@@ -296,7 +296,7 @@ const GLOBAL_STYLE = `
   @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
   @keyframes glow{0%,100%{box-shadow:0 0 0 0 ${S.gold}30}50%{box-shadow:0 0 0 8px ${S.gold}10}}
-  @keyframes pulse{0%,100%{opacity:0.3;transform:scale(0.85)}50%{opacity:1;transform:scale(1.15)}}
+  @keyframes mm-pulse{0%,100%{opacity:0.3;transform:scale(0.85)}50%{opacity:1;transform:scale(1.15)}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
 `;
@@ -517,22 +517,105 @@ function renderSection(id, data, u, t) {
     medical: (
       <>
         <SecHeader icon="—" title="Medical history" subtitle="Diagnoses and medications shape the protocol." />
+
+        {/* ── Diagnoses ── */}
         <QBlock label="Existing diagnoses">
           <Chips color="#9B60C0" options={[
             {value:"autoimmune",label:"Autoimmune"},{value:"hypothyroid",label:"Hypothyroidism"},
-            {value:"fibromyalgia",label:"Fibromyalgia"},{value:"chronic_fatigue",label:"CFS"},
+            {value:"fibromyalgia",label:"Fibromyalgia"},{value:"chronic_fatigue",label:"CFS / ME"},
             {value:"pcos",label:"PCOS"},{value:"psoriasis",label:"Psoriasis"},
-            {value:"adhd",label:"ADHD"},{value:"none",label:"No diagnoses"},
+            {value:"adhd",label:"ADHD"},{value:"type2_diabetes",label:"Type 2 diabetes"},
+            {value:"ibd",label:"IBD / Crohn's"},{value:"endometriosis",label:"Endometriosis"},
+            {value:"none",label:"No diagnoses"},
           ]} selected={data.diagnoses || []} onToggle={v => t("diagnoses", v)} />
+          <input
+            placeholder="Other diagnosis — type here"
+            value={data.diagnoses_other || ""}
+            onChange={e => u("diagnoses_other", e.target.value)}
+            style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+          />
         </QBlock>
-        <QBlock label="Current medications / supplements">
+
+        {/* ── Hormonal therapy ── */}
+        <QBlock label="Hormonal therapy (HRT / contraception)">
+          <Chips color="#D070A0" options={[
+            {value:"hrt_estradiol",label:"Estradiol (E2)"},{value:"hrt_estriol",label:"Estriol (E3)"},
+            {value:"hrt_progesterone",label:"Progesterone"},{value:"hrt_testosterone",label:"Testosterone"},
+            {value:"hrt_dhea",label:"DHEA"},{value:"contraceptive_pill",label:"Contraceptive pill"},
+            {value:"contraceptive_iud",label:"Hormonal IUD"},{value:"hrt_none",label:"None"},
+          ]} selected={data.hormonal_therapy || []} onToggle={v => t("hormonal_therapy", v)} />
+          {(data.hormonal_therapy || []).some(v => v.startsWith("hrt_") && v !== "hrt_none") && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11, color: S.inkDim, fontFamily: S.mono, letterSpacing: "0.1em", marginBottom: 8 }}>DELIVERY METHOD</div>
+              <Chips color="#C06090" options={[
+                {value:"delivery_oral",label:"💊 Oral"},{value:"delivery_patch",label:"🩹 Patch"},
+                {value:"delivery_gel",label:"🧴 Gel / Cream"},{value:"delivery_injection",label:"💉 Injection"},
+                {value:"delivery_sublingual",label:"🍬 Sublingual"},{value:"delivery_vaginal",label:"🕯️ Vaginal"},
+                {value:"delivery_pellet",label:"📍 Pellet"},
+              ]} selected={data.hrt_delivery || []} onToggle={v => t("hrt_delivery", v)} />
+              <input
+                placeholder="Brand name + dose — e.g. Divigel 0.5mg daily, Utrogestan 100mg at night"
+                value={data.hrt_detail || ""}
+                onChange={e => u("hrt_detail", e.target.value)}
+                style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+              />
+            </div>
+          )}
+        </QBlock>
+
+        {/* ── Thyroid medication ── */}
+        <QBlock label="Thyroid medication">
+          <Chips color={S.teal} options={[
+            {value:"levothyroxine",label:"Levothyroxine (T4)"},{value:"liothyronine",label:"Liothyronine (T3)"},
+            {value:"ndt",label:"NDT (T3+T4)"},{value:"methimazole",label:"Methimazole"},
+            {value:"thyroid_none",label:"None"},
+          ]} selected={data.thyroid_meds || []} onToggle={v => t("thyroid_meds", v)} />
+          {!(data.thyroid_meds || []).includes("thyroid_none") && (data.thyroid_meds || []).length > 0 && (
+            <input
+              placeholder="Brand + dose — e.g. Levaxin 75mcg morning fasting"
+              value={data.thyroid_detail || ""}
+              onChange={e => u("thyroid_detail", e.target.value)}
+              style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+            />
+          )}
+        </QBlock>
+
+        {/* ── Other medications ── */}
+        <QBlock label="Other medications">
           <Chips color={S.rust} options={[
-            {value:"antibiotics_recent",label:"Antibiotics (last 12mo)"},{value:"ppi",label:"PPIs/Antacids"},
-            {value:"nsaids",label:"NSAIDs"},{value:"contraceptive_pill",label:"Contraceptive pill"},
-            {value:"antidepressants",label:"Antidepressants"},{value:"thyroid_meds",label:"Thyroid meds"},
-            {value:"probiotics",label:"Probiotics"},{value:"none",label:"None"},
+            {value:"antibiotics_recent",label:"Antibiotics (last 12mo)"},{value:"ppi",label:"PPIs / Antacids"},
+            {value:"nsaids",label:"NSAIDs"},{value:"antidepressants",label:"Antidepressants / SSRIs"},
+            {value:"statins",label:"Statins"},{value:"antihistamines",label:"Antihistamines"},
+            {value:"immunosuppressants",label:"Immunosuppressants"},{value:"blood_pressure",label:"Blood pressure"},
+            {value:"meds_none",label:"None"},
           ]} selected={data.medications || []} onToggle={v => t("medications", v)} />
+          <input
+            placeholder="List any others — name + dose"
+            value={data.medications_other || ""}
+            onChange={e => u("medications_other", e.target.value)}
+            style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+          />
         </QBlock>
+
+        {/* ── Vitamins & supplements ── */}
+        <QBlock label="Current vitamins & supplements">
+          <Chips color="#60A870" options={[
+            {value:"supp_vitamin_d",label:"Vitamin D"},{value:"supp_magnesium",label:"Magnesium"},
+            {value:"supp_b12",label:"B12"},{value:"supp_folate",label:"Folate / B9"},
+            {value:"supp_omega3",label:"Omega-3 / Fish oil"},{value:"supp_zinc",label:"Zinc"},
+            {value:"supp_iron",label:"Iron"},{value:"supp_coq10",label:"CoQ10"},
+            {value:"supp_probiotics",label:"Probiotics"},{value:"supp_nmn",label:"NMN"},
+            {value:"supp_collagen",label:"Collagen"},{value:"supp_none",label:"None"},
+          ]} selected={data.supplements || []} onToggle={v => t("supplements", v)} />
+          <input
+            placeholder="Other supplements — brand, dose, frequency"
+            value={data.supplements_other || ""}
+            onChange={e => u("supplements_other", e.target.value)}
+            style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+          />
+        </QBlock>
+
+        {/* ── Prior testing ── */}
         <QBlock label="Prior food sensitivity testing">
           <Chips color={S.teal} options={[
             {value:"alcat_250",label:"ALCAT 250"},{value:"alcat_483",label:"ALCAT 483"},
@@ -1546,16 +1629,178 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
 }
 
 // ─── ROOT APP ─────────────────────────────────────────────────────────────────
+// ─── TEST UPLOAD SCREEN ────────────────────────────────────────────────────────
+function UploadScreen({ formData, onComplete }) {
+  const [uploads, setUploads] = useState({
+    alcat:    { status: "idle", file: null, summary: null, error: null },
+    cma:      { status: "idle", file: null, summary: null, error: null },
+    genova:   { status: "idle", file: null, summary: null, error: null },
+    bloodwork:{ status: "idle", file: null, summary: null, error: null },
+    methyldetox:{ status: "idle", file: null, summary: null, error: null },
+  });
+
+  const setUpload = (key, patch) => setUploads(p => ({ ...p, [key]: { ...p[key], ...patch } }));
+
+  const toBase64 = (file) => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+
+  const parseFile = async (key, file) => {
+    setUpload(key, { status: "parsing", file, error: null });
+    try {
+      const b64 = await toBase64(file);
+      const prompts = {
+        alcat: "Extract all food reactivity results from this ALCAT report. Return JSON: { severe: [], moderate: [], mild: [], markers: {}, reportDate: '' }. List food names in UPPERCASE. Only return valid JSON, no other text.",
+        cma: "Extract all cellular micronutrient results from this CMA report. Return JSON: { nutrients: [{name, level, status, unit}], reportDate: '' }. Status should be 'deficient', 'low', 'normal', or 'high'. Only return valid JSON.",
+        genova: "Extract key findings from this Genova Diagnostics report. Return JSON: { tests: [{name, findings: []}], reportDate: '' }. Only return valid JSON.",
+        bloodwork: "Extract key blood markers from this report. Return JSON: { markers: [{name, value, unit, range, status}], reportDate: '' }. Status: 'low', 'normal', 'high'. Only return valid JSON.",
+        methyldetox: "Extract methylation gene variants from this report. Return JSON: { genes: [{gene, variant, rsid, impact}], reportDate: '' }. Only return valid JSON.",
+      };
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514", max_tokens: 1500,
+          messages: [{ role: "user", content: [
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
+            { type: "text", text: prompts[key] }
+          ]}]
+        })
+      });
+      const d = await res.json();
+      const text = (d.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+      const clean = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(clean);
+      setUpload(key, { status: "done", summary: parsed, error: null });
+    } catch(e) {
+      setUpload(key, { status: "error", error: "Could not parse this file. You can skip and continue.", summary: null });
+    }
+  };
+
+  const CARDS = [
+    { key: "alcat",      icon: "🧬", label: "ALCAT Food Sensitivity", sub: "Cell Science Systems PDF — 250 or 483 foods", color: "#C87030" },
+    { key: "cma",        icon: "⚗️",  label: "CMA / CNA",             sub: "Cellular Micronutrient Analysis PDF",         color: "#5080A8" },
+    { key: "genova",     icon: "🔬", label: "Genova Diagnostics",    sub: "GI360, DUTCH, NutrEval or similar",           color: "#508060" },
+    { key: "bloodwork",  icon: "🩸", label: "Standard Blood Work",   sub: "CBC, thyroid, vitamins, metabolic panel",     color: "#A04040" },
+    { key: "methyldetox",icon: "🧠", label: "MethylDetox / Genomics",sub: "38-gene methylation panel or WGS report",     color: "#7060A8" },
+  ];
+
+  const doneCount = Object.values(uploads).filter(u => u.status === "done").length;
+
+  return (
+    <div style={{ minHeight: "100vh", background: S.bg, color: S.ink, fontFamily: S.sans }}>
+      <style>{GLOBAL_STYLE}</style>
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -20%, ${S.gold}08 0%, transparent 60%)`, zIndex: 0 }} />
+
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px 80px", position: "relative", zIndex: 1 }}>
+        {/* Header */}
+        <div style={{ marginBottom: 40 }}>
+          <div style={{ fontSize: 10, fontFamily: S.mono, letterSpacing: "0.2em", color: S.goldDim, marginBottom: 12 }}>STEP 2 OF 2 · TEST RESULTS</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: S.ink, lineHeight: 1.2, marginBottom: 10 }}>Upload your existing results</div>
+          <div style={{ fontSize: 15, color: S.inkDim, lineHeight: 1.7 }}>
+            If you've already done any of these tests, upload the PDF now. Mario will read them automatically and personalise your protocol accordingly.
+            <span style={{ color: S.inkMid }}> All fields are optional — skip anything you don't have.</span>
+          </div>
+        </div>
+
+        {/* Upload cards */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
+          {CARDS.map(({ key, icon, label, sub, color }) => {
+            const u = uploads[key];
+            return (
+              <div key={key} style={{ background: S.card, border: `1.5px solid ${u.status === "done" ? color + "60" : u.status === "error" ? "#A04040" : S.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.2s" }}>
+                {/* Card header */}
+                <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: color + "15", border: `1px solid ${color}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: S.ink, marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: 11, color: S.inkDim, fontFamily: S.mono }}>{sub}</div>
+                  </div>
+                  {/* Status */}
+                  {u.status === "idle" && (
+                    <label style={{ cursor: "pointer", background: color + "15", border: `1px solid ${color}40`, borderRadius: 8, padding: "7px 14px", fontSize: 12, color, fontWeight: 600, flexShrink: 0 }}>
+                      Upload PDF
+                      <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => e.target.files[0] && parseFile(key, e.target.files[0])} />
+                    </label>
+                  )}
+                  {u.status === "parsing" && (
+                    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                      {[0,1,2].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: color, animation: `mm-pulse 1.2s ease-in-out ${i * 0.2}s infinite` }} />)}
+                    </div>
+                  )}
+                  {u.status === "done" && <div style={{ fontSize: 18, color: "#5A9050" }}>✓</div>}
+                  {u.status === "error" && (
+                    <label style={{ cursor: "pointer", fontSize: 11, color: S.inkDim, fontFamily: S.mono }}>
+                      Retry
+                      <input type="file" accept="application/pdf" style={{ display: "none" }} onChange={e => e.target.files[0] && parseFile(key, e.target.files[0])} />
+                    </label>
+                  )}
+                </div>
+
+                {/* Summary on success */}
+                {u.status === "done" && u.summary && (
+                  <div style={{ borderTop: `1px solid ${S.border}`, padding: "12px 18px", background: S.bgDeep }}>
+                    {key === "alcat" && u.summary.severe && (
+                      <div style={{ fontSize: 11, color: S.inkDim, fontFamily: S.mono, lineHeight: 1.8 }}>
+                        <span style={{ color: "#C87030", fontWeight: 600 }}>Severe: </span>{(u.summary.severe || []).slice(0,6).join(", ")}{(u.summary.severe||[]).length > 6 ? ` +${u.summary.severe.length - 6} more` : ""}<br/>
+                        <span style={{ color: "#C09030", fontWeight: 600 }}>Moderate: </span>{(u.summary.moderate || []).length} foods &nbsp;·&nbsp;
+                        <span style={{ color: "#8A9830", fontWeight: 600 }}>Mild: </span>{(u.summary.mild || []).length} foods
+                      </div>
+                    )}
+                    {key === "cma" && u.summary.nutrients && (
+                      <div style={{ fontSize: 11, color: S.inkDim, fontFamily: S.mono, lineHeight: 1.8 }}>
+                        {(u.summary.nutrients || []).filter(n => n.status === "deficient" || n.status === "low").slice(0,4).map((n,i) => (
+                          <span key={i}><span style={{ color: "#C06050" }}>{n.name}</span> {n.status}{i < 3 ? " · " : ""}</span>
+                        ))}
+                        {(u.summary.nutrients || []).filter(n => n.status === "deficient" || n.status === "low").length === 0 && <span style={{ color: "#5A9050" }}>No deficiencies detected</span>}
+                      </div>
+                    )}
+                    {(key === "genova" || key === "bloodwork" || key === "methyldetox") && (
+                      <div style={{ fontSize: 11, color: "#5A9050", fontFamily: S.mono }}>✓ Parsed successfully — Mario will reference this in your protocol</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Error */}
+                {u.status === "error" && (
+                  <div style={{ borderTop: `1px solid ${S.border}`, padding: "10px 18px", background: "#180E0E" }}>
+                    <div style={{ fontSize: 11, color: "#A06050", fontFamily: S.mono }}>{u.error}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Continue */}
+        <button onClick={() => onComplete(uploads)} style={{ width: "100%", padding: "16px", background: S.gold, border: "none", borderRadius: 12, color: "#0e0c09", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: S.sans, letterSpacing: "-0.01em" }}>
+          {doneCount > 0 ? `Continue with ${doneCount} test result${doneCount > 1 ? "s" : ""} →` : "Skip — continue without uploads →"}
+        </button>
+        <div style={{ textAlign: "center", marginTop: 14, fontSize: 11, color: S.inkDim, fontFamily: S.mono }}>
+          You can always upload results later from the dashboard
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [stage, setStage] = useState("onboarding");
   const [patientProtocol, setPatientProtocol] = useState(null);
   const [patientFormData, setPatientFormData] = useState(null);
+  const [patientUploads, setPatientUploads] = useState(null);
   const handleOnboardingComplete = ({ formData, protocol }) => {
-    setPatientFormData(formData); setPatientProtocol(protocol); setStage("bridge");
+    setPatientFormData(formData); setPatientProtocol(protocol); setStage("upload");
+  };
+  const handleUploadsComplete = (uploads) => {
+    setPatientUploads(uploads); setStage("bridge");
   };
   const handleEnterDashboard = () => setStage("dashboard");
-  const handleReset = () => { setStage("onboarding"); setPatientProtocol(null); setPatientFormData(null); };
+  const handleReset = () => { setStage("onboarding"); setPatientProtocol(null); setPatientFormData(null); setPatientUploads(null); };
   if (stage === "onboarding") return <Onboarding onComplete={handleOnboardingComplete} />;
+  if (stage === "upload") return <UploadScreen formData={patientFormData} onComplete={handleUploadsComplete} />;
   if (stage === "bridge") return <ProtocolBridge formData={patientFormData} protocol={patientProtocol} onEnterDashboard={handleEnterDashboard} />;
-  return <Dashboard patientData={{}} protocol={patientProtocol} formData={patientFormData} onReset={handleReset} />;
+  return <Dashboard patientData={{ uploads: patientUploads }} protocol={patientProtocol} formData={patientFormData} onReset={handleReset} />;
 }
