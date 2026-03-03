@@ -1,41 +1,57 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-// ─── DESIGN TOKENS — Warm Scandinavian ────────────────────────────────────────
+// ─── DESIGN TOKENS — Rose Gold Liquid Glass ───────────────────────────────────
 const S = {
-  bg:          "#FAF8F4",
-  bgDeep:      "#F2EDE5",
-  bgDark:      "#1C1814",
-  card:        "#FFFFFF",
-  cardWarm:    "#FDFAF6",
-  border:      "#E8E0D4",
-  borderStrong:"#C8B89A",
-  ink:         "#1A1410",
-  inkMid:      "#6B5E52",
-  inkDim:      "#A89880",
-  gold:        "#9A7240",
-  goldLight:   "#C4A06A",
-  goldBg:      "#FDF6EC",
-  goldDark:    "#6A4E28",
-  sage:        "#5A7A58",
-  sageBg:      "#F0F5EF",
-  sageDark:    "#3A5A38",
-  rust:        "#B05030",
-  rustBg:      "#FDF1EE",
-  amber:       "#C47820",
-  amberBg:     "#FDF5E8",
-  sand:        "#B09030",
-  sandBg:      "#FDFAF0",
-  teal:        "#3A7A7A",
-  tealBg:      "#EEF5F5",
-  severe:      "#B05030",
-  moderate:    "#C47820",
-  mild:        "#B09030",
-  serif:       "'Playfair Display','Georgia',serif",
-  sans:        "'Lato','Helvetica Neue',sans-serif",
-  mono:        "'IBM Plex Mono','Courier New',monospace",
-  shadowSm:    "0 1px 4px rgba(100,80,50,0.08)",
-  shadowMd:    "0 4px 16px rgba(100,80,50,0.10)",
-  shadowLg:    "0 8px 32px rgba(100,80,50,0.12)",
+  // Backgrounds — deep blurred layers
+  bg:          "linear-gradient(145deg,#1a0e14 0%,#120a10 40%,#0e0c18 100%)",
+  bgSolid:     "#120a10",
+  bgDeep:      "rgba(255,255,255,0.03)",
+  bgDark:      "#0a0608",
+  // Glass surfaces
+  card:        "rgba(255,255,255,0.06)",
+  cardStrong:  "rgba(255,255,255,0.10)",
+  cardWarm:    "rgba(210,150,160,0.07)",
+  // Borders — frosted
+  border:      "rgba(255,255,255,0.10)",
+  borderStrong:"rgba(210,160,170,0.25)",
+  borderGold:  "rgba(220,160,150,0.40)",
+  // Text
+  ink:         "#F5EEF0",
+  inkMid:      "rgba(245,238,240,0.65)",
+  inkDim:      "rgba(245,238,240,0.38)",
+  // Rose gold accent system
+  gold:        "#D4998A",       // rose gold primary
+  goldLight:   "#E8C0B4",       // light rose
+  goldBg:      "rgba(212,153,138,0.12)",
+  goldDark:    "#A06858",
+  goldDim:     "rgba(212,153,138,0.50)",
+  // Supporting accents
+  sage:        "#7AADA0",
+  sageBg:      "rgba(122,173,160,0.10)",
+  sageDark:    "#4A8A7C",
+  rust:        "#E07060",
+  rustBg:      "rgba(224,112,96,0.10)",
+  amber:       "#D4A060",
+  amberBg:     "rgba(212,160,96,0.10)",
+  sand:        "#C8B080",
+  sandBg:      "rgba(200,176,128,0.10)",
+  teal:        "#70B4C8",
+  tealBg:      "rgba(112,180,200,0.10)",
+  severe:      "#E07060",
+  moderate:    "#D4A060",
+  mild:        "#C8B080",
+  // Typography — SF Pro
+  serif:       "-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',sans-serif",
+  sans:        "-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif",
+  mono:        "'SF Mono','Fira Code','Courier New',monospace",
+  // Shadows — glowing rose
+  shadowSm:    "0 2px 8px rgba(180,80,80,0.08), 0 1px 2px rgba(0,0,0,0.3)",
+  shadowMd:    "0 8px 32px rgba(180,80,80,0.12), 0 4px 8px rgba(0,0,0,0.4)",
+  shadowLg:    "0 20px 60px rgba(180,80,80,0.15), 0 8px 24px rgba(0,0,0,0.5)",
+  // Liquid glass blur
+  glass:       "blur(24px) saturate(180%)",
+  glassMd:     "blur(16px) saturate(160%)",
+  glassSm:     "blur(8px) saturate(140%)",
 };
 const FX = "flex", CP = "pointer";
 
@@ -286,19 +302,28 @@ const SYMPTOM_CATS = {
 
 // ─── SHARED STYLE ─────────────────────────────────────────────────────────────
 const GLOBAL_STYLE = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Lato:wght@300;400;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
   *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:${S.bg};}
-  ::-webkit-scrollbar{width:4px;}
-  ::-webkit-scrollbar-track{background:${S.bgDeep};}
-  ::-webkit-scrollbar-thumb{background:${S.borderStrong};border-radius:2px;}
-  input::placeholder,textarea::placeholder{color:${S.inkDim};}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+  html,body{
+    background:#120a10;
+    background-image: radial-gradient(ellipse 120% 80% at 20% 10%, rgba(180,80,100,0.18) 0%, transparent 50%),
+                      radial-gradient(ellipse 80% 60% at 80% 90%, rgba(100,60,160,0.12) 0%, transparent 50%),
+                      radial-gradient(ellipse 60% 40% at 60% 40%, rgba(212,153,138,0.06) 0%, transparent 40%);
+    min-height:100vh;
+  }
+  ::-webkit-scrollbar{width:3px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:rgba(212,153,138,0.25);border-radius:2px;}
+  input::placeholder,textarea::placeholder{color:rgba(245,238,240,0.28);}
+  input,textarea,button{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',sans-serif;}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
   @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-  @keyframes glow{0%,100%{box-shadow:0 0 0 0 ${S.gold}30}50%{box-shadow:0 0 0 8px ${S.gold}10}}
+  @keyframes liquidFloat{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-6px) scale(1.01)}}
+  @keyframes glowPulse{0%,100%{box-shadow:0 0 20px rgba(212,153,138,0.15),0 0 40px rgba(212,153,138,0.05)}50%{box-shadow:0 0 30px rgba(212,153,138,0.3),0 0 60px rgba(212,153,138,0.1)}}
   @keyframes mm-pulse{0%,100%{opacity:0.3;transform:scale(0.85)}50%{opacity:1;transform:scale(1.15)}}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+  @keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(30px,-20px) scale(1.05)}66%{transform:translate(-20px,15px) scale(0.97)}}
+  @keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-25px,20px) scale(0.95)}66%{transform:translate(20px,-15px) scale(1.03)}}
 `;
 
 // ─── ONBOARDING COMPONENTS ─────────────────────────────────────────────────────
@@ -310,14 +335,22 @@ function Chips({ options, selected, onToggle, color = S.gold }) {
         const val = o.value ?? o; const lbl = o.label ?? o;
         return (
           <div key={val} onClick={() => onToggle(val)} style={{
-            padding: "8px 16px", borderRadius: 24,
-            border: `1.5px solid ${active ? color : S.border}`,
-            background: active ? color + "12" : S.card,
+            padding: "8px 18px", borderRadius: 50,
+            border: `1px solid ${active ? color + "80" : "rgba(255,255,255,0.10)"}`,
+            background: active
+              ? `linear-gradient(135deg, ${color}22 0%, ${color}10 100%)`
+              : "rgba(255,255,255,0.05)",
+            backdropFilter: S.glassSm,
+            WebkitBackdropFilter: S.glassSm,
             color: active ? color : S.inkMid,
             fontSize: 13, fontFamily: S.sans, cursor: CP,
-            transition: "all 0.15s", userSelect: "none",
-            boxShadow: active ? `0 0 0 3px ${color}18` : S.shadowSm,
-            fontWeight: active ? 700 : 400,
+            transition: "all 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+            userSelect: "none",
+            boxShadow: active
+              ? `0 0 16px ${color}25, inset 0 1px 0 ${color}20`
+              : "inset 0 1px 0 rgba(255,255,255,0.08)",
+            fontWeight: active ? 600 : 400,
+            letterSpacing: "-0.01em",
           }}>{lbl}</div>
         );
       })}
@@ -331,13 +364,16 @@ function ScaleQ({ value, onChange, min = 1, max = 10, labels }) {
       <div style={{ display: FX, gap: 4, marginBottom: 10 }}>
         {Array.from({ length: max - min + 1 }, (_, i) => i + min).map(n => (
           <button key={n} onClick={() => onChange(n)} style={{
-            flex: 1, padding: "10px 4px", borderRadius: 8,
-            border: `1.5px solid ${value === n ? S.gold : S.border}`,
-            background: value === n ? S.goldBg : S.card,
+            flex: 1, padding: "10px 4px", borderRadius: 10,
+            border: `1px solid ${value === n ? S.gold + "80" : "rgba(255,255,255,0.08)"}`,
+            background: value === n
+              ? `linear-gradient(135deg, ${S.gold}28 0%, ${S.gold}10 100%)`
+              : "rgba(255,255,255,0.04)",
+            backdropFilter: S.glassSm, WebkitBackdropFilter: S.glassSm,
             color: value === n ? S.gold : S.inkMid,
             fontSize: 13, fontWeight: value === n ? 700 : 400,
-            fontFamily: S.mono, cursor: CP, transition: "all 0.15s",
-            boxShadow: value === n ? `0 0 0 3px ${S.gold}20` : "none",
+            fontFamily: S.mono, cursor: CP, transition: "all 0.2s",
+            boxShadow: value === n ? `0 0 12px ${S.gold}20` : "none",
           }}>{n}</button>
         ))}
       </div>
@@ -355,13 +391,16 @@ function SelectQ({ options, value, onChange }) {
         const active = value === o.value;
         return (
           <div key={o.value} onClick={() => onChange(o.value)} style={{
-            padding: "12px 14px", borderRadius: 10,
-            border: `1.5px solid ${active ? S.gold : S.border}`,
-            background: active ? S.goldBg : S.card,
-            cursor: CP, transition: "all 0.15s",
-            boxShadow: active ? `0 0 0 3px ${S.gold}18` : S.shadowSm,
+            padding: "14px 16px", borderRadius: 14,
+            border: `1px solid ${active ? S.gold + "70" : "rgba(255,255,255,0.08)"}`,
+            background: active
+              ? `linear-gradient(135deg, ${S.gold}20 0%, ${S.gold}08 100%)`
+              : "rgba(255,255,255,0.04)",
+            backdropFilter: S.glassSm, WebkitBackdropFilter: S.glassSm,
+            cursor: CP, transition: "all 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+            boxShadow: active ? `0 0 20px ${S.gold}18, inset 0 1px 0 ${S.gold}15` : "inset 0 1px 0 rgba(255,255,255,0.06)",
           }}>
-            <div style={{ fontSize: 13, color: active ? S.gold : S.ink, fontWeight: active ? 700 : 400, fontFamily: S.sans, marginBottom: 2 }}>{o.label}</div>
+            <div style={{ fontSize: 13, color: active ? S.gold : S.ink, fontWeight: active ? 600 : 400, fontFamily: S.sans, marginBottom: 2, letterSpacing: "-0.01em" }}>{o.label}</div>
             {o.sub && <div style={{ fontSize: 11, color: S.inkDim, fontFamily: S.mono }}>{o.sub}</div>}
           </div>
         );
@@ -372,9 +411,9 @@ function SelectQ({ options, value, onChange }) {
 
 function QBlock({ label, sub, children }) {
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, color: S.ink, fontFamily: S.sans, marginBottom: sub ? 4 : 10 }}>{label}</div>
-      {sub && <div style={{ fontSize: 12, color: S.inkMid, fontFamily: S.mono, marginBottom: 10 }}>{sub}</div>}
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, color: S.ink, fontFamily: S.sans, marginBottom: sub ? 4 : 12, letterSpacing: "-0.02em" }}>{label}</div>
+      {sub && <div style={{ fontSize: 12, color: S.inkDim, fontFamily: S.mono, marginBottom: 12 }}>{sub}</div>}
       {children}
     </div>
   );
@@ -382,9 +421,9 @@ function QBlock({ label, sub, children }) {
 
 function SecHeader({ icon, title, subtitle }) {
   return (
-    <div style={{ marginBottom: 32 }}>
-      <div style={{ fontSize: 11, fontFamily: S.mono, color: S.gold, letterSpacing: "0.15em", marginBottom: 8 }}>{icon} {title.toUpperCase()}</div>
-      {subtitle && <div style={{ fontFamily: S.serif, fontSize: 28, fontWeight: 400, color: S.ink, lineHeight: 1.2, fontStyle: "italic" }}>{subtitle}</div>}
+    <div style={{ marginBottom: 36 }}>
+      <div style={{ fontSize: 10, fontFamily: S.mono, color: S.goldDim, letterSpacing: "0.18em", marginBottom: 10 }}>{icon} {title.toUpperCase()}</div>
+      {subtitle && <div style={{ fontSize: 26, fontWeight: 700, color: S.ink, lineHeight: 1.2, letterSpacing: "-0.03em" }}>{subtitle}</div>}
     </div>
   );
 }
@@ -407,7 +446,7 @@ function renderSection(id, data, u, t) {
         <SecHeader icon="—" title="About you" subtitle="Let us understand who we are working with." />
         <QBlock label="First name (optional)">
           <input type="text" placeholder="Your first name" value={data.firstName || ""} onChange={e => u("firstName", e.target.value)}
-            style={{ width: "100%", background: S.card, border: `1.5px solid ${data.firstName ? S.gold : S.border}`, borderRadius: 10, padding: "11px 14px", color: S.ink, fontSize: 14, fontFamily: S.sans, outline: "none", boxShadow: S.shadowSm }} />
+            style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: `1.5px solid ${data.firstName ? S.gold : S.border}`, borderRadius: 10, padding: "11px 14px", color: S.ink, fontSize: 14, fontFamily: S.sans, outline: "none", boxShadow: S.shadowSm }} />
         </QBlock>
         <QBlock label="Age range">
           <Chips options={["Under 25","25–34","35–44","45–54","55–64","65+"]} selected={data.age ? [data.age] : []} onToggle={v => u("age", v)} />
@@ -532,7 +571,7 @@ function renderSection(id, data, u, t) {
             placeholder="Other diagnosis — type here"
             value={data.diagnoses_other || ""}
             onChange={e => u("diagnoses_other", e.target.value)}
-            style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+            style={{ marginTop: 10, width: "100%", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
           />
         </QBlock>
 
@@ -557,7 +596,7 @@ function renderSection(id, data, u, t) {
                 placeholder="Brand name + dose — e.g. Divigel 0.5mg daily, Utrogestan 100mg at night"
                 value={data.hrt_detail || ""}
                 onChange={e => u("hrt_detail", e.target.value)}
-                style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+                style={{ marginTop: 10, width: "100%", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
               />
             </div>
           )}
@@ -575,7 +614,7 @@ function renderSection(id, data, u, t) {
               placeholder="Brand + dose — e.g. Levaxin 75mcg morning fasting"
               value={data.thyroid_detail || ""}
               onChange={e => u("thyroid_detail", e.target.value)}
-              style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+              style={{ marginTop: 10, width: "100%", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
             />
           )}
         </QBlock>
@@ -593,7 +632,7 @@ function renderSection(id, data, u, t) {
             placeholder="List any others — name + dose"
             value={data.medications_other || ""}
             onChange={e => u("medications_other", e.target.value)}
-            style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+            style={{ marginTop: 10, width: "100%", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
           />
         </QBlock>
 
@@ -611,7 +650,7 @@ function renderSection(id, data, u, t) {
             placeholder="Other supplements — brand, dose, frequency"
             value={data.supplements_other || ""}
             onChange={e => u("supplements_other", e.target.value)}
-            style={{ marginTop: 10, width: "100%", background: S.card, border: `1.5px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
+            style={{ marginTop: 10, width: "100%", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 8, padding: "9px 12px", color: S.ink, fontSize: 13, fontFamily: S.sans, outline: "none", boxSizing: "border-box" }}
           />
         </QBlock>
 
@@ -643,9 +682,9 @@ function renderSection(id, data, u, t) {
         </QBlock>
         <QBlock label="Email (optional)" sub="Receive a copy of your protocol.">
           <input type="email" placeholder="your@email.com" value={data.email || ""} onChange={e => u("email", e.target.value)}
-            style={{ width: "100%", background: S.card, border: `1.5px solid ${data.email ? S.gold : S.border}`, borderRadius: 10, padding: "11px 14px", color: S.ink, fontSize: 14, fontFamily: S.sans, outline: "none", boxShadow: S.shadowSm }} />
+            style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: `1.5px solid ${data.email ? S.gold : S.border}`, borderRadius: 10, padding: "11px 14px", color: S.ink, fontSize: 14, fontFamily: S.sans, outline: "none", boxShadow: S.shadowSm }} />
         </QBlock>
-        <div style={{ padding: "12px 16px", background: S.bgDeep, border: `1px solid ${S.border}`, borderRadius: 8, fontSize: 11, color: S.inkDim, fontFamily: S.mono, lineHeight: 1.7 }}>
+        <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 8, fontSize: 11, color: S.inkDim, fontFamily: S.mono, lineHeight: 1.7 }}>
           🔒 GDPR compliant. Data used solely to generate your protocol. Not sold or shared. Delete: privacy@medibalans.com
         </div>
       </>
@@ -674,25 +713,29 @@ function Onboarding({ onComplete }) {
   const progress = idx >= 0 ? ((idx + 1) / SECTIONS.length) * 100 : 0;
 
   return (
-    <div style={{ minHeight: "100vh", background: S.bg, color: S.ink, fontFamily: S.sans }}>
+    <div style={{ minHeight: "100vh", background: S.bgSolid, color: S.ink, fontFamily: S.sans }}>
       <style>{GLOBAL_STYLE}</style>
 
-      {/* Subtle texture overlay */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -20%, ${S.gold}08 0%, transparent 60%)`, zIndex: 0 }} />
+      {/* Ambient liquid orbs */}
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}>
+        <div style={{ position: "absolute", width: 600, height: 600, borderRadius: "50%", background: "radial-gradient(circle, rgba(180,80,100,0.18) 0%, transparent 70%)", top: "-10%", left: "-5%", animation: "orb1 18s ease-in-out infinite", filter: "blur(40px)" }} />
+        <div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(120,60,180,0.12) 0%, transparent 70%)", bottom: "-5%", right: "-5%", animation: "orb2 22s ease-in-out infinite", filter: "blur(40px)" }} />
+        <div style={{ position: "absolute", width: 300, height: 300, borderRadius: "50%", background: "radial-gradient(circle, rgba(212,153,138,0.10) 0%, transparent 70%)", top: "40%", right: "20%", animation: "orb1 14s ease-in-out 3s infinite", filter: "blur(30px)" }} />
+      </div>
 
-      {/* Header */}
-      <div style={{ position: "sticky", top: 0, zIndex: 20, borderBottom: `1px solid ${S.border}`, background: `${S.bg}EE`, backdropFilter: "blur(20px)", padding: "14px 32px", display: FX, alignItems: "center", justifyContent: "space-between" }}>
+      {/* Header — frosted glass */}
+      <div style={{ position: "sticky", top: 0, zIndex: 20, borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(18,10,16,0.75)", backdropFilter: "blur(28px) saturate(180%)", WebkitBackdropFilter: "blur(28px) saturate(180%)", padding: "14px 32px", display: FX, alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: FX, alignItems: "center", gap: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${S.gold},${S.goldDark})`, display: FX, alignItems: "center", justifyContent: "center", fontFamily: S.serif, fontSize: 20, color: "#FFF", fontWeight: 600, boxShadow: `0 2px 8px ${S.gold}40` }}>M</div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)", display: FX, alignItems: "center", justifyContent: "center", fontFamily: S.serif, fontSize: 20, color: "#FFF", fontWeight: 700, boxShadow: "0 4px 16px rgba(212,153,138,0.40), 0 0 0 1px rgba(212,153,138,0.15)" }}>M</div>
           <div>
-            <div style={{ fontSize: 16, fontFamily: S.serif, color: S.ink, fontWeight: 500 }}>Meet Mario</div>
-            <div style={{ fontSize: 9, fontFamily: S.mono, color: S.gold, letterSpacing: "0.18em" }}>BIOLOGICAL RESET · MEDIBALANS AB</div>
+            <div style={{ fontSize: 16, fontFamily: S.sans, color: S.ink, fontWeight: 600, letterSpacing: "-0.02em" }}>Meet Mario</div>
+            <div style={{ fontSize: 9, fontFamily: S.mono, color: S.goldDim, letterSpacing: "0.18em" }}>BIOLOGICAL RESET · MEDIBALANS AB</div>
           </div>
         </div>
         {idx >= 0 && (
           <div style={{ display: FX, alignItems: "center", gap: 16 }}>
-            <div style={{ width: 140, height: 3, background: S.border, borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${progress}%`, background: `linear-gradient(90deg,${S.gold},${S.goldLight})`, borderRadius: 2, transition: "width 0.4s ease" }} />
+            <div style={{ width: 140, height: 2, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, #D4998A, #E8C0B4)", borderRadius: 2, transition: "width 0.4s ease", boxShadow: "0 0 8px rgba(212,153,138,0.5)" }} />
             </div>
             <span style={{ fontSize: 11, fontFamily: S.mono, color: S.inkDim }}>{idx + 1}/{SECTIONS.length}</span>
           </div>
@@ -701,16 +744,15 @@ function Onboarding({ onComplete }) {
 
       {/* Side nav */}
       {idx >= 0 && (
-        <div style={{ position: "fixed", left: 0, top: 65, bottom: 0, width: 188, borderRight: `1px solid ${S.border}`, background: S.bgDeep, padding: "28px 0", zIndex: 10 }}>
+        <div style={{ position: "fixed", left: 0, top: 65, bottom: 0, width: 188, borderRight: "1px solid rgba(255,255,255,0.07)", background: "rgba(18,10,16,0.60)", backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)", padding: "28px 0", zIndex: 10 }}>
           {SECTIONS.map((s, i) => (
             <div key={s.id} onClick={() => i < idx && setIdx(i)} style={{ padding: "9px 20px", display: FX, alignItems: "center", gap: 10, cursor: i < idx ? CP : "default" }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: i === idx ? S.gold : i < idx ? S.goldLight : S.border, transition: "background 0.3s", boxShadow: i === idx ? `0 0 0 3px ${S.gold}30` : "none" }} />
-              <div style={{ fontSize: 12, fontFamily: S.sans, color: i === idx ? S.gold : i < idx ? S.inkMid : S.inkDim, fontWeight: i === idx ? 700 : 400 }}>{s.label}</div>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: i === idx ? S.gold : i < idx ? S.goldDim : "rgba(255,255,255,0.15)", transition: "all 0.3s", boxShadow: i === idx ? `0 0 10px ${S.gold}60` : "none" }} />
+              <div style={{ fontSize: 12, fontFamily: S.sans, color: i === idx ? S.gold : i < idx ? S.inkMid : S.inkDim, fontWeight: i === idx ? 600 : 400, letterSpacing: "-0.01em" }}>{s.label}</div>
             </div>
           ))}
-          {/* Patent notice in sidebar */}
-          <div style={{ position: "absolute", bottom: 20, left: 16, right: 16, padding: "8px 10px", background: S.goldBg, border: `1px solid ${S.gold}30`, borderRadius: 6 }}>
-            <div style={{ fontSize: 8, fontFamily: S.mono, color: S.gold, letterSpacing: "0.1em", lineHeight: 1.6 }}>PATENT PENDING<br />SE 2615203-3</div>
+          <div style={{ position: "absolute", bottom: 20, left: 16, right: 16, padding: "8px 10px", background: "rgba(212,153,138,0.08)", border: "1px solid rgba(212,153,138,0.20)", borderRadius: 8, backdropFilter: "blur(8px)" }}>
+            <div style={{ fontSize: 8, fontFamily: S.mono, color: S.goldDim, letterSpacing: "0.1em", lineHeight: 1.6 }}>PATENT PENDING<br />SE 2615203-3</div>
           </div>
         </div>
       )}
@@ -722,20 +764,20 @@ function Onboarding({ onComplete }) {
           {/* Landing */}
           {idx === -1 && (
             <div style={{ animation: "fadeUp 0.7s ease" }}>
-              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: S.goldBg, border: `1px solid ${S.gold}40`, borderRadius: 24, padding: "6px 18px", fontSize: 10, fontFamily: S.mono, color: S.gold, letterSpacing: "0.14em", marginBottom: 28 }}>
+              <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(212,153,138,0.10)", backdropFilter: "blur(8px)", border: "1px solid rgba(212,153,138,0.25)", borderRadius: 24, padding: "6px 18px", fontSize: 10, fontFamily: S.mono, color: S.gold, letterSpacing: "0.14em", marginBottom: 28 }}>
                 <span style={{ width: 6, height: 6, borderRadius: "50%", background: S.sage, display: "inline-block" }} />
                 1,042 REAL ALCAT REPORTS · MEDIBALANS AB · STOCKHOLM
               </div>
-              <h1 style={{ fontFamily: S.serif, fontSize: 54, fontWeight: 400, lineHeight: 1.05, marginBottom: 22, color: S.ink }}>
+              <h1 style={{ fontFamily: S.sans, fontSize: 52, fontWeight: 700, lineHeight: 1.05, marginBottom: 22, color: S.ink, letterSpacing: "-0.04em" }}>
                 Your body has<br />been speaking.<br />
-                <em style={{ color: S.gold }}>We translate it.</em>
+                <span style={{ background: "linear-gradient(135deg, #D4998A, #E8C0B4)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>We translate it.</span>
               </h1>
-              <p style={{ fontSize: 16, color: S.inkMid, lineHeight: 1.85, maxWidth: 480, marginBottom: 44, fontFamily: S.sans, fontWeight: 300 }}>
+              <p style={{ fontSize: 16, color: S.inkMid, lineHeight: 1.85, maxWidth: 480, marginBottom: 44, fontFamily: S.sans, fontWeight: 400, letterSpacing: "-0.01em" }}>
                 A clinical intake powered by population-level ALCAT data. 10 minutes. A personalised 21-day anti-inflammatory protocol.
               </p>
-              <div style={{ display: FX, gap: 0, marginBottom: 52, border: `1px solid ${S.border}`, borderRadius: 12, overflow: "hidden", boxShadow: S.shadowMd }}>
+              <div style={{ display: FX, gap: 0, marginBottom: 52, border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 12, overflow: "hidden", boxShadow: S.shadowMd }}>
                 {[["1,042", "ALCAT Reports"], ["21 Days", "Reset Protocol"], ["10 min", "Intake time"], ["7", "Clinical sections"]].map(([n, l], i) => (
-                  <div key={l} style={{ flex: 1, padding: "20px 16px", background: S.card, borderRight: i < 3 ? `1px solid ${S.border}` : "none", textAlign: "center" }}>
+                  <div key={l} style={{ flex: 1, padding: "20px 16px", background: "rgba(255,255,255,0.06)", borderRight: i < 3 ? `1px solid ${S.border}` : "none", textAlign: "center" }}>
                     <div style={{ fontSize: 28, fontFamily: S.serif, color: S.gold, marginBottom: 4 }}>{n}</div>
                     <div style={{ fontSize: 9, fontFamily: S.mono, color: S.inkDim, letterSpacing: "0.1em" }}>{l.toUpperCase()}</div>
                   </div>
@@ -743,7 +785,7 @@ function Onboarding({ onComplete }) {
               </div>
               <button onClick={() => navigate(1)} style={{
                 display: "block", width: "100%", padding: "18px 0", borderRadius: 12, border: "none",
-                background: `linear-gradient(135deg,${S.gold},${S.goldDark})`, color: "#FFF",
+                background: `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, color: "#FFF",
                 fontSize: 15, fontWeight: 700, fontFamily: S.sans, cursor: CP,
                 letterSpacing: "0.06em", boxShadow: `0 4px 20px ${S.gold}40`,
                 animation: "glow 3s ease infinite",
@@ -752,8 +794,8 @@ function Onboarding({ onComplete }) {
 
               <div style={{ marginTop: 56, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                 {SECTIONS.map(s => (
-                  <div key={s.id} style={{ padding: "12px 14px", background: S.card, border: `1px solid ${S.border}`, borderRadius: 8, display: FX, gap: 8, alignItems: "center", boxShadow: S.shadowSm }}>
-                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: S.gold, flexShrink: 0 }} />
+                  <div key={s.id} style={{ padding: "12px 14px", background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 8, display: FX, gap: 8, alignItems: "center", boxShadow: S.shadowSm }}>
+                    <div style={{ width: 6, height: 6, borderRadius: "50%", background: "linear-gradient(135deg, #D4998A, #A06858)", flexShrink: 0 }} />
                     <span style={{ fontSize: 12, color: S.inkMid, fontFamily: S.sans }}>{s.label}</span>
                   </div>
                 ))}
@@ -767,13 +809,13 @@ function Onboarding({ onComplete }) {
           {/* Nav */}
           {idx >= 0 && (
             <div style={{ position: "fixed", bottom: 0, left: 188, right: 0, background: `${S.bg}F4`, backdropFilter: "blur(16px)", borderTop: `1px solid ${S.border}`, padding: "16px 32px", display: FX, justifyContent: "space-between", alignItems: "center", zIndex: 20 }}>
-              <button onClick={() => navigate(-1)} style={{ background: "none", border: `1.5px solid ${S.border}`, color: S.inkMid, borderRadius: 10, padding: "10px 24px", fontSize: 13, fontFamily: S.sans, cursor: CP, fontWeight: 700 }}>← Back</button>
+              <button onClick={() => navigate(-1)} style={{ background: "none", border: `1px solid rgba(255,255,255,0.10)`, color: S.inkMid, borderRadius: 10, padding: "10px 24px", fontSize: 13, fontFamily: S.sans, cursor: CP, fontWeight: 700 }}>← Back</button>
               <div style={{ display: FX, gap: 5, alignItems: "center" }}>
                 {SECTIONS.map((_, i) => (
                   <div key={i} style={{ width: i === idx ? 22 : 7, height: 7, borderRadius: 4, background: i < idx ? S.goldLight : i === idx ? S.gold : S.border, cursor: i < idx ? CP : "default", transition: "all 0.3s ease" }} onClick={() => i < idx && setIdx(i)} />
                 ))}
               </div>
-              <button onClick={() => navigate(1)} style={{ background: isLast ? `linear-gradient(135deg,${S.sage},${S.sageDark})` : `linear-gradient(135deg,${S.gold},${S.goldDark})`, border: "none", color: "#FFF", borderRadius: 10, padding: "10px 28px", fontSize: 13, fontWeight: 700, fontFamily: S.sans, cursor: CP, boxShadow: `0 2px 12px ${isLast ? S.sage : S.gold}40` }}>
+              <button onClick={() => navigate(1)} style={{ background: isLast ? `linear-gradient(135deg, #7AADA0 0%, #4A8A7C 100%)` : `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, border: "none", color: "#FFF", borderRadius: 10, padding: "10px 28px", fontSize: 13, fontWeight: 700, fontFamily: S.sans, cursor: CP, boxShadow: `0 2px 12px ${isLast ? S.sage : S.gold}40` }}>
                 {isLast ? "Generate My Protocol ✦" : "Continue →"}
               </button>
             </div>
@@ -796,7 +838,7 @@ function ProtocolBridge({ formData, protocol, onEnterDashboard }) {
   const topAvoid = protocol.avoid.filter(f => !f.label).slice(0, 6);
   const safeCount = protocol.safe.length;
   return (
-    <div style={{ minHeight: "100vh", background: S.bgDark, color: "#F0EAE0", fontFamily: S.sans, display: FX, alignItems: "center", justifyContent: "center" }}>
+    <div style={{ minHeight: "100vh", background: S.bgSolid, color: S.ink, fontFamily: S.sans, display: FX, alignItems: "center", justifyContent: "center" }}>
       <style>{GLOBAL_STYLE}</style>
       <div style={{ maxWidth: 580, width: "100%", padding: "52px 32px", textAlign: "center" }}>
         {phase === 0 && (
@@ -843,7 +885,7 @@ function ProtocolBridge({ formData, protocol, onEnterDashboard }) {
 
             {phase >= 2 && (
               <div style={{ animation: "fadeUp 0.6s ease" }}>
-                <button onClick={onEnterDashboard} style={{ display: "block", width: "100%", padding: "18px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg,${S.gold},${S.goldDark})`, color: "#FFF", fontSize: 15, fontWeight: 700, fontFamily: S.sans, cursor: CP, letterSpacing: "0.06em", boxShadow: `0 4px 24px ${S.gold}50`, animation: "glow 3s ease infinite", marginBottom: 14 }}>
+                <button onClick={onEnterDashboard} style={{ display: "block", width: "100%", padding: "18px 0", borderRadius: 12, border: "none", background: `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, color: "#FFF", fontSize: 15, fontWeight: 700, fontFamily: S.sans, cursor: CP, letterSpacing: "0.06em", boxShadow: `0 4px 24px ${S.gold}50`, animation: "glow 3s ease infinite", marginBottom: 14 }}>
                   Enter Meet Mario Dashboard →
                 </button>
                 <div style={{ fontSize: 11, fontFamily: S.mono, color: "#584838" }}>
@@ -871,7 +913,7 @@ function MiniChart({ pts, key_, color, label, unit, height = 64 }) {
   const delta = current - vals[0];
   const isGoodUp = key_ !== "hrv" && key_ !== "spo2";
   return (
-    <div style={{ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, padding: "12px 14px", boxShadow: S.shadowSm }}>
+    <div style={{ background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 10, padding: "12px 14px", boxShadow: S.shadowSm }}>
       <div style={{ display: FX, justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <div style={{ fontSize: 9, letterSpacing: "0.14em", color: S.inkDim, fontFamily: S.mono }}>{label.toUpperCase()}</div>
         <div style={{ textAlign: "right" }}>
@@ -1035,7 +1077,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
     if (!popup) return null;
     return (
       <div style={{ position: "fixed", inset: 0, background: "rgba(20,15,10,0.6)", zIndex: 1000, display: FX, alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }}>
-        <div style={{ background: S.card, border: `1.5px solid ${levelColor}40`, borderRadius: 16, maxWidth: 480, width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.20)", overflow: "hidden" }}>
+        <div style={{ background: "rgba(255,255,255,0.06)", border: `1.5px solid ${levelColor}40`, borderRadius: 16, maxWidth: 480, width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.20)", overflow: "hidden" }}>
           <div style={{ background: levelColor + "10", borderBottom: `1px solid ${levelColor}20`, padding: "18px 22px" }}>
             <div style={{ display: FX, alignItems: "center", gap: 10 }}>
               <div style={{ width: 10, height: 10, borderRadius: "50%", background: levelColor, animation: "pulse 1s infinite", flexShrink: 0 }} />
@@ -1053,7 +1095,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
               <div style={{ fontSize: 13, color: S.gold, fontFamily: S.sans, marginBottom: 14, fontWeight: 700 }}>Did you eat anything outside your safe list?</div>
               <div style={{ display: FX, gap: 10 }}>
                 <button onClick={() => { setPopupReactive(true); setPopupStep(1); }} style={{ flex: 1, background: S.rustBg, border: `1.5px solid ${S.rust}40`, borderRadius: 10, padding: "11px", cursor: CP, color: S.rust, fontSize: 13, fontFamily: S.sans, fontWeight: 700 }}>Yes — possibly</button>
-                <button onClick={() => { setPopupReactive(false); setPopupStep(1); }} style={{ flex: 1, background: S.bgDeep, border: `1.5px solid ${S.border}`, borderRadius: 10, padding: "11px", cursor: CP, color: S.inkMid, fontSize: 13, fontFamily: S.sans }}>No — on protocol</button>
+                <button onClick={() => { setPopupReactive(false); setPopupStep(1); }} style={{ flex: 1, background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 10, padding: "11px", cursor: CP, color: S.inkMid, fontSize: 13, fontFamily: S.sans }}>No — on protocol</button>
               </div>
             </>}
             {popupStep === 1 && <>
@@ -1075,7 +1117,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                   <button key={sev} onClick={() => setPopupSeverity(sev)} style={{ flex: 1, background: popupSeverity === sev ? col + "15" : S.bgDeep, border: `1.5px solid ${popupSeverity === sev ? col : S.border}`, borderRadius: 8, padding: "10px", cursor: CP, color: popupSeverity === sev ? col : S.inkMid, fontSize: 12, fontFamily: S.sans, fontWeight: 700, textTransform: "capitalize" }}>{sev}</button>
                 ))}
               </div>
-              <button onClick={logAndDismiss} disabled={popupLoading} style={{ width: "100%", background: popupLoading ? S.bgDeep : `linear-gradient(135deg,${S.gold},${S.goldDark})`, border: "none", borderRadius: 10, padding: "12px", cursor: popupLoading ? "wait" : CP, color: popupLoading ? S.inkDim : "#FFF", fontSize: 13, fontFamily: S.sans, fontWeight: 700, display: FX, alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <button onClick={logAndDismiss} disabled={popupLoading} style={{ width: "100%", background: popupLoading ? S.bgDeep : `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, border: "none", borderRadius: 10, padding: "12px", cursor: popupLoading ? "wait" : CP, color: popupLoading ? S.inkDim : "#FFF", fontSize: 13, fontFamily: S.sans, fontWeight: 700, display: FX, alignItems: "center", justifyContent: "center", gap: 8 }}>
                 {popupLoading ? <><span style={{ display: FX, gap: 3 }}>{[0, 1, 2].map(i => <span key={i} style={{ width: 5, height: 5, borderRadius: "50%", background: S.inkDim, animation: `pulse 1.2s ease-in-out ${i * 0.2}s infinite`, display: "inline-block" }} />)}</span><span>Analysing with Mario…</span></> : "Log reaction & get Mario's analysis →"}
               </button>
             </>}
@@ -1085,7 +1127,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                 {popupAnalysis.split("\n").map((l, i) => l.trim() ? <div key={i} style={{ marginBottom: 8 }}>{l}</div> : null)}
               </div>
               {diary[0]?.flagClinic && <div style={{ background: S.rustBg, border: `1px solid ${S.rust}30`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: S.rust, fontFamily: S.sans, display: FX, gap: 8, alignItems: "center" }}>⚠️ This reaction has been flagged for clinician review.</div>}
-              <button onClick={() => setPopup(null)} style={{ width: "100%", background: S.bgDeep, border: `1.5px solid ${S.border}`, borderRadius: 10, padding: "11px", cursor: CP, color: S.inkMid, fontSize: 13, fontFamily: S.sans }}>Close — logged to diary ✓</button>
+              <button onClick={() => setPopup(null)} style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.10)`, borderRadius: 10, padding: "11px", cursor: CP, color: S.inkMid, fontSize: 13, fontFamily: S.sans }}>Close — logged to diary ✓</button>
             </>}
           </div>
         </div>
@@ -1110,10 +1152,10 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
   });
 
   // Card style
-  const card = (extra = {}) => ({ background: S.card, border: `1px solid ${S.border}`, borderRadius: 10, boxShadow: S.shadowSm, ...extra });
+  const card = (extra = {}) => ({ background: "rgba(255,255,255,0.06)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 10, boxShadow: S.shadowSm, ...extra });
 
   return (
-    <div style={{ minHeight: "100vh", background: S.bg, color: S.ink, fontFamily: S.sans }}>
+    <div style={{ minHeight: "100vh", background: S.bgSolid, color: S.ink, fontFamily: S.sans }}>
       <style>{GLOBAL_STYLE}</style>
       {popup && <SpikePopup />}
 
@@ -1121,7 +1163,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
       <div style={{ borderBottom: `1px solid ${S.border}`, background: `${S.card}EE`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 100, padding: "0 24px" }}>
         <div style={{ display: FX, justifyContent: "space-between", alignItems: "center", padding: "14px 0 10px" }}>
           <div style={{ display: FX, alignItems: "center", gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${S.gold},${S.goldDark})`, display: FX, alignItems: "center", justifyContent: "center", fontFamily: S.serif, fontSize: 20, color: "#FFF", fontWeight: 600, boxShadow: `0 2px 8px ${S.gold}30` }}>M</div>
+            <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, display: FX, alignItems: "center", justifyContent: "center", fontFamily: S.serif, fontSize: 20, color: "#FFF", fontWeight: 600, boxShadow: `0 2px 8px ${S.gold}30` }}>M</div>
             <div>
               <div style={{ fontSize: 17, fontFamily: S.serif, fontWeight: 500, color: S.ink }}>meet mario</div>
               <div style={{ fontSize: 9, fontFamily: S.mono, color: S.gold, letterSpacing: "0.16em" }}>MEDIBALANS AB · STOCKHOLM</div>
@@ -1133,15 +1175,15 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
               <span style={{ fontSize: 10, color: S.rust, fontFamily: S.mono, fontWeight: 700 }}>MONITORING</span>
             </div>}
             {diary.length > 0 && <div style={{ background: S.amberBg, border: `1px solid ${S.amber}30`, borderRadius: 20, padding: "4px 12px", fontSize: 10, color: S.amber, fontFamily: S.mono }}>{diary.length} reaction{diary.length > 1 ? "s" : ""}</div>}
-            <div style={{ background: S.goldBg, border: `1px solid ${S.gold}30`, borderRadius: 6, padding: "4px 10px" }}>
+            <div style={{ background: "rgba(212,153,138,0.08)", border: `1px solid ${S.gold}30`, borderRadius: 6, padding: "4px 10px" }}>
               <div style={{ fontSize: 9, fontFamily: S.mono, color: S.gold, letterSpacing: "0.1em" }}>PATENT PENDING · SE 2615203-3</div>
             </div>
-            <div style={{ display: FX, alignItems: "center", gap: 6, background: S.goldBg, border: `1px solid ${S.border}`, borderRadius: 8, padding: "6px 12px" }}>
+            <div style={{ display: FX, alignItems: "center", gap: 6, background: "rgba(212,153,138,0.08)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 8, padding: "6px 12px" }}>
               <div style={{ width: 7, height: 7, borderRadius: "50%", background: S.sage }} />
               <span style={{ fontSize: 11, fontFamily: S.sans, color: S.inkMid }}>{patientName}</span>
               <span style={{ fontSize: 10, color: S.gold, fontFamily: S.mono, fontWeight: 700 }}>{protocol?.profile?.split("/")[0]?.trim()}</span>
             </div>
-            <button onClick={onReset} style={{ background: "none", border: `1px solid ${S.border}`, borderRadius: 7, padding: "6px 12px", cursor: CP, fontSize: 11, fontFamily: S.sans, color: S.inkDim }}>← New</button>
+            <button onClick={onReset} style={{ background: "none", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 7, padding: "6px 12px", cursor: CP, fontSize: 11, fontFamily: S.sans, color: S.inkDim }}>← New</button>
           </div>
         </div>
         <div style={{ display: FX, gap: 0, overflowX: "auto" }}>
@@ -1172,7 +1214,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                       <div style={{ fontSize: 10, fontFamily: S.mono, color: S.inkDim }}>{period}</div>
                     </div>
                     <div style={{ display: FX, flexWrap: "wrap", gap: 5 }}>
-                      {items.map(f => <span key={f} style={{ background: S.card, border: `1px solid ${color}25`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontFamily: S.sans, color: S.inkMid }}>{f}</span>)}
+                      {items.map(f => <span key={f} style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${color}25`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontFamily: S.sans, color: S.inkMid }}>{f}</span>)}
                     </div>
                   </div>
                 </div>
@@ -1236,7 +1278,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                 <div key={k} style={{ ...card({ padding: "14px 16px", gridColumn: k === "misc" ? "1/-1" : undefined }) }}>
                   <div style={{ fontSize: 9, fontFamily: S.mono, color: S.gold, letterSpacing: "0.12em", marginBottom: 10 }}>{em} {label.toUpperCase()}</div>
                   <div style={{ display: FX, flexWrap: "wrap", gap: 6 }}>
-                    {ROT[rotDay][k].map(f => <span key={f} style={{ background: S.bgDeep, border: `1px solid ${S.border}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, fontFamily: S.sans, color: S.inkMid }}>{f}</span>)}
+                    {ROT[rotDay][k].map(f => <span key={f} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 20, padding: "4px 12px", fontSize: 12, fontFamily: S.sans, color: S.inkMid }}>{f}</span>)}
                   </div>
                 </div>
               ))}
@@ -1288,7 +1330,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                       </div>
                     </div>
                     {isProtein && isRecipeOpen && (
-                      <div style={{ borderTop: `1px solid ${S.border}`, background: S.bgDeep, padding: "16px 18px" }}>
+                      <div style={{ borderTop: `1px solid ${S.border}`, background: "rgba(255,255,255,0.03)", padding: "16px 18px" }}>
                         {recipeLoading ? <div style={{ display: FX, gap: 8, alignItems: "center", padding: "6px 0" }}><DotLoader /><span style={{ fontSize: 12, color: S.inkDim, fontFamily: S.mono }}>Writing your recipe…</span></div>
                           : recipeSteps ? (
                             <div style={{ fontSize: 12, fontFamily: S.sans, lineHeight: 1.85, color: S.inkMid }}>
@@ -1348,14 +1390,14 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                 </div>
               </div>
             </div>
-            <button onClick={genMenu} disabled={!cuisine || genLoad} style={{ width: "100%", background: !cuisine ? S.bgDeep : genLoad ? S.bgDeep : `linear-gradient(135deg,${S.gold},${S.goldDark})`, border: `1px solid ${!cuisine ? S.border : S.gold}`, color: !cuisine || genLoad ? S.inkDim : "#FFF", borderRadius: 12, padding: "14px", cursor: !cuisine ? "not-allowed" : CP, fontSize: 14, fontFamily: S.sans, fontWeight: 700, marginBottom: 20, display: FX, alignItems: "center", justifyContent: "center", gap: 8, boxShadow: !cuisine ? "none" : `0 4px 16px ${S.gold}30` }}>
+            <button onClick={genMenu} disabled={!cuisine || genLoad} style={{ width: "100%", background: !cuisine ? S.bgDeep : genLoad ? S.bgDeep : `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, border: `1px solid ${!cuisine ? S.border : S.gold}`, color: !cuisine || genLoad ? S.inkDim : "#FFF", borderRadius: 12, padding: "14px", cursor: !cuisine ? "not-allowed" : CP, fontSize: 14, fontFamily: S.sans, fontWeight: 700, marginBottom: 20, display: FX, alignItems: "center", justifyContent: "center", gap: 8, boxShadow: !cuisine ? "none" : `0 4px 16px ${S.gold}30` }}>
               {genLoad ? <><DotLoader /><span>Generating…</span></> : !cuisine ? "Select a cuisine above" : `Generate · ${CUISINES.find(c => c.id === cuisine)?.label} · Day ${rotDay}`}
             </button>
             {genResult && (
               <div style={{ ...card({ padding: "20px 22px", animation: "fadeUp 0.3s ease" }) }}>
                 <div style={{ display: FX, justifyContent: "space-between", marginBottom: 16 }}>
                   <span style={{ fontSize: 13, color: S.ink }}>{CUISINES.find(c => c.id === cuisine)?.flag} {CUISINES.find(c => c.id === cuisine)?.label} · Day {rotDay}</span>
-                  <button onClick={() => setGenResult(null)} style={{ background: "none", border: `1px solid ${S.border}`, borderRadius: 6, color: S.inkDim, padding: "4px 10px", cursor: CP, fontSize: 11, fontFamily: S.mono }}>↺ Reset</button>
+                  <button onClick={() => setGenResult(null)} style={{ background: "none", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 6, color: S.inkDim, padding: "4px 10px", cursor: CP, fontSize: 11, fontFamily: S.mono }}>↺ Reset</button>
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 2, color: S.inkMid, fontFamily: S.sans }}>
                   {genResult.split("\n").map((line, i) => {
@@ -1391,7 +1433,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
                 {groceryWeek.map(d => (
-                  <div key={d} style={{ background: S.bgDeep, border: `1px solid ${S.border}`, borderRadius: 8, padding: "10px 12px" }}>
+                  <div key={d} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 8, padding: "10px 12px" }}>
                     <div style={{ fontSize: 9, color: S.gold, fontFamily: S.mono, marginBottom: 6, fontWeight: 700 }}>DAY {d}</div>
                     <div style={{ fontSize: 10, color: S.inkDim, fontFamily: S.sans, lineHeight: 1.8 }}>
                       <div>🐟 {ROT[d].protein.slice(0, 2).join(", ")}</div>
@@ -1401,7 +1443,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                   </div>
                 ))}
               </div>
-              <button onClick={buildGroceryList} disabled={groceryLoad || groceryWeek.length === 0} style={{ width: "100%", background: groceryLoad ? S.bgDeep : groceryWeek.length === 0 ? S.bgDeep : `linear-gradient(135deg,${S.gold},${S.goldDark})`, border: `1px solid ${groceryLoad || groceryWeek.length === 0 ? S.border : S.gold}`, color: groceryLoad || groceryWeek.length === 0 ? S.inkDim : "#FFF", borderRadius: 10, padding: "12px", cursor: groceryLoad || groceryWeek.length === 0 ? "not-allowed" : CP, fontSize: 13, fontFamily: S.sans, fontWeight: 700, display: FX, alignItems: "center", justifyContent: "center", gap: 8, boxShadow: groceryWeek.length > 0 && !groceryLoad ? `0 4px 16px ${S.gold}30` : "none" }}>
+              <button onClick={buildGroceryList} disabled={groceryLoad || groceryWeek.length === 0} style={{ width: "100%", background: groceryLoad ? S.bgDeep : groceryWeek.length === 0 ? S.bgDeep : `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, border: `1px solid ${groceryLoad || groceryWeek.length === 0 ? S.border : S.gold}`, color: groceryLoad || groceryWeek.length === 0 ? S.inkDim : "#FFF", borderRadius: 10, padding: "12px", cursor: groceryLoad || groceryWeek.length === 0 ? "not-allowed" : CP, fontSize: 13, fontFamily: S.sans, fontWeight: 700, display: FX, alignItems: "center", justifyContent: "center", gap: 8, boxShadow: groceryWeek.length > 0 && !groceryLoad ? `0 4px 16px ${S.gold}30` : "none" }}>
                 {groceryLoad ? <><DotLoader /><span>Building your list…</span></> : <><span>🛒</span><span>Generate grocery list · Days {groceryWeek.join(", ")}</span></>}
               </button>
             </div>
@@ -1412,7 +1454,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                   <div style={{ fontSize: 9, fontFamily: S.mono, color: S.gold, letterSpacing: "0.12em" }}>YOUR WEEKLY ALCAT GROCERY LIST</div>
                   <div style={{ display: FX, gap: 8 }}>
                     <button onClick={() => { navigator.clipboard?.writeText(groceryList.replace(/\*\*/g, "")); setGroceryExport(true); setTimeout(() => setGroceryExport(false), 2000); }} style={{ background: groceryExport ? S.sageBg : S.bgDeep, border: `1px solid ${groceryExport ? S.sage : S.border}`, borderRadius: 7, padding: "5px 12px", cursor: CP, fontSize: 11, fontFamily: S.mono, color: groceryExport ? S.sage : S.inkDim }}>{groceryExport ? "✓ Copied" : "Copy"}</button>
-                    <button onClick={() => setGroceryList(null)} style={{ background: "none", border: `1px solid ${S.border}`, borderRadius: 7, color: S.inkDim, padding: "5px 12px", cursor: CP, fontSize: 11, fontFamily: S.mono }}>↺</button>
+                    <button onClick={() => setGroceryList(null)} style={{ background: "none", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 7, color: S.inkDim, padding: "5px 12px", cursor: CP, fontSize: 11, fontFamily: S.mono }}>↺</button>
                   </div>
                 </div>
                 <div style={{ fontSize: 13, lineHeight: 2.1, color: S.inkMid, fontFamily: S.sans }}>
@@ -1429,7 +1471,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                   <div style={{ fontSize: 9, fontFamily: S.mono, color: S.inkDim, letterSpacing: "0.12em", marginBottom: 12 }}>ORDER ONLINE</div>
                   <div style={{ display: FX, gap: 8, flexWrap: "wrap" }}>
                     {[{ name: "ICA Online", url: "https://www.ica.se", icon: "🔴", note: "Hemleverans" }, { name: "Matsmart", url: "https://www.matsmart.se", icon: "🟢", note: "Organic discounts" }, { name: "Nordic Superfood", url: "https://nordicsuperfood.se", icon: "🌿", note: "Wild-caught & organic" }, { name: "Willys", url: "https://www.willys.se", icon: "🔵", note: "Budget-friendly" }, { name: "Rohkost.de", url: "https://www.rohkost.de", icon: "🌱", note: "Rare protocol items" }].map(s => (
-                      <a key={s.name} href={s.url} target="_blank" rel="noopener noreferrer" style={{ background: S.bgDeep, border: `1px solid ${S.border}`, borderRadius: 8, padding: "10px 14px", textDecoration: "none", display: FX, gap: 8, alignItems: "center", boxShadow: S.shadowSm }}>
+                      <a key={s.name} href={s.url} target="_blank" rel="noopener noreferrer" style={{ background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 8, padding: "10px 14px", textDecoration: "none", display: FX, gap: 8, alignItems: "center", boxShadow: S.shadowSm }}>
                         <span style={{ fontSize: 16 }}>{s.icon}</span>
                         <div><div style={{ fontSize: 12, color: S.ink, fontWeight: 700 }}>{s.name}</div><div style={{ fontSize: 10, color: S.inkDim, fontFamily: S.mono }}>{s.note}</div></div>
                       </a>
@@ -1469,19 +1511,19 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                           const isSev = severe.some(s => fu.includes(s) || s.includes(fu.split(" ")[0]));
                           const isMod = moderate.some(s => fu.includes(s) || s.includes(fu.split(" ")[0]));
                           const col = isSev ? S.rust : isMod ? S.amber : S.sage;
-                          return <span key={i} onClick={() => setMonFoods(prev => prev.filter((_, j) => j !== i))} style={{ background: S.card, border: `1px solid ${col}40`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontFamily: S.sans, color: col, cursor: CP }}>{f} ×</span>;
+                          return <span key={i} onClick={() => setMonFoods(prev => prev.filter((_, j) => j !== i))} style={{ background: "rgba(255,255,255,0.06)", border: `1px solid ${col}40`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontFamily: S.sans, color: col, cursor: CP }}>{f} ×</span>;
                         })}
                       </div>
                     </div>
                   )}
-                  <input value={monFoodInput} onChange={e => setMonFoodInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && monFoodInput.trim()) { setMonFoods(prev => [...prev, monFoodInput.trim()]); setMonFoodInput(""); } }} placeholder="Type food + Enter to add" style={{ width: "100%", background: S.bgDeep, border: `1px solid ${S.border}`, borderRadius: 8, padding: "9px 12px", fontSize: 12, color: S.ink, fontFamily: S.sans, outline: "none", marginBottom: 10, boxSizing: "border-box" }} />
+                  <input value={monFoodInput} onChange={e => setMonFoodInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && monFoodInput.trim()) { setMonFoods(prev => [...prev, monFoodInput.trim()]); setMonFoodInput(""); } }} placeholder="Type food + Enter to add" style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 8, padding: "9px 12px", fontSize: 12, color: S.ink, fontFamily: S.sans, outline: "none", marginBottom: 10, boxSizing: "border-box" }} />
                   <div style={{ display: FX, gap: 5, marginBottom: 10, flexWrap: "wrap" }}>
                     {ROT[rotDay].protein.concat(ROT[rotDay].veg.slice(0, 3)).map(f => {
                       const added = monFoods.includes(f);
                       return <button key={f} onClick={() => setMonFoods(prev => added ? prev.filter(x => x !== f) : [...prev, f])} style={{ background: added ? S.sageBg : S.bgDeep, border: `1px solid ${added ? S.sage : S.border}`, borderRadius: 20, padding: "4px 10px", cursor: CP, fontSize: 11, fontFamily: S.sans, color: added ? S.sage : S.inkDim, fontWeight: added ? 700 : 400 }}>{added ? "✓ " : ""}{f}</button>;
                     })}
                   </div>
-                  <button onClick={startMonitoring} style={{ width: "100%", background: `linear-gradient(135deg,${S.gold},${S.goldDark})`, border: "none", borderRadius: 10, padding: "13px", cursor: CP, color: "#FFF", fontSize: 13, fontFamily: S.sans, fontWeight: 700, boxShadow: `0 4px 16px ${S.gold}30` }}>Start 2-hour post-meal monitoring</button>
+                  <button onClick={startMonitoring} style={{ width: "100%", background: `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, border: "none", borderRadius: 10, padding: "13px", cursor: CP, color: "#FFF", fontSize: 13, fontFamily: S.sans, fontWeight: 700, boxShadow: `0 4px 16px ${S.gold}30` }}>Start 2-hour post-meal monitoring</button>
                 </div>
                 <div style={{ ...card({ padding: "18px" }) }}>
                   <div style={{ fontSize: 9, fontFamily: S.mono, color: S.inkDim, letterSpacing: "0.12em", marginBottom: 14 }}>DATA SOURCES</div>
@@ -1491,11 +1533,11 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                       <div style={{ flex: 1 }}>
                         <div style={{ display: FX, alignItems: "center", gap: 6, marginBottom: 2 }}>
                           <span style={{ fontSize: 12, color: S.ink, fontFamily: S.sans }}>{d.name}</span>
-                          <span style={{ fontSize: 8, background: S.goldBg, border: `1px solid ${S.gold}30`, color: S.gold, borderRadius: 4, padding: "1px 6px", fontFamily: S.mono }}>{d.badge}</span>
+                          <span style={{ fontSize: 8, background: "rgba(212,153,138,0.08)", border: `1px solid ${S.gold}30`, color: S.gold, borderRadius: 4, padding: "1px 6px", fontFamily: S.mono }}>{d.badge}</span>
                         </div>
                         <div style={{ fontSize: 10, color: S.inkDim, fontFamily: S.mono }}>{d.streams}</div>
                       </div>
-                      <div style={{ background: S.bgDeep, border: `1px solid ${S.border}`, borderRadius: 4, padding: "2px 8px", fontSize: 9, color: S.inkDim, fontFamily: S.mono }}>Demo</div>
+                      <div style={{ background: "rgba(255,255,255,0.03)", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 4, padding: "2px 8px", fontSize: 9, color: S.inkDim, fontFamily: S.mono }}>Demo</div>
                     </div>
                   ))}
                 </div>
@@ -1507,7 +1549,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
                     {monActive ? <><div style={{ width: 10, height: 10, borderRadius: "50%", background: S.rust, animation: "pulse 0.8s infinite" }} /><span style={{ fontSize: 13, color: S.rust, fontFamily: S.mono, fontWeight: 700 }}>LIVE — {monMealLabel} · {currentPt?.min || 0}min</span></>
                       : <><div style={{ width: 10, height: 10, borderRadius: "50%", background: S.sage }} /><span style={{ fontSize: 13, color: S.sage, fontFamily: S.mono, fontWeight: 700 }}>COMPLETE — {monMealLabel} · 120min</span></>}
                   </div>
-                  <button onClick={() => { setMonTimeline([]); setMonTick(0); setMonActive(false); setMonFoods([]); setMonSpikes([]); }} style={{ background: "none", border: `1px solid ${S.border}`, borderRadius: 7, padding: "6px 14px", cursor: CP, fontSize: 11, fontFamily: S.mono, color: S.inkDim }}>↺ New session</button>
+                  <button onClick={() => { setMonTimeline([]); setMonTick(0); setMonActive(false); setMonFoods([]); setMonSpikes([]); }} style={{ background: "none", border: `1px solid rgba(255,255,255,0.09)`, borderRadius: 7, padding: "6px 14px", cursor: CP, fontSize: 11, fontFamily: S.mono, color: S.inkDim }}>↺ New session</button>
                 </div>
                 {monSpikes.length > 0 && <div style={{ marginBottom: 16 }}>
                   {monSpikes.map((sp, i) => (
@@ -1565,7 +1607,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
               <div style={{ fontSize: 9, fontFamily: S.mono, color: S.gold, letterSpacing: "0.16em", marginBottom: 8 }}>FOOD LOOKUP</div>
               <h2 style={{ fontFamily: S.serif, fontSize: 28, fontWeight: 400, color: S.ink }}>Is this food safe?</h2>
             </div>
-            <input value={foodQ} onChange={e => setFoodQ(e.target.value)} placeholder="Search — salmon, quinoa, avocado…" style={{ width: "100%", background: S.card, border: `1.5px solid ${foodQ ? S.gold : S.border}`, borderRadius: 12, padding: "14px 18px", fontSize: 15, color: S.ink, fontFamily: S.sans, outline: "none", boxSizing: "border-box", marginBottom: 16, boxShadow: S.shadowSm }} />
+            <input value={foodQ} onChange={e => setFoodQ(e.target.value)} placeholder="Search — salmon, quinoa, avocado…" style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: `1.5px solid ${foodQ ? S.gold : S.border}`, borderRadius: 12, padding: "14px 18px", fontSize: 15, color: S.ink, fontFamily: S.sans, outline: "none", boxSizing: "border-box", marginBottom: 16, boxShadow: S.shadowSm }} />
             {foodResults.map(({ food, level }) => {
               const cols = { severe: S.rust, moderate: S.amber, mild: S.sand };
               const bgs = { severe: S.rustBg, moderate: S.amberBg, mild: S.sandBg };
@@ -1598,7 +1640,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
               {chatMsgs.map((m, i) => (
                 <div key={i} style={{ display: FX, justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
                   {m.role === "assistant" && (
-                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: `linear-gradient(135deg,${S.gold},${S.goldDark})`, display: FX, alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, marginRight: 10, marginTop: 2, color: "#FFF", fontFamily: S.serif, fontWeight: 600, boxShadow: `0 2px 8px ${S.gold}30` }}>M</div>
+                    <div style={{ width: 30, height: 30, borderRadius: "50%", background: `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, display: FX, alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, marginRight: 10, marginTop: 2, color: "#FFF", fontFamily: S.serif, fontWeight: 600, boxShadow: `0 2px 8px ${S.gold}30` }}>M</div>
                   )}
                   <div style={{ maxWidth: "72%", background: m.role === "user" ? S.goldBg : S.card, border: `1px solid ${m.role === "user" ? S.gold + "30" : S.border}`, borderRadius: m.role === "user" ? "14px 14px 4px 14px" : "4px 14px 14px 14px", padding: "13px 16px", fontSize: 13, lineHeight: 1.85, color: S.ink, fontFamily: S.sans, boxShadow: S.shadowSm }}>{m.content}</div>
                 </div>
@@ -1607,8 +1649,8 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
               <div ref={chatEnd} />
             </div>
             <div style={{ display: FX, gap: 8 }}>
-              <input value={chatIn} onChange={e => setChatIn(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChat()} placeholder="Ask about your protocol, foods, symptoms, meal ideas…" style={{ flex: 1, background: S.card, border: `1.5px solid ${chatIn ? S.gold : S.border}`, borderRadius: 10, padding: "13px 16px", fontSize: 13, color: S.ink, fontFamily: S.sans, outline: "none", boxShadow: S.shadowSm }} />
-              <button onClick={sendChat} disabled={chatLoad} style={{ background: chatLoad ? S.bgDeep : `linear-gradient(135deg,${S.gold},${S.goldDark})`, border: "none", color: chatLoad ? S.inkDim : "#FFF", borderRadius: 10, padding: "13px 22px", cursor: chatLoad ? "not-allowed" : CP, fontSize: 13, fontFamily: S.sans, fontWeight: 700, boxShadow: chatLoad ? "none" : `0 4px 16px ${S.gold}30` }}>Send</button>
+              <input value={chatIn} onChange={e => setChatIn(e.target.value)} onKeyDown={e => e.key === "Enter" && !e.shiftKey && sendChat()} placeholder="Ask about your protocol, foods, symptoms, meal ideas…" style={{ flex: 1, background: "rgba(255,255,255,0.06)", border: `1.5px solid ${chatIn ? S.gold : S.border}`, borderRadius: 10, padding: "13px 16px", fontSize: 13, color: S.ink, fontFamily: S.sans, outline: "none", boxShadow: S.shadowSm }} />
+              <button onClick={sendChat} disabled={chatLoad} style={{ background: chatLoad ? S.bgDeep : `linear-gradient(135deg, #D4998A 0%, #A06858 50%, #C4807A 100%)`, border: "none", color: chatLoad ? S.inkDim : "#FFF", borderRadius: 10, padding: "13px 22px", cursor: chatLoad ? "not-allowed" : CP, fontSize: 13, fontFamily: S.sans, fontWeight: 700, boxShadow: chatLoad ? "none" : `0 4px 16px ${S.gold}30` }}>Send</button>
             </div>
           </div>
         )}
@@ -1620,7 +1662,7 @@ function Dashboard({ patientData, protocol, formData, onReset }) {
           <span style={{ color: S.inkMid, fontWeight: 700 }}>meet mario</span> · MediBalans AB · Karlavägen 89, Stockholm
         </div>
         <div style={{ display: FX, gap: 10, alignItems: "center" }}>
-          <span style={{ fontSize: 9, color: S.gold, fontFamily: S.mono, fontWeight: 700, background: S.goldBg, border: `1px solid ${S.gold}30`, borderRadius: 4, padding: "3px 8px", letterSpacing: "0.1em" }}>PATENT PENDING · SE 2615203-3</span>
+          <span style={{ fontSize: 9, color: S.gold, fontFamily: S.mono, fontWeight: 700, background: "rgba(212,153,138,0.08)", border: `1px solid ${S.gold}30`, borderRadius: 4, padding: "3px 8px", letterSpacing: "0.1em" }}>PATENT PENDING · SE 2615203-3</span>
           <span style={{ fontSize: 9, color: S.inkDim, fontFamily: S.mono }}>AI-driven clinical decision support · Global Constraint Rule</span>
         </div>
       </div>
@@ -1690,9 +1732,9 @@ function UploadScreen({ formData, onComplete }) {
   const doneCount = Object.values(uploads).filter(u => u.status === "done").length;
 
   return (
-    <div style={{ minHeight: "100vh", background: S.bg, color: S.ink, fontFamily: S.sans }}>
+    <div style={{ minHeight: "100vh", background: S.bgSolid, color: S.ink, fontFamily: S.sans }}>
       <style>{GLOBAL_STYLE}</style>
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", backgroundImage: `radial-gradient(ellipse 80% 50% at 50% -20%, ${S.gold}08 0%, transparent 60%)`, zIndex: 0 }} />
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, overflow: "hidden" }}><div style={{ position: "absolute", width: 500, height: 500, borderRadius: "50%", background: "radial-gradient(circle, rgba(180,80,100,0.15) 0%, transparent 70%)", top: "-10%", right: "-5%", filter: "blur(40px)", animation: "orb2 20s ease-in-out infinite" }}/><div style={{ position: "absolute", width: 400, height: 400, borderRadius: "50%", background: "radial-gradient(circle, rgba(100,60,160,0.10) 0%, transparent 70%)", bottom: "10%", left: "-5%", filter: "blur(40px)", animation: "orb1 16s ease-in-out infinite" }}/></div>
 
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px 80px", position: "relative", zIndex: 1 }}>
         {/* Header */}
@@ -1710,7 +1752,7 @@ function UploadScreen({ formData, onComplete }) {
           {CARDS.map(({ key, icon, label, sub, color }) => {
             const u = uploads[key];
             return (
-              <div key={key} style={{ background: S.card, border: `1.5px solid ${u.status === "done" ? color + "60" : u.status === "error" ? "#A04040" : S.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.2s" }}>
+              <div key={key} style={{ background: "rgba(255,255,255,0.06)", border: `1.5px solid ${u.status === "done" ? color + "60" : u.status === "error" ? "#A04040" : S.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color 0.2s" }}>
                 {/* Card header */}
                 <div style={{ padding: "16px 18px", display: "flex", alignItems: "center", gap: 14 }}>
                   <div style={{ width: 42, height: 42, borderRadius: 10, background: color + "15", border: `1px solid ${color}30`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{icon}</div>
@@ -1775,7 +1817,7 @@ function UploadScreen({ formData, onComplete }) {
         </div>
 
         {/* Continue */}
-        <button onClick={() => onComplete(uploads)} style={{ width: "100%", padding: "16px", background: S.gold, border: "none", borderRadius: 12, color: "#0e0c09", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: S.sans, letterSpacing: "-0.01em" }}>
+        <button onClick={() => onComplete(uploads)} style={{ width: "100%", padding: "16px", background: "linear-gradient(135deg, #D4998A 0%, #A06858 60%, #C4807A 100%)", border: "none", borderRadius: 16, color: "#0e0c09", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: S.sans, letterSpacing: "-0.01em" }}>
           {doneCount > 0 ? `Continue with ${doneCount} test result${doneCount > 1 ? "s" : ""} →` : "Skip — continue without uploads →"}
         </button>
         <div style={{ textAlign: "center", marginTop: 14, fontSize: 11, color: S.inkDim, fontFamily: S.mono }}>
