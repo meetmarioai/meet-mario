@@ -283,8 +283,482 @@ const MiniChart = ({pts,key_,color,label,unit,height=62}) => {
   );
 };
 
+// ─── ONBOARDING FLOW ─────────────────────────────────────────────────────────
+const OB_STEPS = [
+  { id:"welcome",   label:"Welcome"   },
+  { id:"about",     label:"About you" },
+  { id:"symptoms",  label:"Symptoms"  },
+  { id:"clinical",  label:"Clinical"  },
+  { id:"results",   label:"Results"   },
+];
+
+const HEIQ_DOMAINS = [
+  { id:"gut", label:"Gut & Immune", weight:0.30, color:"#C4887A",
+    questions:[
+      { q:"Do you experience bloating, gas, or abdominal discomfort after meals?", type:"freq" },
+      { q:"Do you have recurring skin issues — eczema, rashes, acne, or hives?", type:"freq" },
+      { q:"Do you have digestive irregularities — IBS, constipation, or loose stools?", type:"freq" },
+      { q:"Do you have frequent infections, seasonal allergies, or autoimmune flares?", type:"freq" },
+    ]
+  },
+  { id:"energy", label:"Energy & Mitochondria", weight:0.25, color:"#B88040",
+    questions:[
+      { q:"Do you experience persistent fatigue not resolved by sleep?", type:"freq" },
+      { q:"Do you have brain fog, poor concentration, or mental slowness?", type:"freq" },
+      { q:"Do you have poor exercise tolerance or slow physical recovery?", type:"freq" },
+      { q:"Do you have non-restorative sleep or difficulty staying asleep?", type:"freq" },
+    ]
+  },
+  { id:"neuro", label:"Neuro & Methylation", weight:0.20, color:"#7A6A9A",
+    questions:[
+      { q:"Do you experience anxiety, low mood, or emotional instability?", type:"freq" },
+      { q:"Do you have frequent headaches or migraines?", type:"freq" },
+      { q:"Do you have memory issues, word-finding difficulty, or poor focus?", type:"freq" },
+      { q:"Do you react to fragrances, alcohol, or medications with unusual sensitivity?", type:"yn" },
+    ]
+  },
+  { id:"inflammation", label:"Inflammation", weight:0.15, color:"#B85040",
+    questions:[
+      { q:"Do you have joint pain, stiffness, or muscle aches without injury?", type:"freq" },
+      { q:"Do you have diagnosed elevated inflammatory markers (CRP, ESR) or autoimmune condition?", type:"yn" },
+      { q:"Do you have cardiovascular risk factors or relevant family history?", type:"yn" },
+      { q:"Do you experience slow wound healing or recurring infections?", type:"freq" },
+    ]
+  },
+  { id:"aging", label:"Biological Aging", weight:0.10, color:"#6A9060",
+    questions:[
+      { q:"Is your recovery from illness or exercise noticeably slower than it used to be?", type:"yn" },
+      { q:"Do you have unexplained weight gain, hormonal shifts, or libido changes?", type:"yn" },
+      { q:"Do you experience hair thinning, brittle nails, or accelerated skin aging?", type:"yn" },
+      { q:"Do you feel your biological age exceeds your chronological age?", type:"yn" },
+    ]
+  },
+];
+
+const FREQ_OPTS = [
+  { label:"Never",     val:0 },
+  { label:"Rarely",    val:1 },
+  { label:"Sometimes", val:2 },
+  { label:"Often",     val:3 },
+  { label:"Always",    val:4 },
+];
+
+function Onboarding({ onComplete }) {
+  const [step,  setStep]  = useState(0); // 0=welcome,1=about,2=symptoms,3=clinical,4=results
+  const [form,  setForm]  = useState({ name:"", dob:"", sex:"", hormonalStatus:"" });
+  const [answers, setAnswers] = useState({}); // "domain-qIdx" -> val
+  const [domainIdx, setDomainIdx] = useState(0);
+  const [clinical, setClinical] = useState({ hasAlcat:null, hasCma:null, hormonal:"", meds:"" });
+  const [score, setScore] = useState(null);
+  const [breakdown, setBreakdown] = useState(null);
+  const [anim, setAnim] = useState(true);
+
+  const u = (k,v) => setForm(f=>({...f,[k]:v}));
+  const uc = (k,v) => setClinical(c=>({...c,[k]:v}));
+
+  const setAns = (dId, qIdx, val) => setAnswers(a=>({...a,[`${dId}-${qIdx}`]:val}));
+  const getAns = (dId, qIdx) => answers[`${dId}-${qIdx}`];
+
+  // domain completeness
+  const domainComplete = (d) => d.questions.every((_,i) => getAns(d.id,i) !== undefined);
+  const allSymptomsComplete = HEIQ_DOMAINS.every(d => domainComplete(d));
+
+  const transition = (next) => {
+    setAnim(false);
+    setTimeout(() => { setStep(next); setAnim(true); }, 220);
+  };
+
+  const calcScore = () => {
+    const brkd = HEIQ_DOMAINS.map(d => {
+      const raw = d.questions.reduce((sum,q,i) => {
+        const v = getAns(d.id,i) ?? 0;
+        const norm = q.type==="yn" ? (v===1 ? 4 : 0) : v;
+        return sum + norm;
+      }, 0);
+      const max = d.questions.length * 4;
+      return { id:d.id, label:d.label, color:d.color, pct: Math.round((raw/max)*100), weight:d.weight };
+    });
+    const total = Math.round(brkd.reduce((s,d) => s + d.pct * d.weight, 0));
+    setBreakdown(brkd);
+    setScore(total);
+    transition(4);
+  };
+
+  const step_labels = ["Welcome","About you","Symptoms","Clinical","Results"];
+  const progress = step / (OB_STEPS.length - 1);
+
+  const curDomain = HEIQ_DOMAINS[domainIdx];
+
+  // — Shared layout wrapper —
+  const Wrap = ({ children }) => (
+    <div style={{
+      minHeight:"100vh", background:T.w, display:"flex", flexDirection:"column",
+      opacity: anim?1:0, transform: anim?"translateY(0)":"translateY(12px)",
+      transition:"opacity .22s ease, transform .22s ease",
+    }}>
+      {/* Nav */}
+      <div style={{
+        position:"sticky",top:0,zIndex:200,height:58,display:"flex",
+        alignItems:"center",justifyContent:"space-between",padding:"0 44px",
+        background:"rgba(247,244,240,0.90)",backdropFilter:"blur(24px)",
+        borderBottom:`1px solid ${T.w3}`,
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:9,height:9,borderRadius:"50%",background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,.40)`}}/>
+          <span style={{fontFamily:fonts.serif,fontSize:18,fontWeight:400,color:T.w7}}>meet mario</span>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:16}}>
+          {/* Step dots */}
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {step_labels.map((l,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:4}}>
+                <div style={{
+                  width:i===step?22:6,height:6,borderRadius:3,
+                  background:i<step?T.rg:i===step?T.rg:T.w3,
+                  transition:"all .3s ease",
+                }}/>
+              </div>
+            ))}
+          </div>
+          <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:"3px 8px",letterSpacing:"0.14em"}}>PATENT PENDING · SE 2615203-3</span>
+        </div>
+      </div>
+      <div style={{flex:1,display:"flex",justifyContent:"center",padding:"64px 24px 80px"}}>
+        <div style={{width:"100%",maxWidth:560}}>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── STEP 0: Welcome ──
+  if(step===0) return (
+    <Wrap>
+      <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase",marginBottom:32,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:24,height:1,background:T.rg}}/>
+        Clinical intake · ~10 minutes
+      </div>
+      <h1 style={{fontFamily:fonts.serif,fontSize:52,fontWeight:400,lineHeight:1.05,letterSpacing:"-0.02em",color:T.w7,marginBottom:20}}>
+        Before we begin,<br/>
+        <em style={{fontStyle:"italic",color:T.rg2}}>a few questions.</em>
+      </h1>
+      <p style={{fontSize:15,fontWeight:300,color:T.w5,lineHeight:1.8,marginBottom:16}}>
+        This intake takes about 10 minutes. Your answers build a personalised biological profile — used to calibrate your protocol and predict your highest-risk food reactivities.
+      </p>
+      <p style={{fontSize:13,fontWeight:300,color:T.w4,lineHeight:1.7,marginBottom:52,fontFamily:fonts.mono,letterSpacing:"0.04em"}}>
+        GDPR compliant · Data stored securely · Never shared
+      </p>
+      {/* What you'll get */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:52}}>
+        {[
+          ["Health Entropy Score","Your biological disorder index across 5 domains"],
+          ["Food Reactivity Preview","Predicted sensitivities from 25,000+ patient records"],
+          ["Test Roadmap","Which tests address your specific symptom clusters"],
+          ["Protocol Access","Your personalised 21-day detox plan"],
+        ].map(([title,desc])=>(
+          <div key={title} style={{background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:"16px 18px"}}>
+            <div style={{fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:T.rg2,marginBottom:5}}>{title}</div>
+            <div style={{fontFamily:fonts.sans,fontSize:11,fontWeight:300,color:T.w5,lineHeight:1.6}}>{desc}</div>
+          </div>
+        ))}
+      </div>
+      <BtnPrimary onClick={()=>transition(1)}>Start Assessment →</BtnPrimary>
+    </Wrap>
+  );
+
+  // ── STEP 1: About you ──
+  if(step===1) return (
+    <Wrap>
+      <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:24,height:1,background:T.rg}}/>
+        Step 1 of 4 · About you
+      </div>
+      <h2 style={{fontFamily:fonts.serif,fontSize:38,fontWeight:400,color:T.w7,letterSpacing:"-0.01em",lineHeight:1.1,marginBottom:40}}>
+        Tell us about<br/><em style={{fontStyle:"italic",color:T.rg2}}>yourself.</em>
+      </h2>
+      <div style={{marginBottom:28}}>
+        <FieldLabel>Full name</FieldLabel>
+        <RuledInput value={form.name} onChange={e=>u("name",e.target.value)} placeholder="First and last name"/>
+      </div>
+      <div style={{marginBottom:28}}>
+        <FieldLabel>Date of birth</FieldLabel>
+        <RuledInput value={form.dob} onChange={e=>u("dob",e.target.value)} placeholder="DD/MM/YYYY"/>
+      </div>
+      <div style={{marginBottom:28}}>
+        <FieldLabel>Sex</FieldLabel>
+        <div style={{display:"flex",gap:8,marginTop:4}}>
+          {["Female","Male","Other"].map(s=>(
+            <button key={s} onClick={()=>u("sex",s)} style={{
+              flex:1,padding:"11px 0",borderRadius:9,cursor:"pointer",
+              border:`1px solid ${form.sex===s?T.rg:T.w3}`,
+              background:form.sex===s?T.rgBg:T.w,
+              color:form.sex===s?T.rg2:T.w5,
+              fontFamily:fonts.sans,fontSize:13,fontWeight:form.sex===s?500:400,
+              transition:"all .15s",
+            }}>{s}</button>
+          ))}
+        </div>
+      </div>
+      {form.sex==="Female" && (
+        <div style={{marginBottom:28}}>
+          <FieldLabel>Hormonal status</FieldLabel>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:4}}>
+            {["Pre-menopausal","Peri-menopausal","Post-menopausal","On HRT","Prefer not to say"].map(s=>(
+              <button key={s} onClick={()=>u("hormonalStatus",s)} style={{
+                padding:"8px 16px",borderRadius:50,cursor:"pointer",
+                border:`1px solid ${form.hormonalStatus===s?T.rg:T.w3}`,
+                background:form.hormonalStatus===s?T.rgBg:T.w,
+                color:form.hormonalStatus===s?T.rg2:T.w5,
+                fontFamily:fonts.sans,fontSize:12,
+                transition:"all .15s",
+              }}>{s}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      <div style={{marginTop:40}}>
+        <BtnPrimary
+          onClick={()=>transition(2)}
+          disabled={!form.name || !form.dob || !form.sex}
+        >Continue →</BtnPrimary>
+      </div>
+    </Wrap>
+  );
+
+  // ── STEP 2: Symptoms (HEI-Q domains) ──
+  if(step===2) return (
+    <Wrap>
+      <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:24,height:1,background:T.rg}}/>
+        Step 2 of 4 · Symptoms — {domainIdx+1} / {HEIQ_DOMAINS.length}
+      </div>
+      {/* Domain progress bar */}
+      <div style={{display:"flex",gap:4,marginBottom:36}}>
+        {HEIQ_DOMAINS.map((d,i)=>(
+          <div key={d.id} style={{flex:1,height:3,borderRadius:2,background:i<=domainIdx?d.color:T.w3,transition:"background .3s"}}/>
+        ))}
+      </div>
+      <h2 style={{fontFamily:fonts.serif,fontSize:32,fontWeight:400,color:T.w7,letterSpacing:"-0.01em",lineHeight:1.15,marginBottom:8}}>
+        {curDomain.label}
+      </h2>
+      <p style={{fontSize:12,fontFamily:fonts.mono,color:T.w4,letterSpacing:"0.06em",marginBottom:36}}>
+        {Math.round(curDomain.weight*100)}% weight in your Health Entropy Score
+      </p>
+      <div style={{display:"flex",flexDirection:"column",gap:28}}>
+        {curDomain.questions.map((q,i)=>{
+          const ans = getAns(curDomain.id, i);
+          return (
+            <div key={i} style={{borderBottom:`1px solid ${T.w3}`,paddingBottom:24}}>
+              <p style={{fontSize:14,fontWeight:300,color:T.w6,lineHeight:1.7,marginBottom:14,fontFamily:fonts.sans}}>{q.q}</p>
+              {q.type==="freq" ? (
+                <div style={{display:"flex",gap:6}}>
+                  {FREQ_OPTS.map(opt=>(
+                    <button key={opt.val} onClick={()=>setAns(curDomain.id,i,opt.val)} style={{
+                      flex:1,padding:"9px 4px",borderRadius:8,cursor:"pointer",
+                      border:`1px solid ${ans===opt.val?curDomain.color:T.w3}`,
+                      background:ans===opt.val?`${curDomain.color}12`:T.w,
+                      color:ans===opt.val?curDomain.color:T.w4,
+                      fontFamily:fonts.mono,fontSize:9,letterSpacing:"0.1em",textTransform:"uppercase",
+                      transition:"all .15s",
+                    }}>{opt.label}</button>
+                  ))}
+                </div>
+              ) : (
+                <div style={{display:"flex",gap:8}}>
+                  {[{label:"Yes",val:1},{label:"No",val:0}].map(opt=>(
+                    <button key={opt.val} onClick={()=>setAns(curDomain.id,i,opt.val)} style={{
+                      flex:1,padding:"12px 0",borderRadius:9,cursor:"pointer",
+                      border:`1px solid ${ans===opt.val?curDomain.color:T.w3}`,
+                      background:ans===opt.val?`${curDomain.color}12`:T.w,
+                      color:ans===opt.val?curDomain.color:T.w5,
+                      fontFamily:fonts.sans,fontSize:13,fontWeight:ans===opt.val?500:400,
+                      transition:"all .15s",
+                    }}>{opt.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{display:"flex",gap:12,marginTop:40}}>
+        <button onClick={()=>{
+          if(domainIdx>0) setDomainIdx(d=>d-1);
+          else transition(1);
+        }} style={{
+          padding:"14px 28px",borderRadius:10,border:`1px solid ${T.w3}`,
+          background:T.w,color:T.w5,fontFamily:fonts.sans,fontSize:13,cursor:"pointer",
+        }}>← Back</button>
+        <div style={{flex:1}}>
+          <BtnPrimary
+            disabled={!domainComplete(curDomain)}
+            onClick={()=>{
+              if(domainIdx < HEIQ_DOMAINS.length-1) setDomainIdx(d=>d+1);
+              else transition(3);
+            }}
+          >
+            {domainIdx < HEIQ_DOMAINS.length-1 ? `Next: ${HEIQ_DOMAINS[domainIdx+1].label} →` : "Continue →"}
+          </BtnPrimary>
+        </div>
+      </div>
+    </Wrap>
+  );
+
+  // ── STEP 3: Clinical flags ──
+  if(step===3) return (
+    <Wrap>
+      <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:24,height:1,background:T.rg}}/>
+        Step 3 of 4 · Clinical context
+      </div>
+      <h2 style={{fontFamily:fonts.serif,fontSize:38,fontWeight:400,color:T.w7,letterSpacing:"-0.01em",lineHeight:1.1,marginBottom:12}}>
+        Prior testing &<br/><em style={{fontStyle:"italic",color:T.rg2}}>medications.</em>
+      </h2>
+      <p style={{fontSize:14,fontWeight:300,color:T.w5,lineHeight:1.7,marginBottom:40}}>
+        This helps calibrate your predictions and protocol.
+      </p>
+      {/* ALCAT */}
+      <div style={{marginBottom:28,borderBottom:`1px solid ${T.w3}`,paddingBottom:28}}>
+        <FieldLabel>Have you done an ALCAT food sensitivity test?</FieldLabel>
+        <div style={{display:"flex",gap:8}}>
+          {[{l:"Yes — I have results",v:true},{l:"No — not yet",v:false}].map(o=>(
+            <button key={String(o.v)} onClick={()=>uc("hasAlcat",o.v)} style={{
+              flex:1,padding:"12px 0",borderRadius:9,cursor:"pointer",
+              border:`1px solid ${clinical.hasAlcat===o.v?T.rg:T.w3}`,
+              background:clinical.hasAlcat===o.v?T.rgBg:T.w,
+              color:clinical.hasAlcat===o.v?T.rg2:T.w5,
+              fontFamily:fonts.sans,fontSize:12,fontWeight:clinical.hasAlcat===o.v?500:400,
+              transition:"all .15s",
+            }}>{o.l}</button>
+          ))}
+        </div>
+      </div>
+      {/* CMA */}
+      <div style={{marginBottom:28,borderBottom:`1px solid ${T.w3}`,paddingBottom:28}}>
+        <FieldLabel>Have you done a Cellular Micronutrient Assay (CMA)?</FieldLabel>
+        <div style={{display:"flex",gap:8}}>
+          {[{l:"Yes",v:true},{l:"No",v:false}].map(o=>(
+            <button key={String(o.v)} onClick={()=>uc("hasCma",o.v)} style={{
+              flex:1,padding:"12px 0",borderRadius:9,cursor:"pointer",
+              border:`1px solid ${clinical.hasCma===o.v?T.rg:T.w3}`,
+              background:clinical.hasCma===o.v?T.rgBg:T.w,
+              color:clinical.hasCma===o.v?T.rg2:T.w5,
+              fontFamily:fonts.sans,fontSize:12,fontWeight:clinical.hasCma===o.v?500:400,
+              transition:"all .15s",
+            }}>{o.l}</button>
+          ))}
+        </div>
+      </div>
+      {/* Medications */}
+      <div style={{marginBottom:40}}>
+        <FieldLabel>Current medications or supplements (optional)</FieldLabel>
+        <RuledInput
+          value={clinical.meds}
+          onChange={e=>uc("meds",e.target.value)}
+          placeholder="e.g. Levothyroxine, Vitamin D, Metformin…"
+        />
+      </div>
+      <div style={{display:"flex",gap:12}}>
+        <button onClick={()=>transition(2)} style={{
+          padding:"14px 28px",borderRadius:10,border:`1px solid ${T.w3}`,
+          background:T.w,color:T.w5,fontFamily:fonts.sans,fontSize:13,cursor:"pointer",
+        }}>← Back</button>
+        <div style={{flex:1}}>
+          <BtnPrimary
+            disabled={clinical.hasAlcat===null || clinical.hasCma===null}
+            onClick={calcScore}
+          >Calculate my score →</BtnPrimary>
+        </div>
+      </div>
+    </Wrap>
+  );
+
+  // ── STEP 4: Results ──
+  if(step===4 && score!==null) {
+    const scoreLabel = score < 25 ? "Low" : score < 50 ? "Moderate" : score < 72 ? "Elevated" : "High";
+    const scoreColor = score < 25 ? T.ok : score < 50 ? T.warn : score < 72 ? "#C87030" : T.err;
+    const topDomain = [...(breakdown||[])].sort((a,b)=>b.pct-a.pct)[0];
+    return (
+      <Wrap>
+        <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase",marginBottom:20,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:24,height:1,background:T.rg}}/>
+          Your results · Health Entropy Index
+        </div>
+        <h2 style={{fontFamily:fonts.serif,fontSize:38,fontWeight:400,color:T.w7,letterSpacing:"-0.01em",lineHeight:1.1,marginBottom:32}}>
+          {form.name?.split(" ")[0] || "Your"}'s biological<br/><em style={{fontStyle:"italic",color:T.rg2}}>entropy profile.</em>
+        </h2>
+        {/* Score dial */}
+        <div style={{
+          background:T.w1,border:`1px solid ${T.w3}`,borderRadius:16,
+          padding:"32px",marginBottom:24,
+          display:"flex",alignItems:"center",gap:32,
+          boxShadow:`inset 0 1px 3px rgba(100,80,60,0.06)`,
+        }}>
+          <div style={{textAlign:"center",flexShrink:0}}>
+            <div style={{
+              width:100,height:100,borderRadius:"50%",
+              border:`3px solid ${scoreColor}`,
+              display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+              boxShadow:`0 0 28px ${scoreColor}30`,
+            }}>
+              <div style={{fontFamily:fonts.serif,fontSize:36,fontWeight:400,color:scoreColor,lineHeight:1}}>{score}</div>
+              <div style={{fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:"0.1em",textTransform:"uppercase"}}>/ 100</div>
+            </div>
+            <div style={{fontFamily:fonts.mono,fontSize:9,color:scoreColor,letterSpacing:"0.14em",textTransform:"uppercase",marginTop:10}}>{scoreLabel}</div>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:fonts.sans,fontSize:14,color:T.w6,lineHeight:1.7,marginBottom:12}}>
+              Your Health Entropy Index is <strong style={{color:scoreColor}}>{score}/100</strong> — indicating {scoreLabel.toLowerCase()} biological disorder.
+              Your highest-load domain is <strong style={{color:topDomain?.color}}>{topDomain?.label}</strong>.
+            </div>
+            <div style={{fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.08em"}}>
+              {clinical.hasAlcat ? "ALCAT results on file · " : "ALCAT not yet done · "}
+              {clinical.hasCma ? "CMA on file" : "CMA not yet done"}
+            </div>
+          </div>
+        </div>
+        {/* Domain breakdown */}
+        <div style={{marginBottom:24}}>
+          {(breakdown||[]).map(d=>(
+            <div key={d.id} style={{display:"flex",alignItems:"center",gap:14,marginBottom:10}}>
+              <div style={{fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.1em",width:140,flexShrink:0,textTransform:"uppercase"}}>{d.label}</div>
+              <div style={{flex:1,height:5,background:T.w2,borderRadius:3,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${d.pct}%`,background:d.color,borderRadius:3,transition:"width 1s ease"}}/>
+              </div>
+              <div style={{fontFamily:fonts.mono,fontSize:10,color:d.color,width:32,textAlign:"right"}}>{d.pct}%</div>
+            </div>
+          ))}
+        </div>
+        {/* CTA */}
+        {!clinical.hasAlcat && (
+          <div style={{
+            background:T.rgBg,border:`1px solid ${T.rg}30`,borderRadius:12,
+            padding:"18px 22px",marginBottom:24,
+          }}>
+            <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:6}}>Recommended next step</div>
+            <div style={{fontSize:13,fontWeight:300,color:T.w6,lineHeight:1.7}}>
+              Based on your score, an ALCAT 250 test would confirm your predicted reactivities and unlock a full personalised protocol. Book at MediBalans Stockholm.
+            </div>
+          </div>
+        )}
+        <BtnPrimary onClick={()=>onComplete({ form, clinical, score, breakdown })}>
+          {clinical.hasAlcat ? "Enter my dashboard →" : "Continue to dashboard →"}
+        </BtnPrimary>
+        <p style={{marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.1em"}}>
+          Your score is saved · Protocol access enabled
+        </p>
+      </Wrap>
+    );
+  }
+
+  return null;
+}
+
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 export default function MeetMario() {
+  const [showLanding,setShowLanding]   = useState(true);
+  const [showOnboarding,setShowOnboarding] = useState(false);
+  const [patientProfile,setPatientProfile] = useState(null);
   const [tab,setTab]                   = useState("monitor");
   const [rotDay,setRotDay]             = useState(1);
   const [proteins,setProteins]         = useState({});
@@ -1027,8 +1501,6 @@ export default function MeetMario() {
     divider: t.id==="grocery",
   }));
 
-  const [showLanding, setShowLanding] = useState(true);
-
   if (showLanding) return (
     <div style={{minHeight:"100vh",position:"relative",overflow:"hidden",fontFamily:fonts.sans,background:`linear-gradient(155deg,#FDF8F3 0%,#F8EFE8 25%,#F4EAF0 55%,#EEF0F8 85%,#F1EEF8 100%)`}}>
       {/* Liquid orbs */}
@@ -1069,7 +1541,7 @@ export default function MeetMario() {
             </div>
           ))}
         </div>
-        <BtnPrimary onClick={()=>setShowLanding(false)}>Begin Assessment →</BtnPrimary>
+        <BtnPrimary onClick={()=>{ setShowLanding(false); setShowOnboarding(true); }}>Begin Assessment →</BtnPrimary>
         <p style={{marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.14em"}}>~10 minutes · GDPR compliant · No credit card required</p>
       </div>
       <style>{`
@@ -1082,6 +1554,13 @@ export default function MeetMario() {
         *{box-sizing:border-box}
       `}</style>
     </div>
+  );
+
+  if (showOnboarding) return (
+    <Onboarding onComplete={(profile) => {
+      setPatientProfile(profile);
+      setShowOnboarding(false);
+    }}/>
   );
 
   return (
