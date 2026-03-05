@@ -472,6 +472,9 @@ function Onboarding({ onComplete }) {
                 ))}
               </div>
               <BtnPrimary onClick={()=>goTo(1)}>Start Assessment →</BtnPrimary>
+              <div style={{textAlign:"center",marginTop:16}}>
+                <button onClick={()=>onComplete(null)} style={{background:"none",border:"none",cursor:"pointer",fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:"0.14em",textTransform:"uppercase",textDecoration:"underline"}}>Skip — go to dashboard</button>
+              </div>
             </div>
           )}
 
