@@ -394,6 +394,7 @@ function Onboarding({ onComplete }) {
   const [hasCma, setHasCma] = useState(null);
   const [score, setScore] = useState(null);
   const [breakdown, setBreakdown] = useState(null);
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const nameRef = useRef(null);
   const dobRef = useRef(null);
   const medsRef = useRef(null);
@@ -592,10 +593,10 @@ function Onboarding({ onComplete }) {
                 <FieldLabel>Upload lab results (optional)</FieldLabel>
                 <p style={{fontSize:12,fontWeight:300,color:T.w4,lineHeight:1.6,marginBottom:14,fontFamily:fonts.sans}}>ALCAT · CMA · GI-MAP · Genova · Werlabs · Unilabs · DUTCH · or any functional medicine report (PDF)</p>
                 <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
-                  {(clinical.uploadedFiles||[]).map((f,i)=>(
+                  {uploadedFiles.map((f,i)=>(
                     <div key={i} style={{display:"flex",alignItems:"center",gap:6,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:6,padding:"5px 10px"}}>
                       <span style={{fontFamily:fonts.mono,fontSize:10,color:T.rg2}}>{f.name}</span>
-                      <button onClick={()=>uc("uploadedFiles",(clinical.uploadedFiles||[]).filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.w4,fontSize:12,padding:0,lineHeight:1}}>x</button>
+                      <button onClick={()=>setUploadedFiles(uploadedFiles.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.w4,fontSize:12,padding:0,lineHeight:1}}>x</button>
                     </div>
                   ))}
                 </div>
@@ -604,7 +605,7 @@ function Onboarding({ onComplete }) {
                   <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple style={{display:"none"}}
                     onChange={e=>{
                       const files = Array.from(e.target.files);
-                      uc("uploadedFiles",[...(clinical.uploadedFiles||[]),...files]);
+                      setUploadedFiles([...uploadedFiles,...files]);
                       e.target.value="";
                     }}
                   />
