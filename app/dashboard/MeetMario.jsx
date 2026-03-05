@@ -23,14 +23,14 @@ const MEALS = {
   4:{breakfast:{base:"Buckwheat pancakes — pumpkin compote, walnut crumble",isProtein:false},snack1:{base:"Cantaloupe + pecans",isProtein:false},lunch:{base:"Spaghetti squash, cannellini beans",defaultP:"Turkey",methods:{"Clam":"steamed","Haddock":"baked","Mussel":"steamed","Salmon":"baked","Scallop":"seared","Shrimp":"sautéed","Trout":"baked","Turkey":"pan-cooked","Veal":"escalope","Venison":"grilled"},sides:"walnut oil",isProtein:true},snack2:{base:"Persimmon + sesame seeds",isProtein:false},dinner:{base:"Teff, wilted spinach, red beet salad",defaultP:"Trout",methods:{"Clam":"steamed","Haddock":"seared","Mussel":"broth","Salmon":"baked","Scallop":"caramelised","Shrimp":"grilled","Trout":"baked","Turkey":"roasted","Veal":"braised","Venison":"seared"},sides:"grapefruit-walnut",isProtein:true},snack3:{base:"Watermelon + spearmint tea",isProtein:false}},
 };
 const SYMPTOM_CATS = {
-  digestive:{label:"Digestive",icon:"🫁",items:["Bloating","Cramping","Nausea","Gas","Reflux","Loose stools","Stomach pain"]},
-  skin:{label:"Skin",icon:"🌡️",items:["Flushing","Itching","Rash","Hives","Puffiness","Swelling"]},
-  neuro:{label:"Neurological",icon:"🧠",items:["Brain fog","Headache","Dizziness","Fatigue spike","Mood drop","Anxiety"]},
-  joints:{label:"Joints/Muscles",icon:"🦴",items:["Joint stiffness","Muscle aches","Back pain","Neck tension","Swollen fingers"]},
-  cardiac:{label:"Cardiac/Resp",icon:"❤️",items:["Heart racing","Shortness of breath","Chest tightness","Sinus congestion","Runny nose"]},
+  digestive:{label:"Digestive",items:["Bloating","Cramping","Nausea","Gas","Reflux","Loose stools","Stomach pain"]},
+  skin:{label:"Skin",items:["Flushing","Itching","Rash","Hives","Puffiness","Swelling"]},
+  neuro:{label:"Neurological",items:["Brain fog","Headache","Dizziness","Fatigue spike","Mood drop","Anxiety"]},
+  joints:{label:"Joints/Muscles",items:["Joint stiffness","Muscle aches","Back pain","Neck tension","Swollen fingers"]},
+  cardiac:{label:"Cardiac/Resp",items:["Heart racing","Shortness of breath","Chest tightness","Sinus congestion","Runny nose"]},
 };
 const CUISINES = [{id:"mediterranean",label:"Mediterranean",flag:"🫒",desc:"Olive oil, herbs, fish"},{id:"french",label:"French",flag:"🇫🇷",desc:"Bistro — duck, lentils"},{id:"swedish",label:"Swedish",flag:"🇸🇪",desc:"Nordic fish, root veg"},{id:"japanese",label:"Japanese",flag:"🇯🇵",desc:"Clean minimal, fish"},{id:"middle_eastern",label:"Middle Eastern",flag:"🌿",desc:"Spiced meats, herbs"},{id:"scandinavian",label:"Scandinavian",flag:"🐟",desc:"Cured fish, forest"}];
-const EAT_PATS = [{id:"standard",label:"Standard",emoji:"⏰",desc:"6 meals every 3h",fasting:false},{id:"if16_8",label:"IF 16:8",emoji:"🕐",desc:"16h fast · 8h window",fasting:true,detail:"Window 12:00–20:00"},{id:"if18_6",label:"IF 18:6",emoji:"🕑",desc:"18h fast · 6h window",fasting:true,detail:"Window 13:00–19:00"},{id:"if5_2",label:"5:2",emoji:"📆",desc:"5 normal · 2 low-cal",fasting:true,detail:"~500 kcal fasting days"}];
+const EAT_PATS = [{id:"standard",label:"Standard",desc:"6 meals every 3h",fasting:false},{id:"if16_8",label:"IF 16:8",desc:"16h fast · 8h window",fasting:true,detail:"Window 12:00–20:00"},{id:"if18_6",label:"IF 18:6",desc:"18h fast · 6h window",fasting:true,detail:"Window 13:00–19:00"},{id:"if5_2",label:"5:2",desc:"5 normal · 2 low-cal",fasting:true,detail:"~500 kcal fasting days"}];
 const MARIO_SYS = `You are Meet Mario, clinical AI for MediBalans AB, Stockholm. Patient: Christina Wohltahrt, 64, post-menopausal. ALCAT April 2024. Markers: Candida mild (no sugar/yeast/vinegar 3mo), Whey moderate (no milk 6mo). Severe reactors (9mo): beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, bell pepper, chickpea, cilantro, lobster, pistachio, poppy seed, capers, cumin, jalapeño, egg white, sea bass, wakame. Rules: No seed oils. CPF every meal. Respond in clear prose, no bullet points.`;
 
 function simulateMealResponse(hadReactive) {
@@ -588,6 +588,28 @@ function Onboarding({ onComplete }) {
                   ))}
                 </div>
               </div>
+              <div style={{marginBottom:28,borderBottom:`1px solid ${T.w3}`,paddingBottom:28}}>
+                <FieldLabel>Upload lab results (optional)</FieldLabel>
+                <p style={{fontSize:12,fontWeight:300,color:T.w4,lineHeight:1.6,marginBottom:14,fontFamily:fonts.sans}}>ALCAT · CMA · GI-MAP · Genova · Werlabs · Unilabs · DUTCH · or any functional medicine report (PDF)</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+                  {(clinical.uploadedFiles||[]).map((f,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:6,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:6,padding:"5px 10px"}}>
+                      <span style={{fontFamily:fonts.mono,fontSize:10,color:T.rg2}}>{f.name}</span>
+                      <button onClick={()=>uc("uploadedFiles",(clinical.uploadedFiles||[]).filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:T.w4,fontSize:12,padding:0,lineHeight:1}}>x</button>
+                    </div>
+                  ))}
+                </div>
+                <label style={{display:"inline-flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:9,border:`1px solid ${T.w3}`,background:T.w,cursor:"pointer",fontFamily:fonts.sans,fontSize:12,color:T.w5}}>
+                  <span style={{fontFamily:fonts.mono,fontSize:10,letterSpacing:"0.1em"}}>+ ADD FILE</span>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" multiple style={{display:"none"}}
+                    onChange={e=>{
+                      const files = Array.from(e.target.files);
+                      uc("uploadedFiles",[...(clinical.uploadedFiles||[]),...files]);
+                      e.target.value="";
+                    }}
+                  />
+                </label>
+              </div>
               <div style={{marginBottom:40}}>
                 <FieldLabel>Current medications or supplements (optional)</FieldLabel>
                 <input ref={medsRef} defaultValue="" placeholder="e.g. Levothyroxine, Vitamin D, Metformin…" autoComplete="off" style={{display:"block",width:"100%",background:"transparent",border:"none",borderBottom:`1.5px solid ${T.w3}`,padding:"11px 0",fontFamily:fonts.sans,fontSize:13.5,fontWeight:300,color:T.w7,outline:"none",letterSpacing:"-0.01em"}} onFocus={e=>e.target.style.borderBottomColor=T.rg} onBlur={e=>e.target.style.borderBottomColor=T.w3}/>
@@ -944,12 +966,12 @@ export default function MeetMario() {
             <div>
               <Panel>
                 <FieldLabel>Data Sources</FieldLabel>
-                {[{name:"Apple Watch",icon:"⌚",streams:"HR · HRV",badge:"HRV"},
-                  {name:"Oura Ring",icon:"💍",streams:"HRV · Temp · SpO2 · Readiness",badge:"HRV·TEMP"},
-                  {name:"Garmin",icon:"🏔️",streams:"HR · HRV · Sleep · Stress",badge:"HRV·SLEEP"},
-                  {name:"Samsung Galaxy Watch",icon:"💎",streams:"HR · HRV (IBI) · SpO2 · Skin temp",badge:"HRV·TEMP"},
-                  {name:"Dexcom G7/G6",icon:"📡",streams:"Glucose · 5min intervals · trends",badge:"GLUCOSE"},
-                  {name:"Libre 2 / 3",icon:"💠",streams:"Glucose · 1min intervals",badge:"GLUCOSE"},
+                {[{name:"Apple Watch",streams:"HR · HRV",badge:"HRV"},
+                  {name:"Oura Ring",streams:"HRV · Temp · SpO2 · Readiness",badge:"HRV·TEMP"},
+                  {name:"Garmin",streams:"HR · HRV · Sleep · Stress",badge:"HRV·SLEEP"},
+                  {name:"Samsung Galaxy Watch",streams:"HR · HRV (IBI) · SpO2 · Skin temp",badge:"HRV·TEMP"},
+                  {name:"Dexcom G7/G6",streams:"Glucose · 5min intervals · trends",badge:"GLUCOSE"},
+                  {name:"Libre 2 / 3",streams:"Glucose · 1min intervals",badge:"GLUCOSE"},
                 ].map(d=>(
                   <div key={d.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${T.w2}`}}>
                     <span style={{fontSize:16,flexShrink:0}}>{d.icon}</span>
@@ -1183,9 +1205,9 @@ export default function MeetMario() {
             </div>
             <div>
               <FieldLabel>Phase</FieldLabel>
-              {[{id:"detox",label:"Detox / Months 1–3",emoji:"🔒"},{id:"post3months",label:"Post Month 3+",emoji:"🍓"}].map(ph=>(
+              {[{id:"detox",label:"Detox / Months 1–3"},{id:"post3months",label:"Post Month 3+"}].map(ph=>(
                 <button key={ph.id} onClick={()=>{setGenPhase(ph.id);setGenResult(null);if(ph.id==="detox")setEatPat("standard");}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",background:genPhase===ph.id?T.rgBg:T.w,border:`1px solid ${genPhase===ph.id?T.rg:T.w3}`,borderRadius:8,padding:"9px 12px",cursor:"pointer",marginBottom:4,textAlign:"left"}}>
-                  <span>{ph.emoji}</span><span style={{fontSize:12,color:genPhase===ph.id?T.rg2:T.w7,fontFamily:fonts.sans,fontWeight:genPhase===ph.id?500:400}}>{ph.label}</span>
+                  <span style={{fontSize:12,color:genPhase===ph.id?T.rg2:T.w7,fontFamily:fonts.sans,fontWeight:genPhase===ph.id?500:400}}>{ph.label}</span>
                 </button>
               ))}
             </div>
@@ -1204,13 +1226,13 @@ export default function MeetMario() {
                 return <div key={ep.id}>
                   <button onClick={()=>{if(!locked){setEatPat(ep.id);setGenResult(null);}}} style={{width:"100%",background:locked?T.w2:sel?T.rgBg:T.w,border:`1px solid ${locked?T.w3:sel?T.rg:T.w3}`,borderRadius:7,padding:"8px 12px",cursor:locked?"not-allowed":"pointer",textAlign:"left",marginBottom:4,opacity:locked?0.45:1}}>
                     <div style={{display:"flex",alignItems:"center",gap:7}}>
-                      <span style={{fontSize:12}}>{locked?"🔒":ep.emoji}</span>
+                      
                       <div><div style={{fontSize:12,color:locked?T.w4:sel?T.rg2:T.w7,fontFamily:fonts.sans,fontWeight:sel?500:400}}>{ep.label}</div><div style={{fontSize:9,color:T.w4,fontFamily:fonts.mono}}>{ep.desc}</div></div>
                     </div>
                   </button>
                   {sel&&ep.fasting&&!locked&&<div style={{background:T.w1,border:`1px solid ${T.w3}`,borderTop:"none",borderRadius:"0 0 7px 7px",marginBottom:4}}>
                     {!research[ep.id]?<button onClick={()=>fetchResearch(ep.id)} disabled={resLoad===ep.id} style={{width:"100%",background:"none",border:"none",borderTop:`1px solid ${T.w3}`,padding:"8px 12px",cursor:"pointer",display:"flex",gap:7,alignItems:"center"}}>
-                      <span>🔬</span><span style={{fontSize:10,color:T.rg2,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>{resLoad===ep.id?"Searching PubMed…":"Research for your profile"}</span>
+                      <span style={{fontSize:10,color:T.rg2,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>{resLoad===ep.id?"Searching PubMed…":"Research for your profile"}</span>
                     </button>:<div style={{padding:"10px 12px",maxHeight:200,overflowY:"auto"}}>
                       <div style={{fontSize:10,lineHeight:1.7,color:T.w6,fontFamily:fonts.sans,fontWeight:300}}>{research[ep.id].split("\n").slice(0,10).join("\n")}</div>
                     </div>}
@@ -1308,11 +1330,11 @@ export default function MeetMario() {
           <div style={{marginTop:20,borderTop:`1px solid ${T.w3}`,paddingTop:16}}>
             <FieldLabel>Order online</FieldLabel>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[{name:"ICA Online",url:"https://www.ica.se",icon:"🔴",note:"Hemleverans"},
-                {name:"Matsmart",url:"https://www.matsmart.se",icon:"🟢",note:"Organic discounts"},
-                {name:"Nordic Superfood",url:"https://nordicsuperfood.se",icon:"🌿",note:"Wild-caught & organic"},
-                {name:"Willys",url:"https://www.willys.se",icon:"🔵",note:"Budget-friendly"},
-                {name:"Rohkost.de",url:"https://www.rohkost.de",icon:"🌱",note:"Rare protocol items"},
+              {[{name:"ICA Online",url:"https://www.ica.se",note:"Hemleverans"},
+                {name:"Matsmart",url:"https://www.matsmart.se",note:"Organic discounts"},
+                {name:"Nordic Superfood",url:"https://nordicsuperfood.se",note:"Wild-caught & organic"},
+                {name:"Willys",url:"https://www.willys.se",note:"Budget-friendly"},
+                {name:"Rohkost.de",url:"https://www.rohkost.de",note:"Rare protocol items"},
               ].map(s=>(
                 <a key={s.name} href={s.url} target="_blank" rel="noopener noreferrer" style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:"9px 14px",textDecoration:"none",display:"flex",gap:8,alignItems:"center",boxShadow:`0 1px 3px rgba(100,80,60,0.05)`}}>
                   <span style={{fontSize:14}}>{s.icon}</span>
