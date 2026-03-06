@@ -1,3 +1,4 @@
+import PlateCheck from "../components/PlateCheck";
 import { useState, useRef, useEffect, useCallback } from "react";
 const FF="sans-serif",FX="flex",CP="pointer";
 const P = {
