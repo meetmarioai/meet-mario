@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+﻿import { useState, useRef, useEffect, useCallback } from "react";
 
 // --- DATA (unchanged) --------------------------------------------------------
 const P = {
@@ -1069,7 +1069,7 @@ export default function MeetMario() {
             </div>
           ))}
         </div>
-        <BtnPrimary onClick={()=>setShowLanding(false)}>Begin Assessment -></BtnPrimary>
+        <BtnPrimary onClick={()=>setShowLanding(false)}>Begin Assessment &rarr;</BtnPrimary>
         <p style={{marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.14em"}}>~10 minutes . GDPR compliant . No credit card required</p>
       </div>
       <style>{`
@@ -1152,3 +1152,4 @@ export default function MeetMario() {
     </div>
   );
 }
+
