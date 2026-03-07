@@ -1,8 +1,3 @@
 ﻿{
-  "crons": [
-    {
-      "path": "/api/cron/emails",
-      "schedule": "55 8 * * *"
-    }
-  ]
+  "framework": "nextjs"
 }
