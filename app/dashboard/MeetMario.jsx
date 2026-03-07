@@ -717,7 +717,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
              {template.base}
             </div>
            </div>
-           <button onClick={()=>{ if(!alreadyLoaded) setMonFoods(templateFoods); else setMonFoods([]);}}\1                        style={{background:alreadyLoaded?S.gold+"20":S.c1,border:`1px solid ${alreadyLoaded?S.gold:S.goldDim+"40"}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:alreadyLoaded?S.gold:S.goldDim,whiteSpace:"nowrap",marginLeft:8,flexShrink:0}}>
+           <button onClick={()=>{ if(!alreadyLoaded) setMonFoods(templateFoods); else setMonFoods([]);}} style={{background:alreadyLoaded?S.gold+"20":S.c1,border:`1px solid ${alreadyLoaded?S.gold:S.goldDim+"40"}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:alreadyLoaded?S.gold:S.goldDim,whiteSpace:"nowrap",marginLeft:8,flexShrink:0}}>
             {alreadyLoaded?"âœ“ Loaded":"Use template"}
            </button>
           </div>
@@ -1219,5 +1219,6 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
   </div>
  );
 }
+
 
 
