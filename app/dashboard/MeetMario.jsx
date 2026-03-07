@@ -54,9 +54,9 @@ function detectSpikes(pts) {
   return spikes;
 }
 async function callClaude(messages,system,extra={}) {
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages,...extra})});
+  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages,...extra})});
   const d=await res.json();
-  return(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  return d.text||"";
 }
 
 // --- DESIGN SYSTEM -- Balans / Jony Ive / Ferrari ----------------------------
@@ -1152,4 +1152,6 @@ export default function MeetMario() {
     </div>
   );
 }
+
+
 
