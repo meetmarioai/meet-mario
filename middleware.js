@@ -1,7 +1,7 @@
-import { createServerClient } from '@supabase/ssr'
+﻿import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 
-// ─── Middleware: protect /dashboard and /admin routes ─────────────────────────
+// â”€â”€â”€ Middleware: protect /dashboard and /admin routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // All other routes (/, /auth/login, /auth/callback) are public.
 
 export async function middleware(request) {
@@ -39,7 +39,7 @@ export async function middleware(request) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Admin route — only clinic staff
+  // Admin route â€” only clinic staff
   if (pathname.startsWith('/admin') && user) {
     const { data: staff } = await supabase
       .from('clinic_staff')
@@ -58,3 +58,4 @@ export async function middleware(request) {
 export const config = {
   matcher: ['/dashboard/:path*', '/admin/:path*'],
 }
+
