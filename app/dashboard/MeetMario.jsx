@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+﻿import { useState, useRef, useEffect, useCallback } from "react";
 
-// ─── DATA (unchanged) ────────────────────────────────────────────────────────
+// â”€â”€â”€ DATA (unchanged) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const P = {
   name:"Christina Wohltahrt",dob:"07/21/1960",testDate:"April 8, 2024",labId:"539273",
   age:64,sex:"female",hormonalStatus:"post-menopausal",
   conditions:["Candida (mild)","Whey sensitivity (moderate)","ALCAT food protocol"],
-  severe:["BEEF","BLACK TEA","BELL PEPPER","BRUSSELS SPROUT","CABBAGE","CANOLA OIL","CAPERS","CAULIFLOWER","CHICKPEA","CILANTRO","COFFEE","CUMIN","ENDIVE","GARLIC","GREEN TEA","HONEYDEW MELON","JALAPEÑO PEPPER","LOBSTER","MONK FRUIT","MULBERRY","ONION","PINTO BEAN","PISTACHIO","POPPY SEED","RICE (ALL)","SCALLION","SEA BASS","TOMATO","WAKAME SEAWEED","EGG WHITE"],
+  severe:["BEEF","BLACK TEA","BELL PEPPER","BRUSSELS SPROUT","CABBAGE","CANOLA OIL","CAPERS","CAULIFLOWER","CHICKPEA","CILANTRO","COFFEE","CUMIN","ENDIVE","GARLIC","GREEN TEA","HONEYDEW MELON","JALAPEÃ‘O PEPPER","LOBSTER","MONK FRUIT","MULBERRY","ONION","PINTO BEAN","PISTACHIO","POPPY SEED","RICE (ALL)","SCALLION","SEA BASS","TOMATO","WAKAME SEAWEED","EGG WHITE"],
   moderate:["ACORN SQUASH","ALLSPICE","AMARANTH","ANCHOVY","APPLE","APRICOT","BANANA","BARLEY","BLACK BEANS","BLACK CURRANT","BLACKBERRY","BOSTON BIBB LETTUCE","BUCKWHEAT","CANNELLINI BEANS","CARDAMOM","CASHEW","CATFISH","CAYENNE PEPPER","CELERY","CHERRY","CHIA","CHICKEN","CHIVES","CLOVE","COCOA","CODFISH","CORN","CRAB","CRANBERRY","CUCUMBER","DATE","DILL","DRAGON FRUIT","DUCK","EGGPLANT","FAVA BEAN","FIG","FLAXSEED","GRAPEFRUIT","GREEN PEA","GROUPER","HADDOCK","HALIBUT","HORSERADISH","ICEBERG LETTUCE","KALE","KELP","KIDNEY BEAN","KIWI","LAMB","LEMON","LIMA BEAN","LICORICE","LIME","MACADAMIA","MACKEREL","MAHI MAHI","MALT","MANGO","MILLET","MUSSEL","MUSTARD GREENS","MUSTARD SEED","NAVY BEAN","NECTARINE","NORI","OAT (GLUTEN FREE)","OKRA","OLIVE","OREGANO","PAPRIKA","PARSNIP","PEACH","PECAN","PEAR","PEPPERMINT","PINE NUT","PINEAPPLE","PLUM","POLLOCK","POMEGRANATE","PORTOBELLO MUSHROOM","PUMPKIN","QUINOA","RASPBERRY","RED BEET","ROMAINE LETTUCE","ROSEMARY","RUTABAGA","RYE","SAGE","SALMON","SESAME","SHRIMP","SNAPPER","SOLE","SORGHUM","SOYBEAN","SPELT","SPINACH","STRAWBERRY","STRING BEAN","SUNFLOWER","SWEET POTATO","SWISS CHARD","TAPIOCA","TARRAGON","TARO ROOT","TEFF","THYME","TILAPIA","TUNA","TURNIP","VANILLA","VEAL","VENISON","WALNUT","WATER CHESTNUT","WATERCRESS","WATERMELON","WHEAT","YELLOW SQUASH","ZUCCHINI"],
   mild:["ALMOND","ARROWROOT","ASPARAGUS","AVOCADO","BAY LEAF","BLACK PEPPER","BLACK-EYED PEA","BLUEBERRY","BOK CHOY","BRAZIL NUT","BUTTON MUSHROOM","CANTALOUPE","CAROB","CARROT","CHAMOMILE","CHICORY","CINNAMON","CLAM","COCONUT","COLLARD GREENS","CORIANDER SEED","DANDELION LEAF","EGG YOLK","FENNEL SEED","FLOUNDER","GINGER","GRAPE","GUAVA","HAZELNUT","HEMP","LEAF LETTUCE","LEEK","LENTIL BEAN","MUNG BEAN","NUTMEG","ORANGE","OYSTER","PAPAYA","PARSLEY","PEANUT","PLANTAIN","PORK","RADISH","RHUBARB","SAFFLOWER","SAFFRON","SARDINE","SCALLOP","SHIITAKE MUSHROOM","STEVIA","SWORDFISH","TANGERINE","TROUT","TURKEY","TURMERIC","WHITE POTATO","WILD RICE"],
   alsoAvoid:{candida:["SUGAR","HONEY","MAPLE SYRUP","AGAVE","MOLASSES","BAKER'S YEAST","BREWER'S YEAST","NUTRITIONAL YEAST","WINE","BEER","VINEGAR"],whey:["COW'S MILK","GOAT'S MILK","SHEEP'S MILK","WHEY PROTEIN"]},
@@ -17,10 +17,10 @@ const ROT = {
   4:{grains:["Buckwheat","Teff"],veg:["Cannellini beans","Dandelion leaf","Okra","Portobello mushroom","Red beet","Rhubarb","Spaghetti squash","Spinach","Swiss chard","Turnip","Water chestnut"],fruit:["Cantaloupe","Grapefruit","Lychee","Orange","Persimmon","Pumpkin","Watermelon"],protein:["Clam","Haddock","Mussel","Salmon","Scallop","Shrimp","Trout","Turkey","Veal","Venison"],misc:["Black pepper","Nutmeg","Pecan","Sesame","Spearmint","Walnut"]},
 };
 const MEALS = {
-  1:{breakfast:{base:"GF oat porridge — banana, coconut milk, cashews",isProtein:false},snack1:{base:"Kiwi + whole cashews",isProtein:false},lunch:{base:"Butternut squash & kale, tapioca",defaultP:"Bison",methods:{"Bison":"grilled patties","Codfish":"pan-seared","Crab":"flaked in tallow","Lamb":"grilled chops","Sardine":"baked whole","Snapper":"baked fillet","Swordfish":"grilled steak","Oyster":"seared"},sides:"lemon-flaxseed",isProtein:true},snack2:{base:"Guava + carrot sticks",isProtein:false},dinner:{base:"White potato mash, mustard greens",defaultP:"Sardine",methods:{"Bison":"braised","Codfish":"parchment bake","Crab":"steamed","Lamb":"roasted","Sardine":"baked whole","Snapper":"pan-seared","Swordfish":"grilled","Oyster":"seared"},sides:"rosemary & bay leaf",isProtein:true},snack3:{base:"Chamomile tea + chia crackers",isProtein:false}},
-  2:{breakfast:{base:"Millet porridge — cinnamon, blueberries, almond butter",isProtein:false},snack1:{base:"Apple slices + hazelnut butter",isProtein:false},lunch:{base:"Bok choy & shiitake, rye crispbread",defaultP:"Chicken",methods:{"Catfish":"pan-fried","Chicken":"pan-roasted","Egg yolk":"soft-boiled","Mackerel":"grilled","Mahi mahi":"seared","Tilapia":"baked","Tuna":"seared"},sides:"ginger-lemon",isProtein:true},snack2:{base:"Tangerine + almonds",isProtein:false},dinner:{base:"Barley pilaf, broccoli",defaultP:"Mackerel",methods:{"Catfish":"parchment","Chicken":"roasted","Egg yolk":"poached","Mackerel":"grilled","Mahi mahi":"baked","Tilapia":"seared","Tuna":"seared rare"},sides:"wild rice crackers",isProtein:true},snack3:{base:"Pear + wild rice crackers",isProtein:false}},
-  3:{breakfast:{base:"Quinoa porridge — cherry compote, cocoa nibs",isProtein:false},snack1:{base:"Blackberry + pine nuts",isProtein:false},lunch:{base:"Sweet potato purée, navy bean stew",defaultP:"Pork",methods:{"Duck":"confit leg","Grouper":"seared","Halibut":"baked","Pollock":"poached","Pork":"tenderloin","Sole":"pan-fried"},sides:"avocado oil drizzle",isProtein:true},snack2:{base:"Nectarine + peanut butter",isProtein:false},dinner:{base:"Green pea mash, arugula-asparagus salad",defaultP:"Halibut",methods:{"Duck":"roasted","Grouper":"baked","Halibut":"corn-crust","Pollock":"steamed","Pork":"grilled","Sole":"meunière"},sides:"raspberry-lime vinaigrette",isProtein:true},snack3:{base:"Raspberry + carob",isProtein:false}},
-  4:{breakfast:{base:"Buckwheat pancakes — pumpkin compote, walnut crumble",isProtein:false},snack1:{base:"Cantaloupe + pecans",isProtein:false},lunch:{base:"Spaghetti squash, cannellini beans",defaultP:"Turkey",methods:{"Clam":"steamed","Haddock":"baked","Mussel":"steamed","Salmon":"baked","Scallop":"seared","Shrimp":"sautéed","Trout":"baked","Turkey":"pan-cooked","Veal":"escalope","Venison":"grilled"},sides:"walnut oil",isProtein:true},snack2:{base:"Persimmon + sesame seeds",isProtein:false},dinner:{base:"Teff, wilted spinach, red beet salad",defaultP:"Trout",methods:{"Clam":"steamed","Haddock":"seared","Mussel":"broth","Salmon":"baked","Scallop":"caramelised","Shrimp":"grilled","Trout":"baked","Turkey":"roasted","Veal":"braised","Venison":"seared"},sides:"grapefruit-walnut",isProtein:true},snack3:{base:"Watermelon + spearmint tea",isProtein:false}},
+  1:{breakfast:{base:"GF oat porridge â€” banana, coconut milk, cashews",isProtein:false},snack1:{base:"Kiwi + whole cashews",isProtein:false},lunch:{base:"Butternut squash & kale, tapioca",defaultP:"Bison",methods:{"Bison":"grilled patties","Codfish":"pan-seared","Crab":"flaked in tallow","Lamb":"grilled chops","Sardine":"baked whole","Snapper":"baked fillet","Swordfish":"grilled steak","Oyster":"seared"},sides:"lemon-flaxseed",isProtein:true},snack2:{base:"Guava + carrot sticks",isProtein:false},dinner:{base:"White potato mash, mustard greens",defaultP:"Sardine",methods:{"Bison":"braised","Codfish":"parchment bake","Crab":"steamed","Lamb":"roasted","Sardine":"baked whole","Snapper":"pan-seared","Swordfish":"grilled","Oyster":"seared"},sides:"rosemary & bay leaf",isProtein:true},snack3:{base:"Chamomile tea + chia crackers",isProtein:false}},
+  2:{breakfast:{base:"Millet porridge â€” cinnamon, blueberries, almond butter",isProtein:false},snack1:{base:"Apple slices + hazelnut butter",isProtein:false},lunch:{base:"Bok choy & shiitake, rye crispbread",defaultP:"Chicken",methods:{"Catfish":"pan-fried","Chicken":"pan-roasted","Egg yolk":"soft-boiled","Mackerel":"grilled","Mahi mahi":"seared","Tilapia":"baked","Tuna":"seared"},sides:"ginger-lemon",isProtein:true},snack2:{base:"Tangerine + almonds",isProtein:false},dinner:{base:"Barley pilaf, broccoli",defaultP:"Mackerel",methods:{"Catfish":"parchment","Chicken":"roasted","Egg yolk":"poached","Mackerel":"grilled","Mahi mahi":"baked","Tilapia":"seared","Tuna":"seared rare"},sides:"wild rice crackers",isProtein:true},snack3:{base:"Pear + wild rice crackers",isProtein:false}},
+  3:{breakfast:{base:"Quinoa porridge â€” cherry compote, cocoa nibs",isProtein:false},snack1:{base:"Blackberry + pine nuts",isProtein:false},lunch:{base:"Sweet potato purÃ©e, navy bean stew",defaultP:"Pork",methods:{"Duck":"confit leg","Grouper":"seared","Halibut":"baked","Pollock":"poached","Pork":"tenderloin","Sole":"pan-fried"},sides:"avocado oil drizzle",isProtein:true},snack2:{base:"Nectarine + peanut butter",isProtein:false},dinner:{base:"Green pea mash, arugula-asparagus salad",defaultP:"Halibut",methods:{"Duck":"roasted","Grouper":"baked","Halibut":"corn-crust","Pollock":"steamed","Pork":"grilled","Sole":"meuniÃ¨re"},sides:"raspberry-lime vinaigrette",isProtein:true},snack3:{base:"Raspberry + carob",isProtein:false}},
+  4:{breakfast:{base:"Buckwheat pancakes â€” pumpkin compote, walnut crumble",isProtein:false},snack1:{base:"Cantaloupe + pecans",isProtein:false},lunch:{base:"Spaghetti squash, cannellini beans",defaultP:"Turkey",methods:{"Clam":"steamed","Haddock":"baked","Mussel":"steamed","Salmon":"baked","Scallop":"seared","Shrimp":"sautÃ©ed","Trout":"baked","Turkey":"pan-cooked","Veal":"escalope","Venison":"grilled"},sides:"walnut oil",isProtein:true},snack2:{base:"Persimmon + sesame seeds",isProtein:false},dinner:{base:"Teff, wilted spinach, red beet salad",defaultP:"Trout",methods:{"Clam":"steamed","Haddock":"seared","Mussel":"broth","Salmon":"baked","Scallop":"caramelised","Shrimp":"grilled","Trout":"baked","Turkey":"roasted","Veal":"braised","Venison":"seared"},sides:"grapefruit-walnut",isProtein:true},snack3:{base:"Watermelon + spearmint tea",isProtein:false}},
 };
 const SYMPTOM_CATS = {
   digestive:{label:"Digestive",icon:"",items:["Bloating","Cramping","Nausea","Gas","Reflux","Loose stools","Stomach pain"]},
@@ -29,9 +29,9 @@ const SYMPTOM_CATS = {
   joints:{label:"Joints/Muscles",icon:"",items:["Joint stiffness","Muscle aches","Back pain","Neck tension","Swollen fingers"]},
   cardiac:{label:"Cardiac/Resp",icon:"",items:["Heart racing","Shortness of breath","Chest tightness","Sinus congestion","Runny nose"]},
 };
-const CUISINES = [{id:"mediterranean",label:"Mediterranean",flag:"",desc:"Olive oil, herbs, fish"},{id:"french",label:"French",flag:"",desc:"Bistro — duck, lentils"},{id:"swedish",label:"Swedish",flag:"",desc:"Nordic fish, root veg"},{id:"japanese",label:"Japanese",flag:"",desc:"Clean minimal, fish"},{id:"middle_eastern",label:"Middle Eastern",flag:"",desc:"Spiced meats, herbs"},{id:"scandinavian",label:"Scandinavian",flag:"",desc:"Cured fish, forest"}];
-const EAT_PATS = [{id:"standard",label:"Standard",emoji:"",desc:"6 meals every 3h",fasting:false},{id:"if16_8",label:"IF 16:8",emoji:"",desc:"16h fast · 8h window",fasting:true,detail:"Window 12:00–20:00"},{id:"if18_6",label:"IF 18:6",emoji:"",desc:"18h fast · 6h window",fasting:true,detail:"Window 13:00–19:00"},{id:"if5_2",label:"5:2",emoji:"",desc:"5 normal · 2 low-cal",fasting:true,detail:"~500 kcal fasting days"}];
-const MARIO_SYS = `You are Meet Mario, clinical AI for MediBalans AB, Stockholm. Patient: Christina Wohltahrt, 64, post-menopausal. ALCAT April 2024. Markers: Candida mild (no sugar/yeast/vinegar 3mo), Whey moderate (no milk 6mo). Severe reactors (9mo): beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, bell pepper, chickpea, cilantro, lobster, pistachio, poppy seed, capers, cumin, jalapeño, egg white, sea bass, wakame. Rules: No seed oils. CPF every meal. Respond in clear prose, no bullet points.`;
+const CUISINES = [{id:"mediterranean",label:"Mediterranean",flag:"",desc:"Olive oil, herbs, fish"},{id:"french",label:"French",flag:"",desc:"Bistro â€” duck, lentils"},{id:"swedish",label:"Swedish",flag:"",desc:"Nordic fish, root veg"},{id:"japanese",label:"Japanese",flag:"",desc:"Clean minimal, fish"},{id:"middle_eastern",label:"Middle Eastern",flag:"",desc:"Spiced meats, herbs"},{id:"scandinavian",label:"Scandinavian",flag:"",desc:"Cured fish, forest"}];
+const EAT_PATS = [{id:"standard",label:"Standard",emoji:"",desc:"6 meals every 3h",fasting:false},{id:"if16_8",label:"IF 16:8",emoji:"",desc:"16h fast Â· 8h window",fasting:true,detail:"Window 12:00â€“20:00"},{id:"if18_6",label:"IF 18:6",emoji:"",desc:"18h fast Â· 6h window",fasting:true,detail:"Window 13:00â€“19:00"},{id:"if5_2",label:"5:2",emoji:"",desc:"5 normal Â· 2 low-cal",fasting:true,detail:"~500 kcal fasting days"}];
+const MARIO_SYS = `You are Meet Mario, clinical AI for MediBalans AB, Stockholm. Patient: Christina Wohltahrt, 64, post-menopausal. ALCAT April 2024. Markers: Candida mild (no sugar/yeast/vinegar 3mo), Whey moderate (no milk 6mo). Severe reactors (9mo): beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, bell pepper, chickpea, cilantro, lobster, pistachio, poppy seed, capers, cumin, jalapeÃ±o, egg white, sea bass, wakame. Rules: No seed oils. CPF every meal. Respond in clear prose, no bullet points.`;
 
 function simulateMealResponse(hadReactive) {
   const pts=[];
@@ -48,20 +48,20 @@ function detectSpikes(pts) {
     if(i<3)return;
     if(p.hr-b.hr>=22&&!spikes.find(s=>s.m==="hr"))spikes.push({min:p.min,m:"hr",label:"Heart Rate spike",val:`+${p.hr-b.hr} bpm`,level:p.hr-b.hr>=32?"severe":"moderate"});
     if(b.hrv-p.hrv>=18&&!spikes.find(s=>s.m==="hrv"))spikes.push({min:p.min,m:"hrv",label:"HRV drop",val:`-${b.hrv-p.hrv} ms`,level:b.hrv-p.hrv>=28?"severe":"moderate"});
-    if(p.temp-b.temp>=0.45&&!spikes.find(s=>s.m==="temp"))spikes.push({min:p.min,m:"temp",label:"Temperature rise",val:`+${(p.temp-b.temp).toFixed(2)}°C`,level:p.temp-b.temp>=0.65?"severe":"moderate"});
+    if(p.temp-b.temp>=0.45&&!spikes.find(s=>s.m==="temp"))spikes.push({min:p.min,m:"temp",label:"Temperature rise",val:`+${(p.temp-b.temp).toFixed(2)}Â°C`,level:p.temp-b.temp>=0.65?"severe":"moderate"});
     if(p.glucose-b.glucose>=38&&!spikes.find(s=>s.m==="glucose"))spikes.push({min:p.min,m:"glucose",label:"Glucose spike",val:`+${p.glucose-b.glucose} mg/dL`,level:p.glucose-b.glucose>=55?"severe":"moderate"});
   });
   return spikes;
 }
 async function callClaude(messages,system,extra={}) {
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages,...extra})});
+  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages,...extra})});
   const d=await res.json();
-  return(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+  return d.text||"";
 }
 
-// ─── DESIGN SYSTEM — Balans / Jony Ive / Ferrari ────────────────────────────
+// â”€â”€â”€ DESIGN SYSTEM â€” Balans / Jony Ive / Ferrari â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const T = {
-  // Surfaces — warm titanium white
+  // Surfaces â€” warm titanium white
   w:    "#F7F4F0",
   w1:   "#F1EDE7",
   w2:   "#E8E2DA",
@@ -70,7 +70,7 @@ const T = {
   w5:   "#8A7E72",  // secondary text
   w6:   "#4A4038",  // primary text
   w7:   "#1C1510",  // near black
-  // Rose gold — used sparingly
+  // Rose gold â€” used sparingly
   rg:   "#C4887A",
   rg2:  "#9A6255",
   rg3:  "#DEB0A4",
@@ -79,7 +79,7 @@ const T = {
   err:  "#B85040",
   ok:   "#6A9060",
   warn: "#B88040",
-  // The one dark surface — dashboard dial
+  // The one dark surface â€” dashboard dial
   dark: "#18120E",
   dark2:"#221A14",
 };
@@ -90,9 +90,9 @@ const fonts = {
   mono:  "'SF Mono', 'Fira Mono', 'Courier New', monospace",
 };
 
-// ─── SHARED PRIMITIVES ───────────────────────────────────────────────────────
+// â”€â”€â”€ SHARED PRIMITIVES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// Nav — the 1px border is all it needs
+// Nav â€” the 1px border is all it needs
 const Nav = ({ showProgress, step }) => (
   <div style={{
     position:"sticky",top:0,zIndex:200,
@@ -105,7 +105,7 @@ const Nav = ({ showProgress, step }) => (
   }}>
     {/* Wordmark */}
     <div style={{display:"flex",alignItems:"center",gap:12}}>
-      {/* The rose gold dot — one of three in the alphabet */}
+      {/* The rose gold dot â€” one of three in the alphabet */}
       <div style={{
         width:9,height:9,borderRadius:"50%",
         background:`linear-gradient(140deg, ${T.rg3}, ${T.rg}, ${T.rg2})`,
@@ -127,7 +127,7 @@ const Nav = ({ showProgress, step }) => (
         </div>
       )}
       <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:"3px 8px",letterSpacing:"0.14em"}}>
-        PATENT PENDING · SE 2615203-3
+        PATENT PENDING Â· SE 2615203-3
       </span>
     </div>
   </div>
@@ -195,7 +195,7 @@ const Panel = ({ children, style }) => (
   }}>{children}</div>
 );
 
-// The one CTA button — machined rose gold
+// The one CTA button â€” machined rose gold
 const BtnPrimary = ({ children, onClick, disabled, loading }) => (
   <button onClick={onClick} disabled={disabled||loading} style={{
     display:"inline-flex",alignItems:"center",gap:10,
@@ -211,9 +211,9 @@ const BtnPrimary = ({ children, onClick, disabled, loading }) => (
     transition:"all .2s",
     opacity: loading ? 0.7 : 1,
   }}>
-    {/* chamfer highlight — Ive signature */}
+    {/* chamfer highlight â€” Ive signature */}
     <div style={{position:"absolute",top:0,left:"8%",right:"8%",height:1,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.28) 30%,rgba(255,255,255,0.38) 50%,rgba(255,255,255,0.28) 70%,transparent)"}}/>
-    <span style={{position:"relative",zIndex:1}}>{loading ? "…" : children}</span>
+    <span style={{position:"relative",zIndex:1}}>{loading ? "â€¦" : children}</span>
   </button>
 );
 
@@ -231,7 +231,7 @@ const Eyebrow = ({ children }) => (
   </div>
 );
 
-// Section title — Balans Serif
+// Section title â€” Balans Serif
 const SectionTitle = ({ children }) => (
   <h2 style={{fontFamily:fonts.serif,fontSize:34,fontWeight:400,color:T.w7,letterSpacing:"-0.01em",lineHeight:1.14,marginBottom:40}}>
     {children}
@@ -283,7 +283,7 @@ const MiniChart = ({pts,key_,color,label,unit,height=62}) => {
   );
 };
 
-// ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
+// â”€â”€â”€ MAIN COMPONENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function MeetMario() {
   const [tab,setTab]                   = useState("monitor");
   const [rotDay,setRotDay]             = useState(1);
@@ -298,7 +298,7 @@ export default function MeetMario() {
   const [research,setResearch]         = useState({});
   const [resLoad,setResLoad]           = useState(null);
   const [foodQ,setFoodQ]               = useState("");
-  const [chatMsgs,setChatMsgs]         = useState([{role:"assistant",content:"Good day, Christina. Your ALCAT results from April 2024 are loaded — Candida mild and Whey moderate are your two active markers. Where would you like to start?"}]);
+  const [chatMsgs,setChatMsgs]         = useState([{role:"assistant",content:"Good day, Christina. Your ALCAT results from April 2024 are loaded â€” Candida mild and Whey moderate are your two active markers. Where would you like to start?"}]);
   const [chatIn,setChatIn]             = useState("");
   const [chatLoad,setChatLoad]         = useState(false);
   const [expandPh,setExpandPh]         = useState(null);
@@ -393,7 +393,7 @@ export default function MeetMario() {
 
   const fetchRecipeSteps=async(day,mealKey,protein,base,sides)=>{
     setRecipeLoading(true);setRecipeSteps(null);
-    const prompt=`Write a step-by-step recipe for:\nDish: ${protein} — ${base}${sides?" · "+sides:""}\nALCAT Day ${day} rotation. No seed oils. No garlic/onion/tomato. 1 person.\n\nFormat exactly:\nPREP TIME: X min | COOK TIME: X min | SERVES: 1\n\nINGREDIENTS:\n- [ingredient with amount]\n\nSTEPS:\n1. [step]\n(max 8 steps)\n\nCLINICAL NOTE: One sentence on ALCAT relevance.`;
+    const prompt=`Write a step-by-step recipe for:\nDish: ${protein} â€” ${base}${sides?" Â· "+sides:""}\nALCAT Day ${day} rotation. No seed oils. No garlic/onion/tomato. 1 person.\n\nFormat exactly:\nPREP TIME: X min | COOK TIME: X min | SERVES: 1\n\nINGREDIENTS:\n- [ingredient with amount]\n\nSTEPS:\n1. [step]\n(max 8 steps)\n\nCLINICAL NOTE: One sentence on ALCAT relevance.`;
     try{const r=await callClaude([{role:"user",content:prompt}],"You are a clinical chef at MediBalans AB. No seed oils ever.");setRecipeSteps(r);}catch{setRecipeSteps("Error loading recipe.");}
     setRecipeLoading(false);
   };
@@ -423,9 +423,9 @@ export default function MeetMario() {
   ];
 
   const PHASES=[
-    {id:1,label:"21-Day Detox",range:"Days 1–21",color:T.rg,rules:["Green list only","6 meals every 3h","No sugars/yeast (Candida)","No milk (Whey)"],note:"Any deviation restarts the inflammatory clock."},
-    {id:2,label:"Green Phase",range:"Months 1–3",color:T.ok,rules:["Strict 4-day rotation","One legume day/week","Candida continues","Whey continues"],note:"Rotation prevents new sensitivities forming."},
-    {id:3,label:"Mild Reintroduction",range:"Month 3–4",color:T.warn,rules:["Up to 3 mild foods/day","Repeat only after 4 days","Watch for reactions"],note:"React → delay 1 month."},
+    {id:1,label:"21-Day Detox",range:"Days 1â€“21",color:T.rg,rules:["Green list only","6 meals every 3h","No sugars/yeast (Candida)","No milk (Whey)"],note:"Any deviation restarts the inflammatory clock."},
+    {id:2,label:"Green Phase",range:"Months 1â€“3",color:T.ok,rules:["Strict 4-day rotation","One legume day/week","Candida continues","Whey continues"],note:"Rotation prevents new sensitivities forming."},
+    {id:3,label:"Mild Reintroduction",range:"Month 3â€“4",color:T.warn,rules:["Up to 3 mild foods/day","Repeat only after 4 days","Watch for reactions"],note:"React â†’ delay 1 month."},
     {id:4,label:"Moderate Reintroduction",range:"Month 6",color:"#C87030",rules:["Same as mild method","Whey restriction ends"],note:"Most patients see largest improvements here."},
     {id:5,label:"Maintenance",range:"Month 9+",color:"#6A9E8E",rules:["Full rotation","One free day/week"],note:"52 free days per year without affecting outcomes."},
   ];
@@ -441,7 +441,7 @@ export default function MeetMario() {
           <div style={{borderBottom:`1px solid ${T.w3}`,padding:"18px 24px 16px"}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:lc,boxShadow:`0 0 10px ${lc}`}}/>
-              <span style={{fontFamily:fonts.mono,fontSize:9,letterSpacing:"0.18em",color:lc,textTransform:"uppercase"}}>{popup.level} reaction detected · {popup.min}min post-meal</span>
+              <span style={{fontFamily:fonts.mono,fontSize:9,letterSpacing:"0.18em",color:lc,textTransform:"uppercase"}}>{popup.level} reaction detected Â· {popup.min}min post-meal</span>
             </div>
             <div style={{fontFamily:fonts.serif,fontSize:22,color:T.w7,fontWeight:400}}>{popup.label} {popup.val}</div>
           </div>
@@ -453,8 +453,8 @@ export default function MeetMario() {
               </p>
               <div style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.16em",textTransform:"uppercase",marginBottom:12}}>Did you eat anything outside your green list?</div>
               <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>{setPopupReactive(true);setPopupStep(1);}} style={{flex:1,background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:9,padding:"11px",cursor:"pointer",color:T.rg2,fontSize:12,fontFamily:fonts.sans,fontWeight:500}}>Yes — possibly</button>
-                <button onClick={()=>{setPopupReactive(false);setPopupStep(1);}} style={{flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:"11px",cursor:"pointer",color:T.w5,fontSize:12,fontFamily:fonts.sans}}>No — on protocol</button>
+                <button onClick={()=>{setPopupReactive(true);setPopupStep(1);}} style={{flex:1,background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:9,padding:"11px",cursor:"pointer",color:T.rg2,fontSize:12,fontFamily:fonts.sans,fontWeight:500}}>Yes â€” possibly</button>
+                <button onClick={()=>{setPopupReactive(false);setPopupStep(1);}} style={{flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:"11px",cursor:"pointer",color:T.w5,fontSize:12,fontFamily:fonts.sans}}>No â€” on protocol</button>
               </div>
             </>}
             {popupStep===1&&<>
@@ -476,7 +476,7 @@ export default function MeetMario() {
                 );})}
               </div>
               <BtnPrimary onClick={logAndDismiss} loading={popupLoading}>
-                {popupLoading?"Analysing…":"Log reaction & get Mario's analysis →"}
+                {popupLoading?"Analysingâ€¦":"Log reaction & get Mario's analysis â†’"}
               </BtnPrimary>
             </>}
             {popupStep===3&&<>
@@ -484,8 +484,8 @@ export default function MeetMario() {
               <div style={{fontSize:12,color:T.w6,lineHeight:1.8,fontFamily:fonts.sans,fontWeight:300,maxHeight:220,overflowY:"auto",marginBottom:16}}>
                 {popupAnalysis.split("\n").map((l,i)=>l.trim()?<div key={i} style={{marginBottom:6}}>{l}</div>:null)}
               </div>
-              {diary[0]?.flagClinic&&<div style={{background:`${T.err}10`,border:`1px solid ${T.err}35`,borderRadius:7,padding:"8px 12px",marginBottom:14,fontSize:11,color:T.err,fontFamily:fonts.mono,display:"flex",gap:6,alignItems:"center"}}>⚠ Flagged for clinician review</div>}
-              <button onClick={()=>setPopup(null)} style={{width:"100%",background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:"11px",cursor:"pointer",color:T.w5,fontSize:12,fontFamily:fonts.sans}}>Close — logged to diary </button>
+              {diary[0]?.flagClinic&&<div style={{background:`${T.err}10`,border:`1px solid ${T.err}35`,borderRadius:7,padding:"8px 12px",marginBottom:14,fontSize:11,color:T.err,fontFamily:fonts.mono,display:"flex",gap:6,alignItems:"center"}}>âš  Flagged for clinician review</div>}
+              <button onClick={()=>setPopup(null)} style={{width:"100%",background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:"11px",cursor:"pointer",color:T.w5,fontSize:12,fontFamily:fonts.sans}}>Close â€” logged to diary </button>
             </>}
           </div>
         </div>
@@ -493,10 +493,10 @@ export default function MeetMario() {
     );
   };
 
-  // ─── TABS ─────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ TABS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const tabContent = () => {
-    // ── MONITOR ──
+    // â”€â”€ MONITOR â”€â”€
     if(tab==="monitor") return (
       <div>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:28}}>
@@ -532,7 +532,7 @@ export default function MeetMario() {
                   <div style={{fontFamily:fonts.mono,fontSize:8,color:T.ok,letterSpacing:"0.14em",marginBottom:5}}>YOUR MEAL ({monFoods.length})</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
                     {monFoods.map((f,i)=>{const fu=f.toUpperCase(),isS=P.severe.some(s=>fu.includes(s)||s.includes(fu.split(" ")[0])),isM=P.moderate.some(s=>fu.includes(s)||s.includes(fu.split(" ")[0])),col=isS?T.err:isM?T.warn:T.ok;return(
-                      <span key={i} onClick={()=>setMonFoods(p=>p.filter((_,j)=>j!==i))} style={{background:col+"18",border:`1px solid ${col}50`,borderRadius:4,padding:"2px 8px",fontSize:11,fontFamily:fonts.sans,color:col,cursor:"pointer"}}>{f} ×</span>
+                      <span key={i} onClick={()=>setMonFoods(p=>p.filter((_,j)=>j!==i))} style={{background:col+"18",border:`1px solid ${col}50`,borderRadius:4,padding:"2px 8px",fontSize:11,fontFamily:fonts.sans,color:col,cursor:"pointer"}}>{f} Ã—</span>
                     );})}
                   </div>
                 </div>
@@ -556,7 +556,7 @@ export default function MeetMario() {
                 })}
               </div>
               {monFoods.some(f=>P.severe.some(s=>f.toUpperCase().includes(s))||P.moderate.some(s=>f.toUpperCase().includes(s)))&&(
-                <div style={{background:`${T.err}0C`,border:`1px solid ${T.err}30`,borderRadius:7,padding:"8px 10px",margin:"12px 0",fontSize:11,color:T.err,fontFamily:fonts.sans}}>⚠ Reactive food in this meal — elevated spike risk</div>
+                <div style={{background:`${T.err}0C`,border:`1px solid ${T.err}30`,borderRadius:7,padding:"8px 10px",margin:"12px 0",fontSize:11,color:T.err,fontFamily:fonts.sans}}>âš  Reactive food in this meal â€” elevated spike risk</div>
               )}
               <div style={{marginTop:16}}>
                 <BtnPrimary onClick={startMonitoring}>Start 2h monitoring</BtnPrimary>
@@ -566,12 +566,12 @@ export default function MeetMario() {
             <div>
               <Panel>
                 <FieldLabel>Data Sources</FieldLabel>
-                {[{name:"Apple Watch",icon:"",streams:"HR · HRV",badge:"HRV"},
-                  {name:"Oura Ring",icon:"",streams:"HRV · Temp · SpO2 · Readiness",badge:"HRV·TEMP"},
-                  {name:"Garmin",icon:"",streams:"HR · HRV · Sleep · Stress",badge:"HRV·SLEEP"},
-                  {name:"Samsung Galaxy Watch",icon:"",streams:"HR · HRV (IBI) · SpO2 · Skin temp",badge:"HRV·TEMP"},
-                  {name:"Dexcom G7/G6",icon:"",streams:"Glucose · 5min intervals · trends",badge:"GLUCOSE"},
-                  {name:"Libre 2 / 3",icon:"",streams:"Glucose · 1min intervals",badge:"GLUCOSE"},
+                {[{name:"Apple Watch",icon:"",streams:"HR Â· HRV",badge:"HRV"},
+                  {name:"Oura Ring",icon:"",streams:"HRV Â· Temp Â· SpO2 Â· Readiness",badge:"HRVÂ·TEMP"},
+                  {name:"Garmin",icon:"",streams:"HR Â· HRV Â· Sleep Â· Stress",badge:"HRVÂ·SLEEP"},
+                  {name:"Samsung Galaxy Watch",icon:"",streams:"HR Â· HRV (IBI) Â· SpO2 Â· Skin temp",badge:"HRVÂ·TEMP"},
+                  {name:"Dexcom G7/G6",icon:"",streams:"Glucose Â· 5min intervals Â· trends",badge:"GLUCOSE"},
+                  {name:"Libre 2 / 3",icon:"",streams:"Glucose Â· 1min intervals",badge:"GLUCOSE"},
                 ].map(d=>(
                   <div key={d.name} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:`1px solid ${T.w2}`}}>
                     <span style={{fontSize:16,flexShrink:0}}>{d.icon}</span>
@@ -596,7 +596,7 @@ export default function MeetMario() {
                     </div>
                     <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                       {e.spike&&<span style={{fontSize:10,background:e.spike.level==="severe"?`${T.err}18`:`${T.warn}18`,color:e.spike.level==="severe"?T.err:T.warn,border:`1px solid ${e.spike.level==="severe"?T.err:T.warn}40`,borderRadius:4,padding:"1px 7px",fontFamily:fonts.mono}}>{e.spike.label}</span>}
-                      {e.flagClinic&&<span style={{fontSize:10,color:T.err,fontFamily:fonts.mono}}>⚠ Flagged</span>}
+                      {e.flagClinic&&<span style={{fontSize:10,color:T.err,fontFamily:fonts.mono}}>âš  Flagged</span>}
                     </div>
                   </div>
                 ))}
@@ -608,10 +608,10 @@ export default function MeetMario() {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
               <div style={{display:"flex",alignItems:"center",gap:10}}>
                 {monActive
-                  ?<><div style={{width:8,height:8,borderRadius:"50%",background:T.err,boxShadow:`0 0 8px ${T.err}`}}/><span style={{fontSize:12,color:T.err,fontFamily:fonts.mono,letterSpacing:"0.12em"}}>LIVE · {monMealLabel} · {currentPt?.min||0}min</span></>
-                  :<><div style={{width:8,height:8,borderRadius:"50%",background:T.ok}}/><span style={{fontSize:12,color:T.ok,fontFamily:fonts.mono,letterSpacing:"0.12em"}}>COMPLETE · 120min</span></>}
+                  ?<><div style={{width:8,height:8,borderRadius:"50%",background:T.err,boxShadow:`0 0 8px ${T.err}`}}/><span style={{fontSize:12,color:T.err,fontFamily:fonts.mono,letterSpacing:"0.12em"}}>LIVE Â· {monMealLabel} Â· {currentPt?.min||0}min</span></>
+                  :<><div style={{width:8,height:8,borderRadius:"50%",background:T.ok}}/><span style={{fontSize:12,color:T.ok,fontFamily:fonts.mono,letterSpacing:"0.12em"}}>COMPLETE Â· 120min</span></>}
               </div>
-              <button onClick={()=>{setMonTimeline([]);setMonTick(0);setMonActive(false);setMonFoods([]);setMonSpikes([]);}} style={{background:T.w1,border:`1px solid ${T.w3}`,borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:11,fontFamily:fonts.sans,color:T.w5}}>↺ New session</button>
+              <button onClick={()=>{setMonTimeline([]);setMonTick(0);setMonActive(false);setMonFoods([]);setMonSpikes([]);}} style={{background:T.w1,border:`1px solid ${T.w3}`,borderRadius:7,padding:"6px 14px",cursor:"pointer",fontSize:11,fontFamily:fonts.sans,color:T.w5}}>â†º New session</button>
             </div>
             {monSpikes.length>0&&<div style={{marginBottom:14}}>
               {monSpikes.map((sp,i)=>(
@@ -626,11 +626,11 @@ export default function MeetMario() {
               <MiniChart pts={visiblePts} key_="hr" color={T.err} label="Heart Rate" unit="bpm"/>
               <MiniChart pts={visiblePts} key_="hrv" color={T.rg} label="HRV" unit="ms"/>
               <MiniChart pts={visiblePts} key_="glucose" color={T.warn} label="Glucose" unit="mg/dL"/>
-              <MiniChart pts={visiblePts} key_="temp" color="#8A7050" label="Body Temp" unit="°C"/>
+              <MiniChart pts={visiblePts} key_="temp" color="#8A7050" label="Body Temp" unit="Â°C"/>
             </div>
             {currentPt&&<Panel>
               <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
-                {[["SpO2",currentPt.spo2,"%",T.rg,v=>v>=96],["HR",currentPt.hr,"bpm",T.err,v=>v<90],["HRV",currentPt.hrv,"ms",T.rg,v=>v>35],["Glucose",currentPt.glucose,"mg/dL",T.warn,v=>v<130],["Temp",currentPt.temp,"°C","#8A7050",v=>v<37.1]].map(([label,val,unit,color,good])=>(
+                {[["SpO2",currentPt.spo2,"%",T.rg,v=>v>=96],["HR",currentPt.hr,"bpm",T.err,v=>v<90],["HRV",currentPt.hrv,"ms",T.rg,v=>v>35],["Glucose",currentPt.glucose,"mg/dL",T.warn,v=>v<130],["Temp",currentPt.temp,"Â°C","#8A7050",v=>v<37.1]].map(([label,val,unit,color,good])=>(
                   <div key={label} style={{textAlign:"center"}}>
                     <div style={{fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:4}}>{label}</div>
                     <div style={{fontFamily:fonts.serif,fontSize:22,fontWeight:400,color:good(val)?color:T.err}}>{val}</div>
@@ -639,7 +639,7 @@ export default function MeetMario() {
                 ))}
                 <div style={{marginLeft:"auto",display:"flex",flexDirection:"column",justifyContent:"center",alignItems:"flex-end"}}>
                   <div style={{fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:"0.14em",textTransform:"uppercase"}}>Remaining</div>
-                  <div style={{fontFamily:fonts.serif,fontSize:20,color:T.rg,fontWeight:400}}>{Math.max(0,120-(currentPt?.min||0))}′</div>
+                  <div style={{fontFamily:fonts.serif,fontSize:20,color:T.rg,fontWeight:400}}>{Math.max(0,120-(currentPt?.min||0))}â€²</div>
                 </div>
               </div>
             </Panel>}
@@ -647,7 +647,7 @@ export default function MeetMario() {
         )}
 
         {clinView&&diary.length>0&&<div style={{marginTop:28}}>
-          <Eyebrow>Clinician Dashboard — {diary.length} Reaction{diary.length>1?"s":""}</Eyebrow>
+          <Eyebrow>Clinician Dashboard â€” {diary.length} Reaction{diary.length>1?"s":""}</Eyebrow>
           {diary.map(e=>(
             <Panel key={e.id} style={{borderLeft:`3px solid ${e.flagClinic?T.err:T.rg}`,marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
@@ -655,25 +655,25 @@ export default function MeetMario() {
                   <span style={{fontSize:13,color:T.w7,fontFamily:fonts.sans,fontWeight:500}}>{e.meal}</span>
                   <span style={{fontSize:10,color:T.w4,fontFamily:fonts.mono,marginLeft:8}}>{new Date(e.ts).toLocaleString("en-SE")}</span>
                 </div>
-                {e.flagClinic&&<span style={{fontFamily:fonts.mono,fontSize:8.5,color:T.err,border:`1px solid ${T.err}40`,borderRadius:4,padding:"3px 9px",letterSpacing:"0.12em"}}>⚠ REVIEW</span>}
+                {e.flagClinic&&<span style={{fontFamily:fonts.mono,fontSize:8.5,color:T.err,border:`1px solid ${T.err}40`,borderRadius:4,padding:"3px 9px",letterSpacing:"0.12em"}}>âš  REVIEW</span>}
               </div>
-              {e.analysis&&<div style={{fontSize:11,color:T.w6,lineHeight:1.7,fontFamily:fonts.sans,fontWeight:300}}>{e.analysis.slice(0,280)}{e.analysis.length>280?"…":""}</div>}
+              {e.analysis&&<div style={{fontSize:11,color:T.w6,lineHeight:1.7,fontFamily:fonts.sans,fontWeight:300}}>{e.analysis.slice(0,280)}{e.analysis.length>280?"â€¦":""}</div>}
             </Panel>
           ))}
         </div>}
       </div>
     );
 
-    // ── PROTOCOL ──
+    // â”€â”€ PROTOCOL â”€â”€
     if(tab==="protocol") return (
       <div>
         <Eyebrow>Clinical protocol</Eyebrow>
         <SectionTitle>Avoidance timeline &<br/><em style={{fontStyle:"italic",color:T.rg2}}>reintroduction phases</em></SectionTitle>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:24}}>
-          {[{label:"SEVERE — 9 MONTHS",color:T.err,text:"Beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, Brussels sprout, chickpea, cilantro, bell pepper, scallion, canola oil, lobster, pistachio, poppy seed, capers, cumin, endive, honeydew, monk fruit, mulberry, wakame, jalapeño, egg white"},
-            {label:"MODERATE — 6 MONTHS",color:T.warn,text:"All common grains · Most fish · Most vegetables · Nearly all fruits · Most nuts & herbs"},
-            {label:"CANDIDA — 3 MONTHS",color:"#906080",text:"No sugars (agave, honey, maple, molasses) · No yeast (baker's, brewer's, nutritional) · No alcohol, vinegar"},
-            {label:"WHEY — 6 MONTHS",color:"#5080A8",text:"No cow's, goat's, or sheep's milk · No whey protein"},
+          {[{label:"SEVERE â€” 9 MONTHS",color:T.err,text:"Beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, Brussels sprout, chickpea, cilantro, bell pepper, scallion, canola oil, lobster, pistachio, poppy seed, capers, cumin, endive, honeydew, monk fruit, mulberry, wakame, jalapeÃ±o, egg white"},
+            {label:"MODERATE â€” 6 MONTHS",color:T.warn,text:"All common grains Â· Most fish Â· Most vegetables Â· Nearly all fruits Â· Most nuts & herbs"},
+            {label:"CANDIDA â€” 3 MONTHS",color:"#906080",text:"No sugars (agave, honey, maple, molasses) Â· No yeast (baker's, brewer's, nutritional) Â· No alcohol, vinegar"},
+            {label:"WHEY â€” 6 MONTHS",color:"#5080A8",text:"No cow's, goat's, or sheep's milk Â· No whey protein"},
           ].map(({label,color,text})=>(
             <div key={label} style={{background:T.w,border:`1px solid ${T.w3}`,borderLeft:`3px solid ${color}`,borderRadius:9,padding:"14px 16px",boxShadow:`0 1px 3px rgba(100,80,60,0.05)`}}>
               <div style={{fontFamily:fonts.mono,fontSize:8.5,letterSpacing:"0.18em",color,marginBottom:6,textTransform:"uppercase"}}>{label}</div>
@@ -688,7 +688,7 @@ export default function MeetMario() {
                 <span style={{fontSize:12,color:ph.color,fontWeight:500,fontFamily:fonts.sans}}>{ph.label}</span>
                 <span style={{fontSize:10,color:T.w4,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>{ph.range}</span>
               </div>
-              <span style={{color:T.w4,fontSize:14}}>{expandPh===ph.id?"−":"+"}</span>
+              <span style={{color:T.w4,fontSize:14}}>{expandPh===ph.id?"âˆ’":"+"}</span>
             </button>
             {expandPh===ph.id&&<div style={{padding:"0 16px 14px"}}>
               <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:8}}>
@@ -701,11 +701,11 @@ export default function MeetMario() {
       </div>
     );
 
-    // ── ROTATION ──
+    // â”€â”€ ROTATION â”€â”€
     if(tab==="rotation") return (
       <div>
         <Eyebrow>4-day rotation cycle</Eyebrow>
-        <SectionTitle>Day {rotDay} — <em style={{fontStyle:"italic",color:T.rg2}}>green list</em></SectionTitle>
+        <SectionTitle>Day {rotDay} â€” <em style={{fontStyle:"italic",color:T.rg2}}>green list</em></SectionTitle>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
           {[1,2,3,4].map(d=>(
             <button key={d} onClick={()=>setRotDay(d)} style={{background:rotDay===d?T.rg:T.w,border:`1px solid ${rotDay===d?T.rg:T.w3}`,color:rotDay===d?"#fff":T.w5,borderRadius:8,padding:"8px 22px",cursor:"pointer",fontSize:12,fontFamily:fonts.sans,fontWeight:rotDay===d?500:400,transition:"all .16s"}}>Day {d}</button>
@@ -724,11 +724,11 @@ export default function MeetMario() {
       </div>
     );
 
-    // ── MEALS ──
+    // â”€â”€ MEALS â”€â”€
     if(tab==="meals") return (
       <div onClick={e=>e.stopPropagation()}>
         <Eyebrow>Daily meal plan</Eyebrow>
-        <SectionTitle>Day {rotDay} — <em style={{fontStyle:"italic",color:T.rg2}}>rotation meals</em></SectionTitle>
+        <SectionTitle>Day {rotDay} â€” <em style={{fontStyle:"italic",color:T.rg2}}>rotation meals</em></SectionTitle>
         <div style={{display:"flex",gap:8,marginBottom:24}}>
           {[1,2,3,4].map(d=>(
             <button key={d} onClick={()=>{setRotDay(d);setPicker(null);}} style={{background:rotDay===d?T.rg:T.w,border:`1px solid ${rotDay===d?T.rg:T.w3}`,color:rotDay===d?"#fff":T.w5,borderRadius:8,padding:"8px 22px",cursor:"pointer",fontSize:12,fontFamily:fonts.sans,fontWeight:rotDay===d?500:400}}>Day {d}</button>
@@ -745,9 +745,9 @@ export default function MeetMario() {
                     <span style={{fontSize:11,color:T.rg2,fontWeight:500,fontFamily:fonts.mono,letterSpacing:"0.12em",textTransform:"uppercase"}}>{label}</span>
                     {meal.isProtein&&<div style={{position:"relative",marginLeft:"auto"}} onClick={e=>e.stopPropagation()}>
                       <button onClick={()=>setPicker(isOpen?null:pk)} style={{background:isOpen?T.rgBg:T.w1,border:`1px solid ${isOpen?T.rg:T.w3}`,borderRadius:20,padding:"3px 10px",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                        <span style={{fontSize:9}}>↻</span>
+                        <span style={{fontSize:9}}>â†»</span>
                         <span style={{fontSize:11,color:isOpen?T.rg2:T.w6,fontFamily:fonts.sans}}>{selP}</span>
-                        <span style={{fontSize:8,color:T.w4}}>▾</span>
+                        <span style={{fontSize:8,color:T.w4}}>â–¾</span>
                       </button>
                       {isOpen&&<div style={{position:"absolute",top:"calc(100% + 4px)",right:0,background:T.w,border:`1px solid ${T.rg}40`,borderRadius:9,padding:5,zIndex:300,minWidth:200,boxShadow:`0 8px 32px rgba(100,80,60,0.12)`}}>
                         {Object.entries(meal.methods).map(([p,m])=>(
@@ -760,14 +760,14 @@ export default function MeetMario() {
                     </div>}
                   </div>
                   <div style={{fontSize:12,color:T.w6,lineHeight:1.6,fontFamily:fonts.sans,fontWeight:300}}>
-                    {meal.isProtein?<><span style={{color:T.rg2,fontWeight:500}}>{selP}</span> <span style={{color:T.w4,fontSize:10}}>({meal.methods[selP]||"prepared"})</span> — {meal.base} · <span style={{color:T.w4}}>{meal.sides}</span></>:meal.base}
+                    {meal.isProtein?<><span style={{color:T.rg2,fontWeight:500}}>{selP}</span> <span style={{color:T.w4,fontSize:10}}>({meal.methods[selP]||"prepared"})</span> â€” {meal.base} Â· <span style={{color:T.w4}}>{meal.sides}</span></>:meal.base}
                   </div>
                   <div style={{marginTop:8}}>
                     <button onClick={()=>{if(isRecipeOpen){setRecipeTarget(null);setRecipeSteps(null);}else{setRecipeTarget(pk);fetchRecipeSteps(rotDay,k,meal.isProtein?selP:"",meal.base,meal.sides);}}} style={{background:"none",border:`1px solid ${isRecipeOpen?T.rg:T.w3}`,borderRadius:5,padding:"3px 10px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono,color:isRecipeOpen?T.rg2:T.w4,display:"flex",alignItems:"center",gap:4,letterSpacing:"0.1em"}}>
-                      <span>{isRecipeOpen?"▾":"▸"}</span><span>{isRecipeOpen?"HIDE RECIPE":"STEP-BY-STEP RECIPE"}</span>
+                      <span>{isRecipeOpen?"â–¾":"â–¸"}</span><span>{isRecipeOpen?"HIDE RECIPE":"STEP-BY-STEP RECIPE"}</span>
                     </button>
                     {isRecipeOpen&&<div style={{marginTop:10,background:T.w1,border:`1px solid ${T.rg}20`,borderRadius:8,padding:"14px 16px"}}>
-                      {recipeLoading?<div style={{fontSize:11,color:T.w4,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>Writing recipe…</div>
+                      {recipeLoading?<div style={{fontSize:11,color:T.w4,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>Writing recipeâ€¦</div>
                       :recipeSteps?<div style={{fontSize:11,fontFamily:fonts.sans,lineHeight:1.8,fontWeight:300}}>
                         {recipeSteps.split("\n").map((line,ri)=>{
                           if(!line.trim())return<div key={ri} style={{height:4}}/>;
@@ -776,7 +776,7 @@ export default function MeetMario() {
                           if(line.startsWith("STEPS"))return<div key={ri} style={{color:T.rg2,fontWeight:600,fontSize:9,fontFamily:fonts.mono,letterSpacing:"0.18em",textTransform:"uppercase",marginTop:10,marginBottom:5}}>STEPS</div>;
                           if(line.startsWith("CLINICAL NOTE"))return<div key={ri} style={{marginTop:10,borderTop:`1px solid ${T.w3}`,paddingTop:8,color:T.ok,fontSize:10,fontFamily:fonts.sans,fontStyle:"italic",fontWeight:300}}> {line.replace("CLINICAL NOTE:","").trim()}</div>;
                           if(line.match(/^\d+\./))return<div key={ri} style={{display:"flex",gap:8,marginBottom:4}}><span style={{color:T.rg2,fontWeight:600,fontFamily:fonts.mono,minWidth:16,fontSize:10}}>{line.match(/^\d+/)[0]}.</span><span style={{color:T.w6,flex:1}}>{line.replace(/^\d+\.\s*/,"")}</span></div>;
-                          if(line.startsWith("-"))return<div key={ri} style={{color:T.w6,paddingLeft:12,marginBottom:2}}>· {line.slice(1).trim()}</div>;
+                          if(line.startsWith("-"))return<div key={ri} style={{color:T.w6,paddingLeft:12,marginBottom:2}}>Â· {line.slice(1).trim()}</div>;
                           return<div key={ri} style={{color:T.w5}}>{line}</div>;
                         })}
                       </div>:null}
@@ -790,11 +790,11 @@ export default function MeetMario() {
       </div>
     );
 
-    // ── GENERATE ──
+    // â”€â”€ GENERATE â”€â”€
     if(tab==="generate") return (
       <div>
         <Eyebrow>AI menu generation</Eyebrow>
-        <SectionTitle>Custom menu —<br/><em style={{fontStyle:"italic",color:T.rg2}}>your cuisine, your day</em></SectionTitle>
+        <SectionTitle>Custom menu â€”<br/><em style={{fontStyle:"italic",color:T.rg2}}>your cuisine, your day</em></SectionTitle>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
           <div style={{display:"flex",flexDirection:"column",gap:18}}>
             <div>
@@ -805,7 +805,7 @@ export default function MeetMario() {
             </div>
             <div>
               <FieldLabel>Phase</FieldLabel>
-              {[{id:"detox",label:"Detox / Months 1–3",emoji:""},{id:"post3months",label:"Post Month 3+",emoji:""}].map(ph=>(
+              {[{id:"detox",label:"Detox / Months 1â€“3",emoji:""},{id:"post3months",label:"Post Month 3+",emoji:""}].map(ph=>(
                 <button key={ph.id} onClick={()=>{setGenPhase(ph.id);setGenResult(null);if(ph.id==="detox")setEatPat("standard");}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",background:genPhase===ph.id?T.rgBg:T.w,border:`1px solid ${genPhase===ph.id?T.rg:T.w3}`,borderRadius:8,padding:"9px 12px",cursor:"pointer",marginBottom:4,textAlign:"left"}}>
                   <span>{ph.emoji}</span><span style={{fontSize:12,color:genPhase===ph.id?T.rg2:T.w7,fontFamily:fonts.sans,fontWeight:genPhase===ph.id?500:400}}>{ph.label}</span>
                 </button>
@@ -832,7 +832,7 @@ export default function MeetMario() {
                   </button>
                   {sel&&ep.fasting&&!locked&&<div style={{background:T.w1,border:`1px solid ${T.w3}`,borderTop:"none",borderRadius:"0 0 7px 7px",marginBottom:4}}>
                     {!research[ep.id]?<button onClick={()=>fetchResearch(ep.id)} disabled={resLoad===ep.id} style={{width:"100%",background:"none",border:"none",borderTop:`1px solid ${T.w3}`,padding:"8px 12px",cursor:"pointer",display:"flex",gap:7,alignItems:"center"}}>
-                      <span></span><span style={{fontSize:10,color:T.rg2,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>{resLoad===ep.id?"Searching PubMed…":"Research for your profile"}</span>
+                      <span></span><span style={{fontSize:10,color:T.rg2,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>{resLoad===ep.id?"Searching PubMedâ€¦":"Research for your profile"}</span>
                     </button>:<div style={{padding:"10px 12px",maxHeight:200,overflowY:"auto"}}>
                       <div style={{fontSize:10,lineHeight:1.7,color:T.w6,fontFamily:fonts.sans,fontWeight:300}}>{research[ep.id].split("\n").slice(0,10).join("\n")}</div>
                     </div>}
@@ -855,12 +855,12 @@ export default function MeetMario() {
           </div>
         </div>
         <BtnPrimary onClick={genMenu} disabled={!cuisine} loading={genLoad}>
-          {!cuisine?"Select a cuisine to generate":`Generate · ${CUISINES.find(c=>c.id===cuisine)?.label} · Day ${rotDay}`}
+          {!cuisine?"Select a cuisine to generate":`Generate Â· ${CUISINES.find(c=>c.id===cuisine)?.label} Â· Day ${rotDay}`}
         </BtnPrimary>
         {genResult&&<Panel style={{marginTop:20}}>
           <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
-            <span style={{fontSize:12,color:T.w7,fontFamily:fonts.sans}}>{CUISINES.find(c=>c.id===cuisine)?.flag} {CUISINES.find(c=>c.id===cuisine)?.label} · Day {rotDay}</span>
-            <button onClick={()=>setGenResult(null)} style={{background:"none",border:`1px solid ${T.w3}`,borderRadius:5,color:T.w4,padding:"3px 9px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono}}>↺</button>
+            <span style={{fontSize:12,color:T.w7,fontFamily:fonts.sans}}>{CUISINES.find(c=>c.id===cuisine)?.flag} {CUISINES.find(c=>c.id===cuisine)?.label} Â· Day {rotDay}</span>
+            <button onClick={()=>setGenResult(null)} style={{background:"none",border:`1px solid ${T.w3}`,borderRadius:5,color:T.w4,padding:"3px 9px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono}}>â†º</button>
           </div>
           <div style={{fontSize:12,lineHeight:1.9,color:T.w6,fontFamily:fonts.sans,fontWeight:300}}>
             {genResult.split("\n").map((line,i)=>{
@@ -875,11 +875,11 @@ export default function MeetMario() {
       </div>
     );
 
-    // ── GROCERY ──
+    // â”€â”€ GROCERY â”€â”€
     if(tab==="grocery") return (
       <div>
         <Eyebrow>Weekly shopping</Eyebrow>
-        <SectionTitle>Smart grocery list —<br/><em style={{fontStyle:"italic",color:T.rg2}}>ALCAT-safe, wild-caught</em></SectionTitle>
+        <SectionTitle>Smart grocery list â€”<br/><em style={{fontStyle:"italic",color:T.rg2}}>ALCAT-safe, wild-caught</em></SectionTitle>
         <Panel>
           <FieldLabel>Rotation days this week</FieldLabel>
           <div style={{display:"flex",gap:7,marginBottom:18,flexWrap:"wrap"}}>
@@ -907,7 +907,7 @@ export default function MeetMario() {
             ))}
           </div>
           <BtnPrimary onClick={buildGroceryList} disabled={groceryLoad||groceryWeek.length===0} loading={groceryLoad}>
-            {groceryLoad?"Building your list…":`Generate list · Days ${groceryWeek.join(", ")}`}
+            {groceryLoad?"Building your listâ€¦":`Generate list Â· Days ${groceryWeek.join(", ")}`}
           </BtnPrimary>
         </Panel>
         {groceryList&&<Panel>
@@ -915,7 +915,7 @@ export default function MeetMario() {
             <div style={{fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:"0.18em",textTransform:"uppercase"}}>Weekly ALCAT Grocery List</div>
             <div style={{display:"flex",gap:7}}>
               <button onClick={()=>{navigator.clipboard?.writeText(groceryList.replace(/\*\*/g,""));setGroceryExport(true);setTimeout(()=>setGroceryExport(false),2000);}} style={{background:groceryExport?T.ok+"18":T.w1,border:`1px solid ${groceryExport?T.ok:T.w3}`,borderRadius:5,padding:"4px 11px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono,color:groceryExport?T.ok:T.w5,letterSpacing:"0.1em"}}>{groceryExport?" COPIED":"COPY"}</button>
-              <button onClick={()=>setGroceryList(null)} style={{background:"none",border:`1px solid ${T.w3}`,borderRadius:5,color:T.w4,padding:"4px 11px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>↺ NEW</button>
+              <button onClick={()=>setGroceryList(null)} style={{background:"none",border:`1px solid ${T.w3}`,borderRadius:5,color:T.w4,padding:"4px 11px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono,letterSpacing:"0.1em"}}>â†º NEW</button>
             </div>
           </div>
           <div style={{fontSize:12,lineHeight:2,color:T.w6,fontFamily:fonts.sans,fontWeight:300}}>
@@ -923,7 +923,7 @@ export default function MeetMario() {
               if(!line.trim())return<div key={gi} style={{height:5}}/>;
               const bm=line.match(/^\*\*(.+)\*\*/);
               if(bm)return<div key={gi} style={{marginTop:gi>0?14:0,marginBottom:6,display:"flex",alignItems:"center",gap:10}}><div style={{height:1,flex:1,background:T.w3}}/><span style={{fontFamily:fonts.mono,fontSize:8.5,letterSpacing:"0.18em",color:T.rg2,textTransform:"uppercase",fontWeight:600}}>{bm[1]}</span><div style={{height:1,flex:1,background:T.w3}}/></div>;
-              if(line.startsWith("- ")||line.startsWith("• "))return<div key={gi} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:2}}><span style={{color:T.rg,flexShrink:0}}>·</span><span style={{color:T.w6,fontFamily:fonts.sans,fontSize:11,fontWeight:300}}>{line.slice(2)}</span></div>;
+              if(line.startsWith("- ")||line.startsWith("â€¢ "))return<div key={gi} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:2}}><span style={{color:T.rg,flexShrink:0}}>Â·</span><span style={{color:T.w6,fontFamily:fonts.sans,fontSize:11,fontWeight:300}}>{line.slice(2)}</span></div>;
               return<div key={gi} style={{fontSize:11,color:T.w4,fontFamily:fonts.sans}}>{line}</div>;
             })}
           </div>
@@ -945,12 +945,12 @@ export default function MeetMario() {
           </div>
         </Panel>}
         {!groceryList&&<Panel>
-          <FieldLabel>Shopping rules — always apply</FieldLabel>
+          <FieldLabel>Shopping rules â€” always apply</FieldLabel>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             {[{icon:"",rule:"Wild-caught fish only",detail:"Farm-raised contains inflammatory omega-6. Look for MSC certified."},
               {icon:"",rule:"Oils: tallow, coconut, avocado only",detail:"No sunflower, canola, rapeseed, or vegetable oil."},
               {icon:"",rule:"Organic for today's rotation",detail:"Buy organic for items on your plate today."},
-              {icon:"⚠",rule:"Labels: no hidden yeast/sugars",detail:"Nutritional yeast, malt extract, dextrose — all Candida triggers."},
+              {icon:"âš ",rule:"Labels: no hidden yeast/sugars",detail:"Nutritional yeast, malt extract, dextrose â€” all Candida triggers."},
             ].map(({icon,rule,detail})=>(
               <div key={rule} style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:"11px 13px",display:"flex",gap:9}}>
                 <span style={{fontSize:16,flexShrink:0}}>{icon}</span>
@@ -962,12 +962,12 @@ export default function MeetMario() {
       </div>
     );
 
-    // ── FOOD CHECK ──
+    // â”€â”€ FOOD CHECK â”€â”€
     if(tab==="lookup") return (
       <div>
         <Eyebrow>Food lookup</Eyebrow>
         <SectionTitle>Is it safe<br/><em style={{fontStyle:"italic",color:T.rg2}}>to eat?</em></SectionTitle>
-        <RuledInput value={foodQ} onChange={e=>setFoodQ(e.target.value)} placeholder="Search — e.g. salmon, quinoa, avocado…" style={{marginBottom:20,fontSize:15}}/>
+        <RuledInput value={foodQ} onChange={e=>setFoodQ(e.target.value)} placeholder="Search â€” e.g. salmon, quinoa, avocadoâ€¦" style={{marginBottom:20,fontSize:15}}/>
         {foodResults.map(({food,level})=>{
           const cols={severe:T.err,moderate:T.warn,mild:T.ok,candida:"#906080",whey:"#5080A8"},periods={severe:"9 months",moderate:"6 months",mild:"3 months",candida:"3mo (Candida)",whey:"6mo (Whey)"},c=cols[level];
           return <div key={food} style={{background:T.w,border:`1px solid ${c}30`,borderLeft:`3px solid ${c}`,borderRadius:8,padding:"11px 16px",display:"flex",justifyContent:"space-between",marginBottom:6,boxShadow:`0 1px 3px rgba(100,80,60,0.05)`}}>
@@ -982,7 +982,7 @@ export default function MeetMario() {
       </div>
     );
 
-    // ── CHAT ──
+    // â”€â”€ CHAT â”€â”€
     if(tab==="chat") return (
       <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 200px)"}}>
         <Eyebrow>Clinical AI</Eyebrow>
@@ -1000,7 +1000,7 @@ export default function MeetMario() {
           <div ref={chatEnd}/>
         </div>
         <div style={{display:"flex",gap:8}}>
-          <RuledInput value={chatIn} onChange={e=>setChatIn(e.target.value)} placeholder="Ask about your protocol, foods, symptoms, meal ideas…"
+          <RuledInput value={chatIn} onChange={e=>setChatIn(e.target.value)} placeholder="Ask about your protocol, foods, symptoms, meal ideasâ€¦"
             style={{flex:1,borderBottom:`1.5px solid ${T.w3}`}}/>
           <button onClick={sendChat} disabled={chatLoad} style={{background:chatLoad?T.w1:T.rg,border:`1px solid ${chatLoad?T.w3:T.rg}`,color:chatLoad?T.w4:"#fff",borderRadius:9,padding:"0 22px",cursor:chatLoad?"not-allowed":"pointer",fontSize:12,fontFamily:fonts.sans,fontWeight:500,flexShrink:0}}>Send</button>
         </div>
@@ -1046,13 +1046,13 @@ export default function MeetMario() {
           <div style={{width:9,height:9,borderRadius:"50%",background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`}}/>
           <span style={{fontFamily:fonts.serif,fontSize:18,fontWeight:400,color:T.w7}}>meet mario</span>
         </div>
-        <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:"3px 8px",letterSpacing:"0.14em"}}>PATENT PENDING · SE 2615203-3</span>
+        <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:"3px 8px",letterSpacing:"0.14em"}}>PATENT PENDING Â· SE 2615203-3</span>
       </div>
       {/* Hero */}
       <div style={{position:"relative",zIndex:2,padding:"80px 72px 100px",maxWidth:820}}>
         <div style={{display:"inline-flex",alignItems:"center",gap:12,marginBottom:44}}>
           <div style={{width:28,height:1,background:T.rg}}/>
-          <span style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase"}}>precision medicine · stockholm</span>
+          <span style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:"0.24em",textTransform:"uppercase"}}>precision medicine Â· stockholm</span>
         </div>
         <h1 style={{fontFamily:fonts.serif,fontSize:72,fontWeight:400,lineHeight:0.95,letterSpacing:"-0.02em",color:T.w7,marginBottom:28}}>
           Your body has<br/>been speaking.<br/>
@@ -1062,15 +1062,15 @@ export default function MeetMario() {
           A clinical intake built on proprietary immune reactivity data. Ten minutes. A 21-day anti-inflammatory protocol designed for your precise biology.
         </p>
         <div style={{display:"flex",gap:0,borderTop:`1px solid ${T.w3}`,borderBottom:`1px solid ${T.w3}`,marginBottom:52,width:"fit-content"}}>
-          {[["21","Day Protocol"],["10′","Intake Time"],["7","Patent Claims"],["4","Diagnostic Pillars"]].map(([n,l],i,arr)=>(
+          {[["21","Day Protocol"],["10â€²","Intake Time"],["7","Patent Claims"],["4","Diagnostic Pillars"]].map(([n,l],i,arr)=>(
             <div key={l} style={{padding:"18px 36px 16px 0",marginRight:36,borderRight:i<arr.length-1?`1px solid ${T.w3}`:"none"}}>
               <div style={{fontFamily:fonts.serif,fontSize:34,fontWeight:400,color:T.w7,letterSpacing:"-0.03em",lineHeight:1,marginBottom:5}}>{n}</div>
               <div style={{fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:"0.18em",textTransform:"uppercase"}}>{l}</div>
             </div>
           ))}
         </div>
-        <BtnPrimary onClick={()=>setShowLanding(false)}>Begin Assessment →</BtnPrimary>
-        <p style={{marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.14em"}}>~10 minutes · GDPR compliant · No credit card required</p>
+        <BtnPrimary onClick={()=>setShowLanding(false)}>Begin Assessment â†’</BtnPrimary>
+        <p style={{marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.14em"}}>~10 minutes Â· GDPR compliant Â· No credit card required</p>
       </div>
       <style>{`
         @keyframes ob1{0%,100%{transform:translate(0,0) scale(1) rotate(0deg)}25%{transform:translate(36px,-30px) scale(1.04) rotate(4deg)}50%{transform:translate(14px,38px) scale(.97) rotate(-3deg)}75%{transform:translate(-24px,12px) scale(1.02) rotate(6deg)}}
@@ -1090,7 +1090,7 @@ export default function MeetMario() {
 
       <Nav showProgress={false}/>
 
-      {/* Tab nav — below main nav, hairline rule */}
+      {/* Tab nav â€” below main nav, hairline rule */}
       <div style={{
         background:T.w,borderBottom:`1px solid ${T.w3}`,
         padding:"0 44px",display:"flex",gap:0,
@@ -1110,7 +1110,7 @@ export default function MeetMario() {
             {t.id==="monitor"&&diary.length>0&&<span style={{marginLeft:6,fontFamily:fonts.mono,fontSize:8.5,color:T.w4}}>{diary.length}</span>}
           </button>
         ))}
-        {/* Status badges — far right */}
+        {/* Status badges â€” far right */}
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
           {[["Candida","mild","#906080"],["Whey","moderate","#5080A8"]].map(([n,l,c])=>(
             <div key={n} style={{background:T.w1,border:`1px solid ${c}30`,borderRadius:4,padding:"3px 9px",display:"flex",gap:5,alignItems:"center"}}>
@@ -1133,11 +1133,11 @@ export default function MeetMario() {
       {/* Footer */}
       <div style={{borderTop:`1px solid ${T.w3}`,padding:"14px 44px",display:"flex",justifyContent:"space-between",alignItems:"center",background:T.w1}}>
         <div style={{fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:"0.12em"}}>
-          <span style={{color:T.w6,fontWeight:500}}>meet mario</span> · MediBalans · Karlavägen 89, Stockholm
+          <span style={{color:T.w6,fontWeight:500}}>meet mario</span> Â· MediBalans Â· KarlavÃ¤gen 89, Stockholm
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center"}}>
-          <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:"2px 8px",letterSpacing:"0.12em",background:T.rgBg}}>PATENT PENDING · SE 2615203-3</span>
-          <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:"0.1em"}}>AI-driven clinical decision support · Global Constraint Rule framework</span>
+          <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:"2px 8px",letterSpacing:"0.12em",background:T.rgBg}}>PATENT PENDING Â· SE 2615203-3</span>
+          <span style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:"0.1em"}}>AI-driven clinical decision support Â· Global Constraint Rule framework</span>
         </div>
       </div>
 
@@ -1152,3 +1152,5 @@ export default function MeetMario() {
     </div>
   );
 }
+
+
