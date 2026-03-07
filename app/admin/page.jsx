@@ -1,165 +1,337 @@
-'use client'
-import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
+"use client";
+import { useState, useEffect } from "react";
+import { createBrowserClient } from "@supabase/ssr";
+import { useRouter } from "next/navigation";
 
 const T = {
-  w:"#F7F4F0",w1:"#F1EDE7",w2:"#E8E2DA",w3:"#D8D0C4",
-  w4:"#B8ACA0",w5:"#8A7E72",w6:"#4A4038",w7:"#1C1510",
-  rg:"#C4887A",rg2:"#9A6255",rg3:"#DEB0A4",rgBg:"#F8F0EE",
-  err:"#B85040",ok:"#6A9060",warn:"#B88040",
-}
+  bg: "#FAF8F4",
+  bg2: "#F5F1EB",
+  card: "#FFFFFF",
+  border: "#E8E4DC",
+  gold: "#9A7240",
+  goldLight: "#C4A882",
+  rg: "#C4887A",
+  text: "#2C2C2C",
+  muted: "#9A9690",
+  severe: "#C04040",
+  moderate: "#C4887A",
+  mild: "#9A7240",
+  green: "#5A8A6A",
+};
+
 const fonts = {
-  serif:"'Georgia','Times New Roman',serif",
-  sans:"-apple-system,'Helvetica Neue','Arial',sans-serif",
-  mono:"'SF Mono','Fira Mono','Courier New',monospace",
-}
+  serif: "EB Garamond, Georgia, serif",
+  sans: "Lato, sans-serif",
+  mono: "IBM Plex Mono, monospace",
+};
+
+const STATUS_COLORS = {
+  pending: "#C4887A",
+  confirmed: "#5A8A6A",
+  cancelled: "#9A9690",
+  completed: "#9A7240",
+};
 
 export default function AdminPage() {
-  const [patients,setPatients] = useState([])
-  const [loading,setLoading] = useState(true)
-  const [showAdd,setShowAdd] = useState(false)
-  const [form,setForm] = useState({
-    email:'',full_name:'',date_of_birth:'',
-    sex:'female',lab_id:'',test_date:'',
-    candida_level:'',whey_level:'',
-  })
-  const [addLoading,setAddLoading] = useState(false)
-  const [addResult,setAddResult] = useState(null)
-  const supabase = createClient()
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("bookings");
+  const [bookings, setBookings] = useState([]);
+  const [patients, setPatients] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [anamnesis, setAnamnesis] = useState(null);
+  const [updating, setUpdating] = useState(null);
+  const router = useRouter();
 
-  useEffect(()=>{loadPatients()},[])
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
 
-  async function loadPatients(){
-    setLoading(true)
-    const {data} = await supabase.from('patients').select(`
-      id,full_name,date_of_birth,created_at,
-      alcat_results(test_date,candida_level,whey_level),
-      chat_messages(id)
-    `).order('created_at',{ascending:false})
-    if(data) setPatients(data)
-    setLoading(false)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) { router.push("/login"); return; }
+      setSession(session);
+      loadData();
+    });
+  }, []);
+
+  async function loadData() {
+    setLoading(true);
+    const [{ data: b }, { data: p }] = await Promise.all([
+      supabase.from("bookings").select("*, patients(name, email, phone)").order("created_at", { ascending: false }),
+      supabase.from("patients").select("*").order("created_at", { ascending: false }),
+    ]);
+    setBookings(b || []);
+    setPatients(p || []);
+    setLoading(false);
   }
 
-  async function addPatient(){
-    if(!form.email||!form.full_name) return
-    setAddLoading(true)
-    setAddResult(null)
-    try {
-      const res = await fetch('/api/admin/add-patient',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(form),
-      })
-      const result = await res.json()
-      if(result.error){
-        setAddResult({ok:false,msg:result.error})
-      } else {
-        setAddResult({ok:true,msg:`${form.full_name} added. Login link sent to ${form.email}.`})
-        setForm({email:'',full_name:'',date_of_birth:'',sex:'female',lab_id:'',test_date:'',candida_level:'',whey_level:''})
-        setShowAdd(false)
-        loadPatients()
-      }
-    } catch {
-      setAddResult({ok:false,msg:'Network error. Try again.'})
-    }
-    setAddLoading(false)
+  async function loadAnamnesis(bookingId) {
+    const { data } = await supabase.from("anamnesis").select("*").eq("booking_id", bookingId).single();
+    setAnamnesis(data);
   }
 
-  const field=(label,key,type='text',placeholder='')=>(
-    <div style={{marginBottom:18}}>
-      <div style={{fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.20em',textTransform:'uppercase',marginBottom:6}}>{label}</div>
-      <input type={type} value={form[key]} onChange={e=>setForm(p=>({...p,[key]:e.target.value}))} placeholder={placeholder}
-        style={{display:'block',width:'100%',padding:'10px 0',border:'none',borderBottom:`1.5px solid ${T.w3}`,background:'transparent',fontSize:13,color:T.w7,outline:'none',fontFamily:fonts.sans}}/>
-    </div>
-  )
+  async function updateStatus(bookingId, status) {
+    setUpdating(bookingId);
+    await supabase.from("bookings").update({ status }).eq("id", bookingId);
+    setBookings(prev => prev.map(b => b.id === bookingId ? { ...b, status } : b));
+    setUpdating(null);
+  }
 
-  const sel=(label,key,opts)=>(
-    <div style={{marginBottom:18}}>
-      <div style={{fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.20em',textTransform:'uppercase',marginBottom:6}}>{label}</div>
-      <select value={form[key]} onChange={e=>setForm(p=>({...p,[key]:e.target.value}))}
-        style={{width:'100%',padding:'10px 0',border:'none',borderBottom:`1.5px solid ${T.w3}`,background:'transparent',fontSize:13,color:T.w7,outline:'none',fontFamily:fonts.sans}}>
-        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-      </select>
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
+  function formatDate(d) {
+    if (!d) return "-";
+    return new Date(d).toLocaleDateString("sv-SE", { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  function formatTime(d) {
+    if (!d) return "";
+    return new Date(d).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ fontFamily: fonts.mono, fontSize: 11, color: T.muted, letterSpacing: "0.12em" }}>LOADING...</div>
     </div>
-  )
+  );
 
   return (
-    <div style={{minHeight:'100vh',background:T.w,fontFamily:fonts.sans}}>
-      <div style={{height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 44px',background:'rgba(247,244,240,0.95)',borderBottom:`1px solid ${T.w3}`,position:'sticky',top:0,zIndex:100}}>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <div style={{width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`}}/>
-          <span style={{fontFamily:fonts.serif,fontSize:18,color:T.w7}}>meet mario</span>
-          <span style={{fontFamily:fonts.mono,fontSize:9,color:T.rg2,border:`1px solid ${T.rg}30`,borderRadius:4,padding:'2px 8px',letterSpacing:'0.14em',background:T.rgBg}}>CLINIC ADMIN</span>
+    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: fonts.sans }}>
+
+      {/* Header */}
+      <div style={{ borderBottom: `1px solid ${T.border}`, background: T.card, padding: "0 40px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
+          <div style={{ fontFamily: fonts.serif, fontSize: 18, color: T.text }}>meet mario</div>
+          <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.gold, letterSpacing: "0.14em", textTransform: "uppercase" }}>Clinic Admin</div>
         </div>
-        <div style={{display:'flex',gap:10,alignItems:'center'}}>
-          <span style={{fontFamily:fonts.mono,fontSize:9,color:T.w4}}>{patients.length} patients</span>
-          <button onClick={()=>{setShowAdd(v=>!v);setAddResult(null)}}
-            style={{background:showAdd?T.rgBg:T.rg,border:`1px solid ${T.rg}`,borderRadius:8,padding:'7px 18px',cursor:'pointer',fontSize:12,fontFamily:fonts.sans,color:showAdd?T.rg2:'#fff',fontWeight:500}}>
-            {showAdd?'Cancel':'+ Add patient'}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted }}>
+            {bookings.filter(b => b.status === "pending").length} pending
+          </div>
+          <button onClick={signOut} style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, background: "none", border: `1px solid ${T.border}`, borderRadius: 2, padding: "4px 12px", cursor: "pointer", letterSpacing: "0.1em" }}>
+            SIGN OUT
           </button>
         </div>
       </div>
 
-      <div style={{padding:'36px 44px',maxWidth:860,margin:'0 auto'}}>
-        {showAdd&&(
-          <div style={{background:T.w1,border:`1px solid ${T.rg}30`,borderRadius:16,padding:'32px 36px',marginBottom:32,boxShadow:`0 4px 20px rgba(196,136,122,0.10)`}}>
-            <div style={{fontFamily:fonts.serif,fontSize:22,color:T.w7,marginBottom:28,fontWeight:400}}>New patient</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0 32px'}}>
-              {field('Full name','full_name','text','Anna Lindström')}
-              {field('Email','email','email','patient@email.com')}
-              {field('Date of birth','date_of_birth','date')}
-              {field('Lab ID','lab_id','text','539273')}
-              {field('Test date','test_date','date')}
-              {sel('Sex','sex',[{v:'female',l:'Female'},{v:'male',l:'Male'},{v:'other',l:'Other'}])}
-              {sel('Candida marker','candida_level',[{v:'',l:'None'},{v:'mild',l:'Mild'},{v:'moderate',l:'Moderate'},{v:'severe',l:'Severe'}])}
-              {sel('Whey marker','whey_level',[{v:'',l:'None'},{v:'mild',l:'Mild'},{v:'moderate',l:'Moderate'},{v:'severe',l:'Severe'}])}
-            </div>
-            {addResult&&(
-              <div style={{marginTop:8,marginBottom:16,padding:'10px 14px',background:addResult.ok?`${T.ok}12`:`${T.err}12`,border:`1px solid ${addResult.ok?T.ok:T.err}35`,borderRadius:8,fontSize:12,color:addResult.ok?T.ok:T.err}}>
-                {addResult.msg}
-              </div>
-            )}
-            <button onClick={addPatient} disabled={addLoading||!form.email||!form.full_name}
-              style={{marginTop:8,background:addLoading?T.w2:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,border:'none',borderRadius:10,padding:'13px 32px',cursor:addLoading?'not-allowed':'pointer',color:addLoading?T.w4:'#fff',fontSize:13,fontWeight:500,fontFamily:fonts.sans}}>
-              {addLoading?'Adding patient…':'Add patient & send login link →'}
-            </button>
-          </div>
-        )}
+      <div style={{ display: "flex", height: "calc(100vh - 56px)" }}>
 
-        <div style={{fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.20em',textTransform:'uppercase',marginBottom:16}}>All patients</div>
-        {loading?(
-          <div style={{fontSize:13,color:T.w4}}>Loading…</div>
-        ):patients.length===0?(
-          <div style={{fontSize:13,color:T.w5,padding:'32px 0',textAlign:'center'}}>No patients yet. Add your first patient above.</div>
-        ):(
-          <div style={{display:'flex',flexDirection:'column',gap:4}}>
-            {patients.map(p=>{
-              const alcat=p.alcat_results?.[0]
-              const chats=p.chat_messages?.length??0
-              return(
-                <div key={p.id} style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:10,padding:'14px 20px',display:'flex',alignItems:'center',gap:20,boxShadow:'0 1px 3px rgba(100,80,60,0.04)'}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:14,color:T.w7,fontWeight:500,marginBottom:4}}>{p.full_name}</div>
-                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                      {alcat?.test_date&&<span style={{fontFamily:fonts.mono,fontSize:9,color:T.w4}}>ALCAT {alcat.test_date}</span>}
-                      {alcat?.candida_level&&<span style={{fontFamily:fonts.mono,fontSize:9,color:'#906080',border:'1px solid #90608030',borderRadius:3,padding:'1px 6px'}}>Candida {alcat.candida_level}</span>}
-                      {alcat?.whey_level&&<span style={{fontFamily:fonts.mono,fontSize:9,color:'#5080A8',border:'1px solid #5080A830',borderRadius:3,padding:'1px 6px'}}>Whey {alcat.whey_level}</span>}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',gap:16,alignItems:'center'}}>
-                    <div style={{textAlign:'center'}}>
-                      <div style={{fontFamily:fonts.serif,fontSize:18,color:chats>0?T.rg:T.w4}}>{chats}</div>
-                      <div style={{fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.12em'}}>MESSAGES</div>
-                    </div>
-                    <div style={{fontFamily:fonts.mono,fontSize:8,color:T.w4}}>{new Date(p.created_at).toLocaleDateString('sv-SE')}</div>
-                  </div>
+        {/* Sidebar */}
+        <div style={{ width: 200, borderRight: `1px solid ${T.border}`, background: T.card, padding: "24px 0" }}>
+          {[
+            { id: "bookings", label: "Bookings", count: bookings.length },
+            { id: "patients", label: "Patients", count: patients.length },
+            { id: "pending", label: "Pending", count: bookings.filter(b => b.status === "pending").length },
+          ].map(item => (
+            <button key={item.id} onClick={() => { setTab(item.id); setSelected(null); setAnamnesis(null); }}
+              style={{
+                width: "100%", textAlign: "left", padding: "10px 24px",
+                background: tab === item.id ? T.bg2 : "none",
+                border: "none", borderLeft: tab === item.id ? `2px solid ${T.gold}` : "2px solid transparent",
+                cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center",
+              }}>
+              <span style={{ fontFamily: fonts.mono, fontSize: 10, letterSpacing: "0.1em", color: tab === item.id ? T.gold : T.muted, textTransform: "uppercase" }}>{item.label}</span>
+              <span style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, background: T.bg2, padding: "1px 6px", borderRadius: 8 }}>{item.count}</span>
+            </button>
+          ))}
+
+          <div style={{ margin: "24px 16px 8px", fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase" }}>Quick Stats</div>
+          {[
+            { label: "Confirmed", val: bookings.filter(b => b.status === "confirmed").length, color: T.green },
+            { label: "Completed", val: bookings.filter(b => b.status === "completed").length, color: T.gold },
+            { label: "Cancelled", val: bookings.filter(b => b.status === "cancelled").length, color: T.muted },
+          ].map(s => (
+            <div key={s.label} style={{ padding: "6px 24px", display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.08em" }}>{s.label}</span>
+              <span style={{ fontFamily: fonts.mono, fontSize: 9, color: s.color, fontWeight: 600 }}>{s.val}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Main content */}
+        <div style={{ flex: 1, overflow: "auto", padding: 32 }}>
+
+          {/* Bookings / Pending tab */}
+          {(tab === "bookings" || tab === "pending") && (
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>
+                  {tab === "pending" ? "Awaiting confirmation" : "All bookings"}
                 </div>
-              )
-            })}
+                <div style={{ fontFamily: fonts.serif, fontSize: 28, color: T.text }}>
+                  {tab === "pending" ? "Pending Bookings" : "Booking Overview"}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {(tab === "pending" ? bookings.filter(b => b.status === "pending") : bookings).map(b => (
+                  <div key={b.id}
+                    onClick={() => { setSelected(b); loadAnamnesis(b.id); }}
+                    style={{
+                      background: selected?.id === b.id ? T.bg2 : T.card,
+                      border: `1px solid ${selected?.id === b.id ? T.gold : T.border}`,
+                      borderRadius: 3, padding: "14px 20px", cursor: "pointer",
+                      display: "grid", gridTemplateColumns: "1fr 1fr 1fr 120px 120px",
+                      alignItems: "center", gap: 16,
+                      transition: "border-color 0.15s",
+                    }}>
+                    <div>
+                      <div style={{ fontFamily: fonts.sans, fontSize: 13, color: T.text, fontWeight: 500 }}>{b.patients?.name || "Unknown"}</div>
+                      <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, marginTop: 2 }}>{b.patients?.email}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.text, letterSpacing: "0.06em" }}>{b.service_name}</div>
+                      <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, marginTop: 2 }}>{b.service_tier}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontFamily: fonts.mono, fontSize: 11, color: T.text }}>{formatDate(b.appointment_date)}</div>
+                      <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, marginTop: 2 }}>{formatTime(b.appointment_date)}</div>
+                    </div>
+                    <div style={{
+                      display: "inline-flex", padding: "3px 10px", borderRadius: 12,
+                      background: (STATUS_COLORS[b.status] || T.muted) + "18",
+                      fontFamily: fonts.mono, fontSize: 9, letterSpacing: "0.1em",
+                      color: STATUS_COLORS[b.status] || T.muted, textTransform: "uppercase",
+                    }}>
+                      {b.status || "pending"}
+                    </div>
+                    <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.gold }}>{b.total_price ? `${b.total_price.toLocaleString()} SEK` : "-"}</div>
+                  </div>
+                ))}
+                {bookings.length === 0 && (
+                  <div style={{ padding: 48, textAlign: "center", fontFamily: fonts.mono, fontSize: 11, color: T.muted, letterSpacing: "0.1em" }}>NO BOOKINGS YET</div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Patients tab */}
+          {tab === "patients" && (
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>Registry</div>
+                <div style={{ fontFamily: fonts.serif, fontSize: 28, color: T.text }}>Patient List</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {patients.map(p => (
+                  <div key={p.id}
+                    onClick={() => setSelected(p)}
+                    style={{
+                      background: selected?.id === p.id ? T.bg2 : T.card,
+                      border: `1px solid ${selected?.id === p.id ? T.gold : T.border}`,
+                      borderRadius: 3, padding: "14px 20px", cursor: "pointer",
+                      display: "grid", gridTemplateColumns: "1fr 1fr 1fr 80px",
+                      alignItems: "center", gap: 16,
+                    }}>
+                    <div>
+                      <div style={{ fontFamily: fonts.sans, fontSize: 13, color: T.text, fontWeight: 500 }}>{p.name}</div>
+                      <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, marginTop: 2 }}>{p.email}</div>
+                    </div>
+                    <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted }}>{p.phone || "-"}</div>
+                    <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted }}>{formatDate(p.created_at)}</div>
+                    <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.gold }}>{bookings.filter(b => b.patient_id === p.id).length} booking{bookings.filter(b => b.patient_id === p.id).length !== 1 ? "s" : ""}</div>
+                  </div>
+                ))}
+                {patients.length === 0 && (
+                  <div style={{ padding: 48, textAlign: "center", fontFamily: fonts.mono, fontSize: 11, color: T.muted, letterSpacing: "0.1em" }}>NO PATIENTS YET</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Detail panel */}
+        {selected && (
+          <div style={{ width: 360, borderLeft: `1px solid ${T.border}`, background: T.card, overflow: "auto", padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+              <div>
+                <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>Detail View</div>
+                <div style={{ fontFamily: fonts.serif, fontSize: 20, color: T.text }}>{selected.name || selected.patients?.name}</div>
+              </div>
+              <button onClick={() => { setSelected(null); setAnamnesis(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: T.muted, padding: 4 }}>x</button>
+            </div>
+
+            {/* Contact info */}
+            <div style={{ marginBottom: 20 }}>
+              {[
+                ["Email", selected.email || selected.patients?.email],
+                ["Phone", selected.phone || selected.patients?.phone || "-"],
+                ["Registered", formatDate(selected.created_at)],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${T.border}` }}>
+                  <span style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, letterSpacing: "0.08em" }}>{label}</span>
+                  <span style={{ fontFamily: fonts.mono, fontSize: 10, color: T.text }}>{value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Booking details */}
+            {selected.service_name && (
+              <>
+                <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 12 }}>Booking</div>
+                <div style={{ marginBottom: 20 }}>
+                  {[
+                    ["Service", selected.service_name],
+                    ["Tier", selected.service_tier || "-"],
+                    ["Date", formatDate(selected.appointment_date)],
+                    ["Time", formatTime(selected.appointment_date) || "-"],
+                    ["Price", selected.total_price ? `${selected.total_price.toLocaleString()} SEK` : "-"],
+                    ["Status", selected.status || "pending"],
+                  ].map(([label, value]) => (
+                    <div key={label} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${T.border}` }}>
+                      <span style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, letterSpacing: "0.08em" }}>{label}</span>
+                      <span style={{ fontFamily: fonts.mono, fontSize: 10, color: label === "Status" ? (STATUS_COLORS[value] || T.muted) : T.text, textTransform: label === "Status" ? "uppercase" : "none" }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Status actions */}
+                <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 10 }}>Update Status</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 20 }}>
+                  {["confirmed", "completed", "cancelled", "pending"].map(s => (
+                    <button key={s} onClick={() => updateStatus(selected.id, s)}
+                      disabled={selected.status === s || updating === selected.id}
+                      style={{
+                        padding: "8px 0", border: `1px solid ${STATUS_COLORS[s]}`,
+                        background: selected.status === s ? STATUS_COLORS[s] + "20" : "none",
+                        borderRadius: 2, cursor: selected.status === s ? "default" : "pointer",
+                        fontFamily: fonts.mono, fontSize: 9, letterSpacing: "0.1em",
+                        color: STATUS_COLORS[s], textTransform: "uppercase",
+                      }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Anamnesis */}
+            {anamnesis && (
+              <>
+                <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 12 }}>Clinical Intake</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {Object.entries(anamnesis).filter(([k]) => !["id", "booking_id", "created_at"].includes(k)).map(([key, value]) => (
+                    value && (
+                      <div key={key} style={{ background: T.bg2, borderRadius: 3, padding: "8px 12px" }}>
+                        <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>{key.replace(/_/g, " ")}</div>
+                        <div style={{ fontFamily: fonts.sans, fontSize: 12, color: T.text, lineHeight: 1.5 }}>
+                          {typeof value === "object" ? JSON.stringify(value) : String(value)}
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
-      <style>{`*{box-sizing:border-box;}button:hover{opacity:0.88;}`}</style>
     </div>
-  )
+  );
 }
