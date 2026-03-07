@@ -157,7 +157,7 @@ export default function AdminPage() {
     ]);
     const mapped = (b || []).map(bk => ({
       ...bk,
-      patient_name: bk.patients?.name || bk.patient_name || "Unknown",
+      patient_name: bk.patients?.full_name || bk.patient_name || "Unknown",
       patient_email: bk.patients?.email,
       patient_phone: bk.patients?.phone,
     }));
@@ -417,7 +417,7 @@ export default function AdminPage() {
                     onMouseLeave={e => { if (selectedPatient?.id !== p.id) e.currentTarget.style.background = "none"; }}
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div style={{ fontFamily: fonts.sans, fontSize: 13, color: T.text, fontWeight: 500 }}>{p.name}</div>
+                      <div style={{ fontFamily: fonts.sans, fontSize: 13, color: T.text, fontWeight: 500 }}>{p.full_name}</div>
                       <span style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted }}>{pBookings.length} appts</span>
                     </div>
                     <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.muted, marginTop: 2 }}>{p.email}</div>
@@ -437,7 +437,7 @@ export default function AdminPage() {
                   {/* Header */}
                   <div style={{ marginBottom: 28 }}>
                     <div style={{ fontFamily: fonts.mono, fontSize: 9, color: T.muted, letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 6 }}>Patient 360</div>
-                    <div style={{ fontFamily: fonts.serif, fontSize: 32, color: T.text }}>{selectedPatient.name}</div>
+                    <div style={{ fontFamily: fonts.serif, fontSize: 32, color: T.text }}>{selectedPatient.full_name}</div>
                     <div style={{ fontFamily: fonts.mono, fontSize: 11, color: T.muted, marginTop: 4 }}>{selectedPatient.email}</div>
                   </div>
 
@@ -715,4 +715,5 @@ export default function AdminPage() {
     </div>
   );
 }
+
 
