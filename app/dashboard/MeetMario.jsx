@@ -54,11 +54,11 @@ const MEALS = {
  },
 };
 const SYMPTOM_CATS = {
- digestive: { label:"Digestive",      icon:"🫁", items:["Bloating","Cramping","Nausea","Gas","Reflux","Loose stools","Stomach pain"] },
- skin:      { label:"Skin",           icon:"🌡️", items:["Flushing","Itching","Rash","Hives","Puffiness","Swelling"] },
- neuro:     { label:"Neurological",   icon:"🧠", items:["Brain fog","Headache","Dizziness","Fatigue spike","Mood drop","Anxiety"] },
- joints:    { label:"Joints/Muscles", icon:"🦴", items:["Joint stiffness","Muscle aches","Back pain","Neck tension","Swollen fingers"] },
- cardiac:   { label:"Cardiac/Resp",   icon:"❤️", items:["Heart racing","Shortness of breath","Chest tightness","Sinus congestion","Runny nose"] },
+ digestive: { label:"Digestive",      icon:"", items:["Bloating","Cramping","Nausea","Gas","Reflux","Loose stools","Stomach pain"] },
+ skin:      { label:"Skin",           icon:"", items:["Flushing","Itching","Rash","Hives","Puffiness","Swelling"] },
+ neuro:     { label:"Neurological",   icon:"", items:["Brain fog","Headache","Dizziness","Fatigue spike","Mood drop","Anxiety"] },
+ joints:    { label:"Joints/Muscles", icon:"", items:["Joint stiffness","Muscle aches","Back pain","Neck tension","Swollen fingers"] },
+ cardiac:   { label:"Cardiac/Resp",   icon:"", items:["Heart racing","Shortness of breath","Chest tightness","Sinus congestion","Runny nose"] },
 };
 function simulateMealResponse(hadReactive) {
  const pts = [];
@@ -103,18 +103,18 @@ const S = {
  green:"#6A9060", candida:"#906080", whey:"#5080A8",
 };
 const CUISINES = [
- {id:"mediterranean",label:"Mediterranean",flag:"🫒",desc:"Olive oil, herbs, fish"},
- {id:"french",       label:"French",        flag:"🇫🇷",desc:"Bistro — duck, lentils"},
- {id:"swedish",      label:"Swedish",       flag:"🇸🇪",desc:"Nordic fish, root veg"},
- {id:"japanese",     label:"Japanese",      flag:"🇯🇵",desc:"Clean minimal, fish"},
- {id:"middle_eastern",label:"Middle Eastern",flag:"🌿",desc:"Spiced meats, herbs"},
- {id:"scandinavian", label:"Scandinavian",  flag:"🐟",desc:"Cured fish, forest"},
+ {id:"mediterranean",label:"Mediterranean",flag:"",desc:"Olive oil, herbs, fish"},
+ {id:"french",       label:"French",        flag:"",desc:"Bistro — duck, lentils"},
+ {id:"swedish",      label:"Swedish",       flag:"",desc:"Nordic fish, root veg"},
+ {id:"japanese",     label:"Japanese",      flag:"",desc:"Clean minimal, fish"},
+ {id:"middle_eastern",label:"Middle Eastern",flag:"",desc:"Spiced meats, herbs"},
+ {id:"scandinavian", label:"Scandinavian",  flag:"",desc:"Cured fish, forest"},
 ];
 const EAT_PATS = [
  {id:"standard", label:"Standard",  emoji:"⏰", desc:"6 meals every 3h",        fasting:false, detail:null},
- {id:"if16_8",   label:"IF 16:8",   emoji:"🕐", desc:"16h fast · 8h window",   fasting:true,  detail:"Window 12:00–20:00"},
- {id:"if18_6",   label:"IF 18:6",   emoji:"🕑", desc:"18h fast · 6h window",   fasting:true,  detail:"Window 13:00–19:00"},
- {id:"if5_2",    label:"5:2",       emoji:"📆", desc:"5 normal · 2 low-cal",   fasting:true,  detail:"~500 kcal fasting days"},
+ {id:"if16_8",   label:"IF 16:8",   emoji:"", desc:"16h fast · 8h window",   fasting:true,  detail:"Window 12:00–20:00"},
+ {id:"if18_6",   label:"IF 18:6",   emoji:"", desc:"18h fast · 6h window",   fasting:true,  detail:"Window 13:00–19:00"},
+ {id:"if5_2",    label:"5:2",       emoji:"", desc:"5 normal · 2 low-cal",   fasting:true,  detail:"~500 kcal fasting days"},
 ];
 const MARIO_SYS = `You are Meet Mario, clinical AI for MediBalans AB, Stockholm. Patient: Christina Wohltahrt, 64, post-menopausal. ALCAT April 2024. Markers: Candida mild (no sugar/yeast/vinegar 3mo), Whey moderate (no milk 6mo). Severe reactors (9mo): beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, bell pepper, chickpea, cilantro, lobster, pistachio, poppy seed, capers, cumin, jalapeño, egg white, sea bass, wakame. Rules: No seed oils. CPF every meal. Respond in clear prose, no bullet points.`;
 
@@ -510,7 +510,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
  const allFoods = [...P.severe.map(f=>({food:f,level:"severe"})),...P.moderate.map(f=>({food:f,level:"moderate"})),...P.mild.map(f=>({food:f,level:"mild"})),...P.alsoAvoid.candida.map(f=>({food:f,level:"candida"})),...P.alsoAvoid.whey.map(f=>({food:f,level:"whey"}))];
  const foodResults = foodQ.length > 1 ? allFoods.filter(({food})=>food.toLowerCase().includes(foodQ.toLowerCase())).slice(0,10) : [];
 
- const TABS = [{id:"monitor",label:"🔴 Monitor"},{id:"glucose",label:"📊 Glucose"},{id:"protocol",label:"Protocol"},{id:"rotation",label:"Rotation"},{id:"meals",label:"Meals"},{id:"generate",label:"Generate"},{id:"grocery",label:"🛒 Grocery"},{id:"lookup",label:"Food Check"},{id:"chat",label:"Ask Mario"}];
+ const TABS = [{id:"monitor",label:" Monitor"},{id:"glucose",label:" Glucose"},{id:"protocol",label:"Protocol"},{id:"rotation",label:"Rotation"},{id:"meals",label:"Meals"},{id:"generate",label:"Generate"},{id:"grocery",label:" Grocery"},{id:"lookup",label:"Food Check"},{id:"chat",label:"Ask Mario"}];
  const PHASES = [
   {id:1,label:"21-Day Detox",range:"Days 1–21",color:S.gold,rules:["Green list only","6 meals every 3h","No sugars/yeast (Candida)","No milk (Whey)"],note:"Any deviation restarts the inflammatory clock."},
   {id:2,label:"Green Phase",range:"Months 1–3",color:"#7A9E60",rules:["Strict 4-day rotation","One legume day/week","Candida continues","Whey continues"],note:"Rotation prevents new sensitivities forming."},
@@ -614,10 +614,10 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
        </div>
        {diary[0]?.flagClinic && (
         <div style={{background:"#2A1010",border:`1px solid ${S.severe}40`,borderRadius:6,padding:"8px 12px",marginBottom:12,fontSize:11,color:S.severe,fontFamily:FF,display:FX,gap:6,alignItems:"center"}}>
-         <span>⚠️</span> This reaction has been flagged for clinician review.
+         <span></span> This reaction has been flagged for clinician review.
         </div>
        )}
-       <button onClick={dismissPopup} style={{width:"100%",background:S.card,border:`1px solid ${S.border}`,borderRadius:7,padding:"10px",cursor:CP,color:S.muted,fontSize:13,fontFamily:FF}}>Close — logged to reaction diary ✓</button>
+       <button onClick={dismissPopup} style={{width:"100%",background:S.card,border:`1px solid ${S.border}`,borderRadius:7,padding:"10px",cursor:CP,color:S.muted,fontSize:13,fontFamily:FF}}>Close — logged to reaction diary </button>
       </>}
      </div>
     </div>
@@ -673,7 +673,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
        <div style={{fontSize:12,color:S.muted,fontFamily:FF,marginTop:3}}>Detects unusual spikes and prompts symptom collection. Logs to reaction diary. Alerts clinician on severe events.</div>
       </div>
       <button onClick={()=>setClinView(v=>!v)} style={{background:clinView?"#1A1028":S.card,border:`1px solid ${clinView?"#6040A0":S.border}`,borderRadius:7,padding:"7px 14px",cursor:CP,fontSize:11,fontFamily:FF,color:clinView?"#A080D0":S.muted}}>
-       {clinView?"👤 Patient view":"🏥 Clinician view"}
+       {clinView?" Patient view":" Clinician view"}
       </button>
      </div>
 
@@ -719,7 +719,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
             </div>
            </div>
            <button onClick={()=>{ if(!alreadyLoaded) setMonFoods(templateFoods); else setMonFoods([]);}}\1                        style={{background:alreadyLoaded?S.gold+"20":S.c1,border:`1px solid ${alreadyLoaded?S.gold:S.goldDim+"40"}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:alreadyLoaded?S.gold:S.goldDim,whiteSpace:"nowrap",marginLeft:8,flexShrink:0}}>
-            {alreadyLoaded?"✓ Loaded":"Use template"}
+            {alreadyLoaded?" Loaded":"Use template"}
            </button>
           </div>
          );
@@ -728,7 +728,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
         {/* Selected foods tray — always visible at top */}
         {monFoods.length > 0 && (
          <div style={{background:"#0E100C",border:`1px solid ${S.green}30`,borderRadius:6,padding:"7px 10px",marginBottom:8}}>
-          <div style={{fontSize:8,letterSpacing:1,color:S.green,fontFamily:FF,marginBottom:5}}>✓ YOUR MEAL ({monFoods.length} foods)</div>
+          <div style={{fontSize:8,letterSpacing:1,color:S.green,fontFamily:FF,marginBottom:5}}> YOUR MEAL ({monFoods.length} foods)</div>
           <div style={{display:FX,flexWrap:"wrap",gap:4}}>
            {monFoods.map((f,i)=>{
             const fu = f.toUpperCase();
@@ -749,7 +749,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
 
         {/* Food chips from rotation — grouped */}
         <div style={{maxHeight:220,overflowY:"auto",paddingRight:2}}>
-         {[["protein","🐟"],["veg","🥬"],["grains","🌾"],["fruit","🍓"],["misc","🫙"]].map(([cat,em])=>{
+         {[["protein",""],["veg",""],["grains",""],["fruit",""],["misc",""]].map(([cat,em])=>{
           const items = ROT[rotDay][cat].filter(f=>!monFoodInput||f.toLowerCase().includes(monFoodInput.toLowerCase()));
           if(!items.length) return null;
           return (
@@ -765,7 +765,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
               return (
                <button key={f} onClick={()=>setMonFoods(prev=>added?prev.filter(x=>x!==f):[...prev,f])}
                 style={{background:added?col+"22":S.bg,border:`1px solid ${added?col:isSev?S.severe+"40":isMod?S.moderate+"30":S.border}`,borderRadius:4,padding:"2px 7px",cursor:CP,fontSize:10,fontFamily:FF,color:added?col:isSev?S.severe+"90":isMod?S.moderate+"90":"#706050",transition:"all .1s",fontWeight:added?600:400}}>
-                {added?"✓ ":""}{f}
+                {added?" ":""}{f}
                </button>
               );
              })}
@@ -775,7 +775,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
          })}
         </div>
         {monFoods.some(f=>P.severe.some(s=>f.toUpperCase().includes(s)||s.includes(f.toUpperCase().split(" ")[0]))||P.moderate.some(s=>f.toUpperCase().includes(s)||s.includes(f.toUpperCase().split(" ")[0]))) && (
-         <div style={{background:"#2A1010",border:`1px solid ${S.severe}40`,borderRadius:6,padding:"8px 10px",marginBottom:12,fontSize:11,color:S.severe,fontFamily:FF}}>⚠️ Reactive food detected in this meal — elevated spike risk</div>
+         <div style={{background:"#2A1010",border:`1px solid ${S.severe}40`,borderRadius:6,padding:"8px 10px",marginBottom:12,fontSize:11,color:S.severe,fontFamily:FF}}> Reactive food detected in this meal — elevated spike risk</div>
         )}
         <button onClick={startMonitoring} style={{width:"100%",background:S.gold,border:`1px solid ${S.gold}`,borderRadius:7,padding:"11px",cursor:CP,color:"#0D0C0A",fontSize:13,fontFamily:FF,fontWeight:700}}>Start 2h post-meal monitoring</button>
        </div>
@@ -786,11 +786,11 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
          <div style={{fontSize:9,letterSpacing:3,color:S.muted,fontFamily:FF,marginBottom:12}}>DATA SOURCES</div>
          {[
           {name:"Apple Watch",    icon:"⌚", streams:"HR · HRV",                     badge:"HRV",         badgeColor:"#707070"},
-          {name:"Oura Ring",      icon:"💍", streams:"HRV · Temp · SpO2 · Readiness", badge:"HRV · TEMP",  badgeColor:"#707070"},
-          {name:"Garmin",         icon:"🏔️", streams:"HR · HRV · Sleep · Stress · Body Battery", badge:"HRV · SLEEP", badgeColor:"#407050"},
-          {name:"Samsung Galaxy", icon:"💎", streams:"HR · HRV (IBI) · Sleep · SpO2 · Skin temp", badge:"HRV · TEMP",  badgeColor:"#6040A0"},
-          {name:"Dexcom G7/G6",   icon:"📡", streams:"Glucose · 5min intervals · trend arrows",   badge:"GLUCOSE",    badgeColor:S.c3},
-          {name:"Libre 2 / 3",    icon:"💠", streams:"Glucose · 1min intervals · predictive low", badge:"GLUCOSE",    badgeColor:S.c3},
+          {name:"Oura Ring",      icon:"", streams:"HRV · Temp · SpO2 · Readiness", badge:"HRV · TEMP",  badgeColor:"#707070"},
+          {name:"Garmin",         icon:"", streams:"HR · HRV · Sleep · Stress · Body Battery", badge:"HRV · SLEEP", badgeColor:"#407050"},
+          {name:"Samsung Galaxy", icon:"", streams:"HR · HRV (IBI) · Sleep · SpO2 · Skin temp", badge:"HRV · TEMP",  badgeColor:"#6040A0"},
+          {name:"Dexcom G7/G6",   icon:"", streams:"Glucose · 5min intervals · trend arrows",   badge:"GLUCOSE",    badgeColor:S.c3},
+          {name:"Libre 2 / 3",    icon:"", streams:"Glucose · 1min intervals · predictive low", badge:"GLUCOSE",    badgeColor:S.c3},
          ].map(d=>(
           <div key={d.name} style={{display:FX,alignItems:"center",gap:10,padding:"7px 0",borderBottom:`1px solid ${S.border}`}}>
            <span style={{fontSize:16,flexShrink:0}}>{d.icon}</span>
@@ -818,7 +818,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
            <div style={{display:FX,gap:4,flexWrap:"wrap"}}>
             {e.spike&&<span style={{fontSize:10,background:e.spike.level==="severe"?S.severe+"20":S.moderate+"20",color:e.spike.level==="severe"?S.severe:S.moderate,border:`1px solid ${e.spike.level==="severe"?S.severe:S.moderate}40`,borderRadius:3,padding:"1px 6px",fontFamily:FF}}>{e.spike.label}</span>}
             {e.symptoms.slice(0,2).map(s=><span key={s} style={{fontSize:10,color:S.muted,background:S.bg,border:`1px solid ${S.border}`,borderRadius:3,padding:"1px 6px",fontFamily:FF}}>{s}</span>)}
-            {e.flagClinic&&<span style={{fontSize:10,color:S.severe,fontFamily:FF}}>⚠️ Flagged</span>}
+            {e.flagClinic&&<span style={{fontSize:10,color:S.severe,fontFamily:FF}}> Flagged</span>}
            </div>
           </div>
          ))}
@@ -876,7 +876,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
 
      {/* ── CLINICIAN VIEW ── */}
      {clinView && diary.length > 0 && <div style={{marginTop:24}}>
-      <div style={{fontSize:9,letterSpacing:3,color:"#6040A0",fontFamily:FF,marginBottom:12}}>🏥 CLINICIAN DASHBOARD — {diary.length} LOGGED REACTION{diary.length>1?"S":""}</div>
+      <div style={{fontSize:9,letterSpacing:3,color:"#6040A0",fontFamily:FF,marginBottom:12}}> CLINICIAN DASHBOARD — {diary.length} LOGGED REACTION{diary.length>1?"S":""}</div>
       {diary.map(e=>(
        <div key={e.id} style={{background:"#100E18",border:`1px solid ${e.flagClinic?S.severe+"40":"#2A2040"}`,borderLeft:`3px solid ${e.flagClinic?S.severe:"#4A3080"}`,borderRadius:8,padding:"14px 16px",marginBottom:8}}>
         <div style={{display:FX,justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -884,7 +884,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
           <div style={{fontSize:13,color:S.text,fontWeight:600}}>{e.meal} <span style={{fontSize:11,color:S.muted,fontFamily:FF,fontWeight:400}}>· {new Date(e.ts).toLocaleString("en-SE")}</span></div>
           <div style={{fontSize:11,color:S.muted,fontFamily:FF,marginTop:2}}>Foods: {e.foods.join(", ")||"not logged"}</div>
          </div>
-         {e.flagClinic&&<div style={{background:S.severe+"20",border:`1px solid ${S.severe}40`,borderRadius:5,padding:"3px 8px",fontSize:10,color:S.severe,fontFamily:FF,fontWeight:600}}>⚠️ REVIEW</div>}
+         {e.flagClinic&&<div style={{background:S.severe+"20",border:`1px solid ${S.severe}40`,borderRadius:5,padding:"3px 8px",fontSize:10,color:S.severe,fontFamily:FF,fontWeight:600}}> REVIEW</div>}
         </div>
         <div style={{display:FX,gap:8,flexWrap:"wrap",marginBottom:8}}>
          {e.spike&&<span style={{background:S[e.spike.level]+"15",border:`1px solid ${S[e.spike.level]}40`,borderRadius:4,padding:"2px 8px",fontSize:11,fontFamily:FF,color:S[e.spike.level]}}>{e.spike.label} {e.spike.val}</span>}
@@ -930,7 +930,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       {[1,2,3,4].map(d=><button key={d} onClick={()=>setRotDay(d)} style={{background:rotDay===d?S.gold:S.card,border:`1px solid ${rotDay===d?S.gold:S.border}`,color:rotDay===d?"#0D0C0A":S.muted,borderRadius:7,padding:"6px 18px",cursor:CP,fontSize:12,fontFamily:FF,fontWeight:rotDay===d?700:400}}>Day {d}</button>)}
      </div>
      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-      {[["grains","🌾","Grains"],["veg","🥬","Vegetables"],["fruit","🍓","Fruit"],["protein","🐟","Protein"],["misc","🫙","Nuts & Herbs"]].map(([k,em,label])=>(
+      {[["grains","","Grains"],["veg","","Vegetables"],["fruit","","Fruit"],["protein","","Protein"],["misc","","Nuts & Herbs"]].map(([k,em,label])=>(
        <div key={k} style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:8,padding:"11px 12px",gridColumn:k==="misc"?"1/-1":undefined}}>
         <div style={{fontSize:9,letterSpacing:2,color:S.goldDim,fontFamily:FF,marginBottom:7}}>{em} {label.toUpperCase()}</div>
         <div style={{display:FX,flexWrap:"wrap",gap:3}}>{ROT[rotDay][k].map(f=><span key={f} style={{background:S.c4,border:`1px solid ${S.border}`,borderRadius:3,padding:"2px 7px",fontSize:11,fontFamily:FF,color:S.c2}}>{f}</span>)}</div>
@@ -943,7 +943,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       {[1,2,3,4].map(d=><button key={d} onClick={()=>{setRotDay(d);setPicker(null);}} style={{background:rotDay===d?S.gold:S.card,border:`1px solid ${rotDay===d?S.gold:S.border}`,color:rotDay===d?"#0D0C0A":S.muted,borderRadius:7,padding:"6px 18px",cursor:CP,fontSize:12,fontFamily:FF,fontWeight:rotDay===d?700:400}}>Day {d}</button>)}
      </div>
      <div style={{display:FX,flexDirection:"column",gap:7}}>
-      {[["breakfast","🌅","Breakfast"],["snack1","🍓","Snack"],["lunch","🍽️","Lunch"],["snack2","🫙","Snack"],["dinner","🐟","Dinner"],["snack3","🌿","Evening"]].map(([k,em,label])=>{
+      {[["breakfast","","Breakfast"],["snack1","","Snack"],["lunch","","Lunch"],["snack2","","Snack"],["dinner","","Dinner"],["snack3","","Evening"]].map(([k,em,label])=>{
        const meal=MEALS[rotDay][k];
        const selP=meal.isProtein?getP(rotDay,k):null;
        const pk=`${rotDay}-${k}`;
@@ -957,7 +957,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
            <span style={{fontSize:11,color:S.gold,fontWeight:600}}>{label}</span>
            {meal.isProtein&&<div style={{position:"relative",marginLeft:"auto"}} onClick={e=>e.stopPropagation()}>
             <button onClick={()=>setPicker(isOpen?null:pk)} style={{background:isOpen?S.gold+"20":S.c4,border:`1px solid ${isOpen?S.gold:S.border}`,borderRadius:20,padding:"2px 8px",cursor:CP,display:FX,alignItems:"center",gap:4}}>
-             <span style={{fontSize:10}}>🔄</span><span style={{fontSize:10,color:isOpen?S.gold:"#C0A870",fontFamily:FF,fontWeight:600}}>{selP}</span><span style={{fontSize:8,color:S.muted}}>▾</span>
+             <span style={{fontSize:10}}></span><span style={{fontSize:10,color:isOpen?S.gold:"#C0A870",fontFamily:FF,fontWeight:600}}>{selP}</span><span style={{fontSize:8,color:S.muted}}>▾</span>
             </button>
             {isOpen&&<div style={{position:"absolute",top:"calc(100% + 3px)",right:0,background:"#1C1A14",border:`1px solid ${S.gold}40`,borderRadius:7,padding:"4px",zIndex:300,minWidth:180,boxShadow:"0 8px 24px #00000080"}}>
              {Object.entries(meal.methods).map(([p,m])=>(
@@ -982,7 +982,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
              if(line.startsWith("PREP TIME")||line.startsWith("COOK TIME"))return<div key={ri} style={{color:S.goldDim,fontSize:10,marginBottom:6}}>{line}</div>;
              if(line.startsWith("INGREDIENTS"))return<div key={ri} style={{color:S.gold,fontWeight:700,fontSize:10,letterSpacing:2,marginTop:8,marginBottom:4}}>INGREDIENTS</div>;
              if(line.startsWith("STEPS"))return<div key={ri} style={{color:S.gold,fontWeight:700,fontSize:10,letterSpacing:2,marginTop:8,marginBottom:4}}>STEPS</div>;
-             if(line.startsWith("CLINICAL NOTE"))return<div key={ri} style={{marginTop:10,borderTop:`1px solid ${S.border}`,paddingTop:8,color:"#7A9060",fontSize:10,fontStyle:"italic"}}>🌿 {line.replace("CLINICAL NOTE:","").trim()}</div>;
+             if(line.startsWith("CLINICAL NOTE"))return<div key={ri} style={{marginTop:10,borderTop:`1px solid ${S.border}`,paddingTop:8,color:"#7A9060",fontSize:10,fontStyle:"italic"}}> {line.replace("CLINICAL NOTE:","").trim()}</div>;
              if(line.match(/^\d+\./))return<div key={ri} style={{display:FX,gap:8,marginBottom:4}}><span style={{color:S.gold,fontWeight:700,minWidth:16}}>{line.match(/^\d+/)[0]}.</span><span style={{color:"#C0B898",flex:1}}>{line.replace(/^\d+\.\s*/,"")}</span></div>;
              if(line.startsWith("-"))return<div key={ri} style={{color:S.c2,paddingLeft:12,marginBottom:2}}>· {line.slice(1).trim()}</div>;
              return<div key={ri} style={{color:S.muted}}>{line}</div>;
@@ -1004,7 +1004,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
        </div>
        <div>
         <div style={{fontSize:9,letterSpacing:3,color:S.muted,fontFamily:FF,marginBottom:7}}>PHASE</div>
-        {[{id:"detox",label:"Detox / Months 1–3",emoji:"🔒"},{id:"post3months",label:"Post Month 3+",emoji:"🍓"}].map(ph=>(
+        {[{id:"detox",label:"Detox / Months 1–3",emoji:""},{id:"post3months",label:"Post Month 3+",emoji:""}].map(ph=>(
          <button key={ph.id} onClick={()=>{setGenPhase(ph.id);setGenResult(null);if(ph.id==="detox")setEatPat("standard");}} style={{display:FX,alignItems:"center",gap:7,width:"100%",background:genPhase===ph.id?S.c1:S.card,border:`1px solid ${genPhase===ph.id?S.gold:S.border}`,borderRadius:6,padding:"7px 10px",cursor:CP,marginBottom:3,textAlign:"left"}}>
           <span>{ph.emoji}</span><span style={{fontSize:11,color:genPhase===ph.id?S.gold:S.text,fontWeight:600,fontFamily:FF}}>{ph.label}</span>
          </button>
@@ -1012,7 +1012,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
        </div>
        <div>
         <div style={{fontSize:9,letterSpacing:3,color:S.muted,fontFamily:FF,marginBottom:7}}>SCOPE</div>
-        <div style={{display:FX,gap:5,flexWrap:"wrap"}}>{[["full_day","📅","Full Day"],["breakfast","🌅","Breakfast"],["lunch","🍽️","Lunch"],["dinner","🐟","Dinner"]].map(([id,em,label])=><button key={id} onClick={()=>{setMealScope(id);setGenResult(null);}} style={{background:mealScope===id?S.c1:S.card,border:`1px solid ${mealScope===id?S.gold:S.border}`,color:mealScope===id?S.gold:S.muted,borderRadius:5,padding:"5px 10px",cursor:CP,fontSize:11,fontFamily:FF,display:FX,alignItems:"center",gap:3}}><span>{em}</span>{label}</button>)}</div>
+        <div style={{display:FX,gap:5,flexWrap:"wrap"}}>{[["full_day","","Full Day"],["breakfast","","Breakfast"],["lunch","","Lunch"],["dinner","","Dinner"]].map(([id,em,label])=><button key={id} onClick={()=>{setMealScope(id);setGenResult(null);}} style={{background:mealScope===id?S.c1:S.card,border:`1px solid ${mealScope===id?S.gold:S.border}`,color:mealScope===id?S.gold:S.muted,borderRadius:5,padding:"5px 10px",cursor:CP,fontSize:11,fontFamily:FF,display:FX,alignItems:"center",gap:3}}><span>{em}</span>{label}</button>)}</div>
        </div>
       </div>
       <div style={{display:FX,flexDirection:"column",gap:12}}>
@@ -1029,20 +1029,20 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
        <div>
         <div style={{display:FX,justifyContent:"space-between",marginBottom:7}}>
          <div style={{fontSize:9,letterSpacing:3,color:S.muted,fontFamily:FF}}>EATING PATTERN</div>
-         {genPhase==="detox"&&<span style={{fontSize:9,color:S.candida,fontFamily:FF}}>🔒 Fasting at Month 3+</span>}
+         {genPhase==="detox"&&<span style={{fontSize:9,color:S.candida,fontFamily:FF}}> Fasting at Month 3+</span>}
         </div>
         {EAT_PATS.map(ep=>{
          const locked=ep.fasting&&genPhase==="detox"; const sel=eatPat===ep.id;
          return <div key={ep.id}>
           <button onClick={()=>{if(!locked){setEatPat(ep.id);setGenResult(null);}}} style={{width:"100%",background:locked?"#0F0E0C":sel?S.c1:S.card,border:`1px solid ${locked?"#1E1C16":sel?S.gold:S.border}`,borderRadius:6,padding:"7px 9px",cursor:locked?"not-allowed":"pointer",textAlign:"left",marginBottom:3,opacity:locked?0.4:1}}>
            <div style={{display:FX,alignItems:"center",gap:6}}>
-            <span style={{fontSize:12}}>{locked?"🔒":ep.emoji}</span>
+            <span style={{fontSize:12}}>{locked?"":ep.emoji}</span>
             <div><div style={{fontSize:11,color:locked?S.muted:sel?S.gold:S.text,fontWeight:600,fontFamily:FF}}>{ep.label}</div><div style={{fontSize:9,color:locked?"#2A2820":S.muted,fontFamily:FF}}>{ep.desc}</div></div>
            </div>
           </button>
           {sel&&ep.fasting&&!locked&&<div style={{background:"#0C0E10",border:"1px solid #304060",borderTop:"none",borderRadius:"0 0 6px 6px",marginBottom:3}}>
            {!research[ep.id]?<button onClick={()=>fetchResearch(ep.id)} disabled={resLoad===ep.id} style={{width:"100%",background:"none",border:"none",borderTop:"1px solid #1A2030",padding:"7px 9px",cursor:resLoad===ep.id?"wait":"pointer",display:FX,gap:6,alignItems:"center"}}>
-            {resLoad===ep.id?<><span style={{display:FX,gap:2}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#5080A8",animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,display:"inline-block"}}/>)}</span><span style={{fontSize:10,color:"#5080A8",fontFamily:FF}}>Searching PubMed…</span></>:<><span>🔬</span><span style={{fontSize:10,color:"#5080A8",fontFamily:FF,fontWeight:600}}>Research for your profile</span></>}
+            {resLoad===ep.id?<><span style={{display:FX,gap:2}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:"#5080A8",animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,display:"inline-block"}}/>)}</span><span style={{fontSize:10,color:"#5080A8",fontFamily:FF}}>Searching PubMed…</span></>:<><span></span><span style={{fontSize:10,color:"#5080A8",fontFamily:FF,fontWeight:600}}>Research for your profile</span></>}
            </button>:<div style={{padding:"10px 12px",maxHeight:220,overflowY:"auto"}}>
             <div style={{fontSize:10,lineHeight:1.7,color:"#98A8B8",fontFamily:FF}}>{research[ep.id].split("\n").slice(0,12).join("\n")}</div>
            </div>}
@@ -1053,7 +1053,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       </div>
      </div>
      <button onClick={genMenu} disabled={!cuisine||genLoad} style={{width:"100%",background:!cuisine?S.card:genLoad?"#2A2010":S.gold,border:`1px solid ${!cuisine?S.border:S.gold}`,color:!cuisine?S.muted:genLoad?S.goldDim:"#0D0C0A",borderRadius:7,padding:"11px",cursor:!cuisine?"not-allowed":"pointer",fontSize:12,fontFamily:FF,fontWeight:700,marginBottom:16,display:FX,alignItems:"center",justifyContent:"center",gap:7}}>
-      {genLoad?<><span>Generating</span><span style={{display:FX,gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:S.goldDim,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,display:"inline-block"}}/>)}</span></>:<><span>✦</span>{!cuisine?"Select a cuisine to generate":`Generate · ${CUISINES.find(c=>c.id===cuisine)?.label} · Day ${rotDay}`}</>}
+      {genLoad?<><span>Generating</span><span style={{display:FX,gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:S.goldDim,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,display:"inline-block"}}/>)}</span></>:<><span></span>{!cuisine?"Select a cuisine to generate":`Generate · ${CUISINES.find(c=>c.id===cuisine)?.label} · Day ${rotDay}`}</>}
      </button>
      {genResult&&<div style={{background:S.card,border:`1px solid ${S.gold}30`,borderRadius:9,padding:"18px 20px",animation:"fadeIn 0.3s ease"}}>
       <div style={{display:FX,justifyContent:"space-between",marginBottom:12}}><span style={{fontSize:12,color:S.text}}>{CUISINES.find(c=>c.id===cuisine)?.flag} {CUISINES.find(c=>c.id===cuisine)?.label} · Day {rotDay}</span><button onClick={()=>setGenResult(null)} style={{background:"none",border:`1px solid ${S.border}`,borderRadius:5,color:S.muted,padding:"3px 9px",cursor:CP,fontSize:10,fontFamily:FF}}>↺</button></div>
@@ -1096,23 +1096,23 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
         <div key={d} style={{background:S.bg,border:`1px solid ${S.border}`,borderRadius:7,padding:"10px 12px"}}>
          <div style={{fontSize:9,color:S.goldDim,fontFamily:FF,marginBottom:6,fontWeight:600}}>DAY {d}</div>
          <div style={{fontSize:10,color:S.muted,fontFamily:FF,lineHeight:1.7}}>
-          <div>🐟 {ROT[d].protein.slice(0,2).join(", ")}</div>
-          <div>🥬 {ROT[d].veg.slice(0,3).join(", ")}</div>
-          <div>🌾 {ROT[d].grains.slice(0,2).join(", ")}</div>
-          <div>🍓 {ROT[d].fruit.slice(0,2).join(", ")}</div>
+          <div> {ROT[d].protein.slice(0,2).join(", ")}</div>
+          <div> {ROT[d].veg.slice(0,3).join(", ")}</div>
+          <div> {ROT[d].grains.slice(0,2).join(", ")}</div>
+          <div> {ROT[d].fruit.slice(0,2).join(", ")}</div>
          </div>
         </div>
        ))}
       </div>
       <button onClick={buildGroceryList} disabled={groceryLoad||groceryWeek.length===0} style={{width:"100%",background:groceryLoad?"#1A1810":groceryWeek.length===0?S.card:S.gold,border:`1px solid ${groceryLoad||groceryWeek.length===0?S.border:S.gold}`,color:groceryLoad?"#7A6030":groceryWeek.length===0?S.muted:"#0D0C0A",borderRadius:7,padding:"11px",cursor:groceryLoad||groceryWeek.length===0?"not-allowed":"pointer",fontSize:12,fontFamily:FF,fontWeight:700,display:FX,alignItems:"center",justifyContent:"center",gap:7}}>
-       {groceryLoad?<><span style={{display:FX,gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:S.goldDim,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,display:"inline-block"}}/>)}</span><span>Building your list…</span></> :<><span>🛒</span><span>Generate grocery list · Days {groceryWeek.join(", ")}</span></>}
+       {groceryLoad?<><span style={{display:FX,gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:"50%",background:S.goldDim,animation:`pulse 1.2s ease-in-out ${i*0.2}s infinite`,display:"inline-block"}}/>)}</span><span>Building your list…</span></> :<><span></span><span>Generate grocery list · Days {groceryWeek.join(", ")}</span></>}
       </button>
      </div>
      {groceryList&&<div style={{background:S.card,border:`1px solid ${S.gold}25`,borderRadius:10,padding:"18px 20px"}}>
       <div style={{display:FX,justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-       <div style={{fontSize:9,letterSpacing:3,color:S.goldDim,fontFamily:FF}}>🛒 YOUR WEEKLY ALCAT GROCERY LIST</div>
+       <div style={{fontSize:9,letterSpacing:3,color:S.goldDim,fontFamily:FF}}> YOUR WEEKLY ALCAT GROCERY LIST</div>
        <div style={{display:FX,gap:6}}>
-        <button onClick={()=>{navigator.clipboard&&navigator.clipboard.writeText(groceryList.replace(/\*\*/g,""));setGroceryExport(true);setTimeout(()=>setGroceryExport(false),2000);}} style={{background:groceryExport?"#1A2810":S.bg,border:`1px solid ${groceryExport?"#4A8030":S.border}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:groceryExport?"#4A8030":S.muted}}>{groceryExport?"✓ Copied":"Copy list"}</button>
+        <button onClick={()=>{navigator.clipboard&&navigator.clipboard.writeText(groceryList.replace(/\*\*/g,""));setGroceryExport(true);setTimeout(()=>setGroceryExport(false),2000);}} style={{background:groceryExport?"#1A2810":S.bg,border:`1px solid ${groceryExport?"#4A8030":S.border}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:groceryExport?"#4A8030":S.muted}}>{groceryExport?" Copied":"Copy list"}</button>
         <button onClick={()=>setGroceryList(null)} style={{background:"none",border:`1px solid ${S.border}`,borderRadius:5,color:S.muted,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF}}>↺ New</button>
        </div>
       </div>
@@ -1129,11 +1129,11 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       <div style={{marginTop:20,borderTop:`1px solid ${S.border}`,paddingTop:14}}>
        <div style={{fontSize:9,letterSpacing:3,color:S.muted,fontFamily:FF,marginBottom:10}}>ORDER ONLINE</div>
        <div style={{display:FX,gap:8,flexWrap:"wrap"}}>
-        {[{name:"ICA Online",url:"https://www.ica.se",icon:"🔴",note:"Hemleverans"},
-         {name:"Matsmart",url:"https://www.matsmart.se",icon:"🟢",note:"Organic discounts"},
-         {name:"Nordic Superfood",url:"https://nordicsuperfood.se",icon:"🌿",note:"Wild-caught & organic"},
-         {name:"Willys",url:"https://www.willys.se",icon:"🔵",note:"Budget-friendly"},
-         {name:"Rohkost.de",url:"https://www.rohkost.de",icon:"🌱",note:"Rare protocol items"},
+        {[{name:"ICA Online",url:"https://www.ica.se",icon:"",note:"Hemleverans"},
+         {name:"Matsmart",url:"https://www.matsmart.se",icon:"",note:"Organic discounts"},
+         {name:"Nordic Superfood",url:"https://nordicsuperfood.se",icon:"",note:"Wild-caught & organic"},
+         {name:"Willys",url:"https://www.willys.se",icon:"",note:"Budget-friendly"},
+         {name:"Rohkost.de",url:"https://www.rohkost.de",icon:"",note:"Rare protocol items"},
         ].map(s=>(
          <a key={s.name} href={s.url} target="_blank" rel="noopener noreferrer" style={{background:S.bg,border:`1px solid ${S.border}`,borderRadius:7,padding:"8px 12px",textDecoration:"none",display:FX,gap:6,alignItems:"center"}}>
           <span style={{fontSize:14}}>{s.icon}</span>
@@ -1149,12 +1149,12 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
      {!groceryList&&<div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:8,padding:"14px 16px"}}>
       <div style={{fontSize:9,letterSpacing:3,color:S.muted,fontFamily:FF,marginBottom:10}}>SHOPPING RULES — ALWAYS APPLY</div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-       {[{icon:"🐟",rule:"Fish: wild-caught only",detail:"Farm-raised fish contains inflammatory omega-6. Look for MSC certified."},
-        {icon:"🥩",rule:"Meat: grass-fed where possible",detail:"Conventional meat has higher arachidonic acid. Bison and lamb are naturally lean."},
-        {icon:"🫙",rule:"Oils: tallow, coconut, avocado only",detail:"No sunflower, canola, rapeseed, or vegetable oil — even if labelled healthy."},
-        {icon:"🥬",rule:"Veg: organic for today's rotation",detail:"Buy organic for items on your plate today. Don't buy ahead — freshness matters."},
-        {icon:"⚠️",rule:"Labels: no hidden yeast/sugars",detail:"Nutritional yeast, malt extract, dextrose — all Candida triggers."},
-        {icon:"🌾",rule:"Grains: certified GF",detail:"GF oats must be certified — regular oats are contaminated with wheat in most mills."},
+       {[{icon:"",rule:"Fish: wild-caught only",detail:"Farm-raised fish contains inflammatory omega-6. Look for MSC certified."},
+        {icon:"",rule:"Meat: grass-fed where possible",detail:"Conventional meat has higher arachidonic acid. Bison and lamb are naturally lean."},
+        {icon:"",rule:"Oils: tallow, coconut, avocado only",detail:"No sunflower, canola, rapeseed, or vegetable oil — even if labelled healthy."},
+        {icon:"",rule:"Veg: organic for today's rotation",detail:"Buy organic for items on your plate today. Don't buy ahead — freshness matters."},
+        {icon:"",rule:"Labels: no hidden yeast/sugars",detail:"Nutritional yeast, malt extract, dextrose — all Candida triggers."},
+        {icon:"",rule:"Grains: certified GF",detail:"GF oats must be certified — regular oats are contaminated with wheat in most mills."},
        ].map(({icon,rule,detail})=>(
         <div key={rule} style={{background:S.bg,border:`1px solid ${S.border}`,borderRadius:6,padding:"10px 12px",display:FX,gap:8}}>
          <span style={{fontSize:18,flexShrink:0}}>{icon}</span>
@@ -1179,7 +1179,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       </div>;
      })}
      {foodQ.length>1&&foodResults.length===0&&<div style={{background:"#0D1810",border:`1px solid ${S.green}30`,borderLeft:`3px solid ${S.green}`,borderRadius:7,padding:"12px 16px"}}>
-      <div style={{fontSize:14,color:S.text,marginBottom:3}}>✓ Not in reactive lists</div>
+      <div style={{fontSize:14,color:S.text,marginBottom:3}}> Not in reactive lists</div>
       <div style={{fontSize:11,color:"#70A070",fontFamily:FF}}>"{foodQ}" does not appear in your ALCAT reactive lists. If it is a whole food it is likely safe — confirm it is not a derivative of a reactive ingredient.</div>
      </div>}
     </div>}
