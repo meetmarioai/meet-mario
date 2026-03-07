@@ -1,0 +1,30 @@
+import re, shutil
+
+src = r"C:\Users\TheLo\meet-mario\app\dashboard\MeetMario.jsx"
+
+with open(src, "r", encoding="utf-8") as f:
+    code = f.read()
+
+def remove_emoji(text):
+    emoji_pattern = re.compile("["
+        u"\U0001F600-\U0001F64F"
+        u"\U0001F300-\U0001F5FF"
+        u"\U0001F680-\U0001F6FF"
+        u"\U0001F1E0-\U0001F1FF"
+        u"\U00002702-\U000027B0"
+        u"\U000024C2-\U0001F251"
+        u"\U0001f926-\U0001f937"
+        u"\U00010000-\U0010ffff"
+        u"\u2640-\u2642"
+        u"\u2600-\u2B55"
+        u"\u200d\u23cf\u23e9\u231a\ufe0f\u3030"
+        "]+", flags=re.UNICODE)
+    return emoji_pattern.sub('', text)
+
+code = remove_emoji(code)
+
+shutil.copy(src, src + ".bak")
+with open(src, "w", encoding="utf-8") as f:
+    f.write(code)
+
+print("Done. Backup at MeetMario.jsx.bak")
