@@ -195,6 +195,7 @@ export default function OnboardingPage() {
   const [symptoms, setSymptoms]   = useState([]);
   const [diet, setDiet]           = useState([]);
   const [tests, setTests]         = useState([]);
+  const [otherTests, setOtherTests] = useState("");
   const [meds, setMeds]           = useState("");
   const [supplements, setSupps]   = useState("");
   const [goals, setGoals]         = useState([]);
@@ -234,8 +235,9 @@ export default function OnboardingPage() {
     { id: "genetic",    label: "Genetic / DNA test" },
     { id: "microbiome", label: "Microbiome / GI-MAP" },
     { id: "dutch",      label: "DUTCH hormone panel" },
-    { id: "werlabs",    label: "Werlabs / Unilabs" },
-    { id: "none",       label: "None yet" },
+    { id: "werlabs", label: "Werlabs / Unilabs" },
+    { id: "cma", label: "CMA (Metabolic Array)" },
+    { id: "none", label: "None yet" },
   ];
 
   const GOAL_OPTS = [
@@ -270,6 +272,7 @@ export default function OnboardingPage() {
           symptoms,
           diet_history: diet,
           previous_tests: tests,
+          other_tests: otherTests || null,
           medications: meds,
           supplements,
           goals,
@@ -413,6 +416,7 @@ export default function OnboardingPage() {
             <Q>Have you done any of these tests?</Q>
             <Sub>Previous results help us calibrate your protocol starting point.</Sub>
             <ChipGroup options={TEST_OPTS} selected={tests} onToggle={id => toggleArr(tests, setTests, id)} />
+            <Input label="OTHER TESTS OR RESULTS (optional)" value={otherTests} onChange={e => setOtherTests(e.target.value)} placeholder="e.g. thyroid panel, cortisol, SIBO breath test" />
             <NextBtn onClick={() => setStep(5)} disabled={tests.length === 0} />
           </div>
         )}
