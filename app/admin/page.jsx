@@ -1,9 +1,9 @@
-"use client";
+﻿"use client";
 import { useState, useEffect, useRef } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { useRouter } from "next/navigation";
 
-// ── Design tokens ──────────────────────────────────────────────────────────
+// â”€â”€ Design tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const T = {
   bg: "#FAF8F4", bg2: "#F5F1EB", bg3: "#EDE9E1",
   card: "#FFFFFF", border: "#E8E4DC", borderHover: "#C4A882",
@@ -32,7 +32,7 @@ const STATUS_META = {
   completed: { color: T.gold,     bg: T.goldPale,   label: "Completed" },
   cancelled: { color: T.muted,    bg: T.bg3,        label: "Cancelled" },
 };
-const HOURS = Array.from({length: 13}, (_, i) => i + 7); // 07:00–19:00
+const HOURS = Array.from({length: 13}, (_, i) => i + 7); // 07:00â€“19:00
 
 const SERVICES = [
   { name: "Diagnostik Basic",    duration: 60,  price: 22000 },
@@ -40,11 +40,11 @@ const SERVICES = [
   { name: "Diagnostik Premium",  duration: 120, price: 42000 },
   { name: "Diagnostik Ultimate", duration: 120, price: 50000 },
   { name: "Konsultation",        duration: 60,  price: 4500  },
-  { name: "Återbesök",           duration: 30,  price: 2500  },
+  { name: "Ã…terbesÃ¶k",           duration: 30,  price: 2500  },
   { name: "Behandling",          duration: 60,  price: 8000  },
 ];
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function weekDays(anchor) {
   const d = new Date(anchor);
   const day = d.getDay();
@@ -71,7 +71,7 @@ function isSameDay(a, b) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-// ── Chip component ───────────────────────────────────────────────────────────
+// â”€â”€ Chip component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Chip({ label, color, bg }) {
   return (
     <span style={{
@@ -82,7 +82,7 @@ function Chip({ label, color, bg }) {
   );
 }
 
-// ── Booking card in calendar ─────────────────────────────────────────────────
+// â”€â”€ Booking card in calendar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function CalBooking({ booking, top, height, onClick }) {
   const c = CLINICIAN_COLORS[booking.clinician] || CLINICIAN_COLORS["Mario Anthis"];
   const sm = STATUS_META[booking.status] || STATUS_META.pending;
@@ -108,7 +108,7 @@ function CalBooking({ booking, top, height, onClick }) {
   );
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// â”€â”€ Main component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function AdminPage() {
   const router = useRouter();
   const supabase = createBrowserClient(
@@ -189,7 +189,7 @@ export default function AdminPage() {
     // Upsert patient
     let patientId = null;
     if (newForm.patient_email) {
-      const { data: existing } = await supabase.from("patients").select("id").eq("email", newForm.patient_email).single().catch(() => ({ data: null }));
+      const { data: existing } = await supabase.from("patients").select("id").eq("email", newForm.patient_email).single().then(r => r).catch(() => ({ data: null }));
       if (existing) {
         patientId = existing.id;
       } else {
@@ -225,7 +225,7 @@ export default function AdminPage() {
     setSelectedBooking(null);
   }
 
-  // ── Calendar helpers ───────────────────────────────────────────────────────
+  // â”€â”€ Calendar helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const days = weekDays(anchor);
   const HOUR_H = 56; // px per hour
   const CAL_TOP = 48; // header height
@@ -254,11 +254,11 @@ export default function AdminPage() {
     setShowNewBooking(true);
   }
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: T.bg, fontFamily: fonts.sans }}>
 
-      {/* ── Top bar ── */}
+      {/* â”€â”€ Top bar â”€â”€ */}
       <div style={{ height: 52, borderBottom: `1px solid ${T.border}`, background: T.card, display: "flex", alignItems: "center", padding: "0 24px", gap: 24, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontFamily: fonts.serif, fontSize: 18, color: T.text }}>meet mario</span>
@@ -296,22 +296,22 @@ export default function AdminPage() {
         </div>
       </div>
 
-      {/* ── Body ── */}
+      {/* â”€â”€ Body â”€â”€ */}
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-        {/* ════════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             CALENDAR VIEW
-        ════════════════════════════════════════════════════════ */}
+        â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {view === "calendar" && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
             {/* Week nav */}
             <div style={{ height: 44, borderBottom: `1px solid ${T.border}`, background: T.card, display: "flex", alignItems: "center", padding: "0 20px", gap: 12, flexShrink: 0 }}>
-              <button onClick={() => { const d = new Date(anchor); d.setDate(d.getDate() - 7); setAnchor(d); }} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 2, padding: "3px 10px", cursor: "pointer", fontFamily: fonts.mono, fontSize: 11, color: T.muted }}>←</button>
+              <button onClick={() => { const d = new Date(anchor); d.setDate(d.getDate() - 7); setAnchor(d); }} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 2, padding: "3px 10px", cursor: "pointer", fontFamily: fonts.mono, fontSize: 11, color: T.muted }}>â†</button>
               <span style={{ fontFamily: fonts.mono, fontSize: 11, color: T.text, letterSpacing: "0.06em" }}>
-                {days[0] && fmtDate(days[0])} – {days[4] && fmtDate(days[4])} {anchor.getFullYear()}
+                {days[0] && fmtDate(days[0])} â€“ {days[4] && fmtDate(days[4])} {anchor.getFullYear()}
               </span>
-              <button onClick={() => { const d = new Date(anchor); d.setDate(d.getDate() + 7); setAnchor(d); }} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 2, padding: "3px 10px", cursor: "pointer", fontFamily: fonts.mono, fontSize: 11, color: T.muted }}>→</button>
+              <button onClick={() => { const d = new Date(anchor); d.setDate(d.getDate() + 7); setAnchor(d); }} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 2, padding: "3px 10px", cursor: "pointer", fontFamily: fonts.mono, fontSize: 11, color: T.muted }}>â†’</button>
               <button onClick={() => setAnchor(new Date())} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 2, padding: "3px 10px", cursor: "pointer", fontFamily: fonts.mono, fontSize: 10, color: T.gold, letterSpacing: "0.08em" }}>TODAY</button>
               <div style={{ marginLeft: "auto", fontFamily: fonts.mono, fontSize: 10, color: T.muted }}>
                 {bookings.filter(b => days.some(d => b.appointment_date && isSameDay(d, new Date(b.appointment_date)))).length} appts this week
@@ -391,9 +391,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ════════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             PATIENTS VIEW
-        ════════════════════════════════════════════════════════ */}
+        â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {view === "patients" && (
           <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
             {/* Patient list */}
@@ -489,9 +489,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ════════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             ANALYTICS VIEW
-        ════════════════════════════════════════════════════════ */}
+        â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {view === "analytics" && (
           <div style={{ flex: 1, overflow: "auto", padding: 32 }}>
             <div style={{ marginBottom: 28 }}>
@@ -534,9 +534,9 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ════════════════════════════════════════════════════════
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
             BOOKING DETAIL PANEL
-        ════════════════════════════════════════════════════════ */}
+        â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {selectedBooking && (
           <div style={{ width: 340, borderLeft: `1px solid ${T.border}`, background: T.card, overflow: "auto", flexShrink: 0 }}>
             <div style={{ padding: "20px 20px 16px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -608,9 +608,9 @@ export default function AdminPage() {
         )}
       </div>
 
-      {/* ════════════════════════════════════════════════════════
+      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
           NEW BOOKING MODAL
-      ════════════════════════════════════════════════════════ */}
+      â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
       {showNewBooking && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(44,44,44,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
           <div style={{ background: T.card, borderRadius: 6, width: 480, maxHeight: "90vh", overflow: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
@@ -715,3 +715,4 @@ export default function AdminPage() {
     </div>
   );
 }
+
