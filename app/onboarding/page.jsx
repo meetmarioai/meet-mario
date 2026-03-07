@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 import { useState } from "react";
 
-// ── Design tokens ────────────────────────────────────────────────────────────
+// â”€â”€ Design tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const T = {
   bg:   "#FAF8F4",
   w1:   "#F5F0E8",
@@ -21,7 +21,7 @@ const fonts = {
   mono:  "'IBM Plex Mono', 'Courier New', monospace",
 };
 
-// ── Population risk data (top reactors for predicted profile) ────────────────
+// â”€â”€ Population risk data (top reactors for predicted profile) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const POP_RISK = [
   { name: "Walnut",     severe: 36.1, n: 180 },
   { name: "Almond",     severe: 35.0, n: 506 },
@@ -72,7 +72,7 @@ function getPredictedReactors(symptoms, diet) {
     });
 }
 
-// ── Components ───────────────────────────────────────────────────────────────
+// â”€â”€ Components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function Wordmark() {
   return (
     <div style={{ fontFamily: fonts.serif, fontSize: 20, letterSpacing: "0.04em", color: T.w7 }}>
@@ -180,7 +180,7 @@ function NextBtn({ onClick, label = "Continue", disabled }) {
   );
 }
 
-// ── Main onboarding component ─────────────────────────────────────────────────
+// â”€â”€ Main onboarding component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function OnboardingPage() {
   const TOTAL_STEPS = 7;
   const [step, setStep]       = useState(1);
@@ -307,7 +307,7 @@ export default function OnboardingPage() {
     }
   }
 
-  // ── Done screen ──────────────────────────────────────────────────────────
+  // â”€â”€ Done screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (done) {
     const firstName = name.split(" ")[0];
     const predicted = getPredictedReactors(symptoms, diet);
@@ -321,7 +321,7 @@ export default function OnboardingPage() {
               {firstName}, your clinical profile is ready.
             </h2>
             <p style={{ fontFamily: fonts.sans, fontSize: 15, color: T.w5, lineHeight: 1.7, margin: "0 0 32px" }}>
-              Based on your profile, I have cross-referenced your symptoms against our database of 1,042 ALCAT patient reports. Your personalised protocol starts today.
+              Based on your profile, I have reviewed your clinical profile and prepared your personalised protocol.
             </p>
 
             <div style={{ background: T.w1, borderRadius: 4, padding: "24px 28px", marginBottom: 28 }}>
@@ -335,7 +335,7 @@ export default function OnboardingPage() {
                 </div>
               ))}
               <div style={{ fontFamily: fonts.sans, fontSize: 11, color: T.w4, marginTop: 12 }}>
-                Population data only. ALCAT testing confirms your personal profile.
+                These are predictive indicators. ALCAT testing confirms your personal profile.
               </div>
             </div>
 
@@ -368,7 +368,7 @@ export default function OnboardingPage() {
     );
   }
 
-  // ── Step renderer ────────────────────────────────────────────────────────
+  // â”€â”€ Step renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const STEP_LABELS = ["", "IDENTITY", "SYMPTOMS", "DIET HISTORY", "PREVIOUS TESTS", "MEDICATIONS", "GOALS", "CONSENT"];
 
   return (
@@ -378,7 +378,7 @@ export default function OnboardingPage() {
         <ProgressBar step={step} total={TOTAL_STEPS} />
         <StepLabel step={step} total={TOTAL_STEPS} label={STEP_LABELS[step]} />
 
-        {/* STEP 1 — Identity */}
+        {/* STEP 1 â€” Identity */}
         {step === 1 && (
           <div>
             <Q>Who are you?</Q>
@@ -390,7 +390,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 2 — Symptoms */}
+        {/* STEP 2 â€” Symptoms */}
         {step === 2 && (
           <div>
             <Q>What brings you here?</Q>
@@ -400,7 +400,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 3 — Diet */}
+        {/* STEP 3 â€” Diet */}
         {step === 3 && (
           <div>
             <Q>How do you currently eat?</Q>
@@ -410,7 +410,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 4 — Previous tests */}
+        {/* STEP 4 â€” Previous tests */}
         {step === 4 && (
           <div>
             <Q>Have you done any of these tests?</Q>
@@ -421,7 +421,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 5 — Medications & supplements */}
+        {/* STEP 5 â€” Medications & supplements */}
         {step === 5 && (
           <div>
             <Q>Current medications and supplements?</Q>
@@ -432,7 +432,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 6 — Goals */}
+        {/* STEP 6 â€” Goals */}
         {step === 6 && (
           <div>
             <Q>What are your primary goals?</Q>
@@ -442,7 +442,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* STEP 7 — Consent */}
+        {/* STEP 7 â€” Consent */}
         {step === 7 && (
           <div>
             <Q>One last thing.</Q>
@@ -492,3 +492,4 @@ export default function OnboardingPage() {
     </div>
   );
 }
+
