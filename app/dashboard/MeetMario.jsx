@@ -852,8 +852,8 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
         <MiniChart pts={visiblePts} key_="hr"      color="#D04060" label="Heart Rate"    unit="bpm" />
         <MiniChart pts={visiblePts} key_="hrv"     color="#A06080" label="HRV"           unit="ms" />
-        <MiniChart pts={visiblePts} key_="glucose" color=S.c3 label="Glucose"       unit="mg/dL" />
-        <MiniChart pts={visiblePts} key_="temp"    color="#C08040" label="Body Temp"     unit="Â°C" />
+        <MiniChart pts={visiblePts} key_="glucose" color={S.c3} label="Glucose"       unit="mg/dL" />
+        <MiniChart pts={visiblePts} key_="temp"    color="#C08040" label="Body Temp"     unit="°C" />
        </div>
 
        {/* Current values bar */}
