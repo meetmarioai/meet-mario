@@ -554,11 +554,62 @@ export default function MeetMario() {
   };
 
   const buildGroceryList=async()=>{
+    detectRegion();
     if(groceryLoad)return;setGroceryLoad(true);setGroceryList(null);
     const days=groceryWeek,allFoodsList=days.map(d=>{const r=ROT[d];return`Day ${d}: Grains: ${r.grains.slice(0,3).join(", ")} | Veg: ${r.veg.slice(0,5).join(", ")} | Protein: ${r.protein.slice(0,3).join(", ")} | Fruit: ${r.fruit.slice(0,3).join(", ")} | Misc: ${r.misc.slice(0,3).join(", ")}`;}).join("\n");
     const prompt=`Generate a structured weekly grocery list for the ALCAT rotation protocol.\nRotation days: ${days.join(", ")}\n${allFoodsList}\nRules: No seed oils. No garlic/onion/tomato. No sugar/yeast (Candida). No dairy (Whey). Organic where possible. Wild-caught fish only.\n\nFormat:\n**FISH & PROTEIN**\n**VEGETABLES**\n**FRUITS**\n**GRAINS & STARCHES**\n**OILS & FATS**\n**HERBS & SPICES**\n**STORE NOTES** (2-3 sentences)`;
-    try{const r=await callClaude([{role:"user",content:prompt}],"You are a clinical nutritionist at MediBalans AB.");setGroceryList(r);}catch{setGroceryList("Error generating list.");}
+    try{const r=await callClaude([{role:"user",content:prompt}],"You are a clinical nutritionist at MediBalans AB.");setGroceryList(r);setParsedItems(parseGroceryItems(r));}catch{setGroceryList("Error generating list.");}
     setGroceryLoad(false);
+  };
+
+  // ── GEO DETECTION ────────────────────────────────────────────────────────
+  const detectRegion = () => {
+    if(userRegion) return;
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      const lang = navigator.language || "";
+      if(tz.startsWith("America") || lang==="en-US") setUserRegion("US");
+      else if(tz.startsWith("Europe/London") || lang==="en-GB") setUserRegion("UK");
+      else if(tz.includes("Berlin") || tz.includes("Vienna") || lang.startsWith("de")) setUserRegion("DE");
+      else setUserRegion("SE");
+    } catch { setUserRegion("SE"); }
+  };
+
+  const parseGroceryItems = (listText) => {
+    const items = [];
+    listText.split("\n").forEach(line => {
+      if(line.startsWith("- ") || line.startsWith("• ")) {
+        const raw = line.slice(2).trim();
+        const clean = raw.replace(/^[\d½¼¾]+[x×]?\s*/i,"").replace(/\([^)]+\)/g,"").replace(/,.*$/,"").trim();
+        if(clean.length > 2 && clean.length < 60) items.push(clean);
+      }
+    });
+    return [...new Set(items)].slice(0, 28);
+  };
+
+  const STORE_CONFIGS = {
+    SE:[
+      {name:"ICA",dot:"#C84040",note:"Hemleverans",search:(q)=>`https://www.ica.se/handla/search/?search=${encodeURIComponent(q)}`},
+      {name:"Matsmart",dot:"#4A9060",note:"Organic deals",search:(q)=>`https://www.matsmart.se/search?q=${encodeURIComponent(q)}`},
+      {name:"Willys",dot:"#4060A8",note:"Budget",search:(q)=>`https://www.willys.se/search?q=${encodeURIComponent(q)}`},
+      {name:"Nordic Superfood",dot:"#6A8860",note:"Wild-caught",search:(q)=>`https://nordicsuperfood.se/search?q=${encodeURIComponent(q)}`},
+    ],
+    US:[
+      {name:"Amazon Fresh",dot:"#FF9900",note:"Same-day delivery",search:(q)=>`https://www.amazon.com/s?k=${encodeURIComponent(q)}&i=amazonfresh`},
+      {name:"Whole Foods",dot:"#00674B",note:"Organic & wild-caught",search:(q)=>`https://www.wholefoodsmarket.com/search?text=${encodeURIComponent(q)}`},
+      {name:"Instacart",dot:"#43B02A",note:"Any local store",search:(q)=>`https://www.instacart.com/store/s?k=${encodeURIComponent(q)}`},
+      {name:"Thrive Market",dot:"#2E5E4E",note:"Protocol staples",search:(q)=>`https://thrivemarket.com/search#q=${encodeURIComponent(q)}`},
+    ],
+    UK:[
+      {name:"Ocado",dot:"#6E2583",note:"Organic delivery",search:(q)=>`https://www.ocado.com/search?entry=${encodeURIComponent(q)}`},
+      {name:"Waitrose",dot:"#006B3F",note:"Wild-caught fish",search:(q)=>`https://www.waitrose.com/ecom/products/search?searchTerm=${encodeURIComponent(q)}`},
+      {name:"Abel & Cole",dot:"#E8532A",note:"Organic box",search:(q)=>`https://www.abelandcole.co.uk/search?q=${encodeURIComponent(q)}`},
+    ],
+    DE:[
+      {name:"Rohkost.de",dot:"#7A9850",note:"Rare protocol items",search:(q)=>`https://www.rohkost.de/search?sSearch=${encodeURIComponent(q)}`},
+      {name:"Rewe",dot:"#CC0000",note:"Organic section",search:(q)=>`https://shop.rewe.de/productList?search=${encodeURIComponent(q)}`},
+      {name:"Bio Company",dot:"#4A7A40",note:"100% organic",search:(q)=>`https://www.biocompany.de/search?q=${encodeURIComponent(q)}`},
+    ],
   };
 
   const getP=(d,k)=>proteins[`${d}-${k}`]||MEALS[d][k]?.defaultP;
@@ -1044,8 +1095,8 @@ export default function MeetMario() {
             );})}
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:6}}>
               <span style={{fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:"0.1em"}}>STORE</span>
-              {["ICA","Matsmart","Willys","Coop"].map(s=>(
-                <button key={s} onClick={()=>setGroceryStore(s)} style={{background:groceryStore===s?T.rgBg:T.w1,border:`1px solid ${groceryStore===s?T.rg:T.w3}`,borderRadius:5,padding:"4px 10px",cursor:"pointer",fontSize:10,fontFamily:fonts.sans,color:groceryStore===s?T.rg2:T.w5}}>{s}</button>
+              {["SE","US","UK","DE"].map(r=>(
+                <button key={r} onClick={()=>setUserRegion(r)} style={{background:(userRegion||"SE")===r?T.rgBg:T.w1,border:`1px solid ${(userRegion||"SE")===r?T.rg:T.w3}`,borderRadius:5,padding:"4px 10px",cursor:"pointer",fontSize:10,fontFamily:fonts.mono,color:(userRegion||"SE")===r?T.rg2:T.w4,letterSpacing:"0.08em"}}>{r}</button>
               ))}
             </div>
           </div>
@@ -1084,20 +1135,51 @@ export default function MeetMario() {
             })}
           </div>
           <div style={{marginTop:20,borderTop:`1px solid ${T.w3}`,paddingTop:16}}>
-            <FieldLabel>Order online</FieldLabel>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-              {[{name:"ICA Online",url:"https://www.ica.se",dot:"#C84040",note:"Hemleverans"},
-                {name:"Matsmart",url:"https://www.matsmart.se",dot:"#4A9060",note:"Organic discounts"},
-                {name:"Nordic Superfood",url:"https://nordicsuperfood.se",dot:"#6A8860",note:"Wild-caught & organic"},
-                {name:"Willys",url:"https://www.willys.se",dot:"#4060A8",note:"Budget-friendly"},
-                {name:"Rohkost.de",url:"https://www.rohkost.de",dot:"#7A9850",note:"Rare protocol items"},
-              ].map(s=>(
-                <a key={s.name} href={s.url} target="_blank" rel="noopener noreferrer" style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:"9px 14px",textDecoration:"none",display:"flex",gap:8,alignItems:"center",boxShadow:`0 1px 3px rgba(100,80,60,0.05)`}}>
+            {/* Region + store row */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <FieldLabel>Shop online</FieldLabel>
+              <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                <span style={{fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:"0.1em",marginRight:3}}>REGION</span>
+                {["SE","US","UK","DE"].map(r=>(
+                  <button key={r} onClick={()=>setUserRegion(r)} style={{background:(userRegion||"SE")===r?T.rgBg:T.w1,border:`1px solid ${(userRegion||"SE")===r?T.rg:T.w3}`,borderRadius:4,padding:"2px 9px",cursor:"pointer",fontSize:9,fontFamily:fonts.mono,color:(userRegion||"SE")===r?T.rg2:T.w4,letterSpacing:"0.08em"}}>{r}</button>
+                ))}
+              </div>
+            </div>
+            {/* Store cards */}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:parsedItems.length>0?18:0}}>
+              {(STORE_CONFIGS[userRegion||"SE"]).map(s=>(
+                <a key={s.name} href={s.search("")} target="_blank" rel="noopener noreferrer"
+                  style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:"9px 14px",textDecoration:"none",display:"flex",gap:8,alignItems:"center",boxShadow:`0 1px 3px rgba(100,80,60,0.05)`}}>
                   <div style={{width:7,height:7,borderRadius:"50%",background:s.dot,flexShrink:0}}/>
                   <div><div style={{fontSize:11,color:T.w7,fontWeight:500,fontFamily:fonts.sans}}>{s.name}</div><div style={{fontSize:9,color:T.w4,fontFamily:fonts.mono}}>{s.note}</div></div>
                 </a>
               ))}
             </div>
+            {/* Smart per-item search links */}
+            {parsedItems.length>0&&(
+              <div>
+                <div style={{fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:"0.16em",textTransform:"uppercase",marginBottom:8}}>
+                  Search each item on {(STORE_CONFIGS[userRegion||"SE"])[0].name} →
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                  {parsedItems.map((item,i)=>{
+                    const primary=(STORE_CONFIGS[userRegion||"SE"])[0];
+                    return(
+                      <a key={i} href={primary.search(item)} target="_blank" rel="noopener noreferrer"
+                        style={{background:T.w1,border:`1px solid ${T.w3}`,borderRadius:6,padding:"4px 11px",textDecoration:"none",fontSize:11,fontFamily:fonts.sans,color:T.w6,display:"inline-flex",alignItems:"center",gap:4,transition:"border-color .15s"}}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor=T.rg}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor=T.w3}
+                      >
+                        <span style={{fontSize:9,color:T.rg,fontFamily:fonts.mono}}>↗</span>{item}
+                      </a>
+                    );
+                  })}
+                </div>
+                <div style={{marginTop:8,fontSize:9,color:T.w4,fontFamily:fonts.mono,letterSpacing:"0.08em"}}>
+                  Clicking any item opens {(STORE_CONFIGS[userRegion||"SE"])[0].name} search · Switch region above for other stores
+                </div>
+              </div>
+            )}
           </div>
         </Panel>}
         {!groceryList&&<Panel>
