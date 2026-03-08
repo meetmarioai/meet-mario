@@ -107,7 +107,7 @@ Return ONLY a JSON array, no other text:
 [{"nutrient":"Vitamin D","status":"Borderline 112%","foodFix":"sardines, salmon, egg yolk"},...]
 Also include redoxScore: {"nutrient":"Redox Score","status":"81","foodFix":"increase polyphenol-rich foods daily"}
 Skip all sufficient/normal items.`;
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -192,7 +192,7 @@ function detectSpikes(pts) {
   return spikes;
 }
 async function callClaude(messages,system,extra={}) {
-  const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages,...extra})});
+  const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system,messages,...extra})});
   const d=await res.json();
   return(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
 }
@@ -643,6 +643,7 @@ export default function MeetMario() {
     {id:"chat",label:"Ask Mario"},
     {id:"alcat",label:"Upload ALCAT"},
     {id:"biomarkers",label:"Biomarkers"},
+    {id:"babybalans",label:"Baby Balans"},
     {id:"loop",label:"Loop"},
     {id:"outcomes",label:"Outcomes"},
   ];
@@ -1416,7 +1417,7 @@ Return ONLY a JSON array, no other text:
 [{"name":"MTHFR C677T heterozygous","interpretation":"2 sentences max on food and lifestyle implications"}]
 Variants: ${JSON.stringify(variants)}`;
                   try{
-                    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:prompt}]})});
+                    const res=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1500,messages:[{role:"user",content:prompt}]})});
                     const data=await res.json();
                     const text=(data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("");
                     const interpreted=JSON.parse(text.replace(/```json|```/g,"").trim());
