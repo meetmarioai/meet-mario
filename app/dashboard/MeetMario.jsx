@@ -111,7 +111,7 @@ Skip all sufficient/normal items.`;
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514", max_tokens: 1500,
+      system: "You are a clinical nutrition AI. Generate precise meal plans based on ALCAT food sensitivity protocols. Return only valid JSON.",
       messages: [{ role: "user", content: [contentBlock, { type: "text", text: prompt }] }]
     })
   });
