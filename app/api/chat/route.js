@@ -8,7 +8,7 @@ export async function POST(request) {
     const { messages, system } = await request.json()
     const response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
+      max_tokens: 4096,
       system: system || 'You are Meet Mario, a clinical AI assistant at MediBalans AB.',
       messages,
     })

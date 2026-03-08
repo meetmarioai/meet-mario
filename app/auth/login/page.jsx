@@ -1,80 +1,120 @@
+// app/login/page.jsx
 'use client'
 import { useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { createBrowserClient } from '@supabase/ssr'
 
 const T = {
-  w:"#F7F4F0",w1:"#F1EDE7",w3:"#D8D0C4",w4:"#B8ACA0",
-  w5:"#8A7E72",w7:"#1C1510",rg:"#C4887A",rg2:"#9A6255",
-  rg3:"#DEB0A4",rgBg:"#F8F0EE",err:"#B85040",ok:"#6A9060",
+  w: "#F7F4F0", w1: "#F1EDE7", w3: "#D8D0C4", w4: "#B8ACA0",
+  w5: "#8A7E72", w6: "#4A4038", w7: "#1C1510",
+  rg: "#C4887A", rg2: "#9A6255", rg3: "#DEB0A4", rgBg: "#F8F0EE",
+  ok: "#6A9060", err: "#B85040",
 }
 const fonts = {
-  serif:"'Georgia','Times New Roman',serif",
-  sans:"-apple-system,'Helvetica Neue','Arial',sans-serif",
-  mono:"'SF Mono','Fira Mono','Courier New',monospace",
+  serif: "'Georgia','Times New Roman',serif",
+  sans: "-apple-system,'Helvetica Neue','Arial',sans-serif",
+  mono: "'SF Mono','Fira Mono','Courier New',monospace",
 }
 
 export default function LoginPage() {
-  const [email,setEmail] = useState('')
-  const [sent,setSent] = useState(false)
-  const [loading,setLoading] = useState(false)
-  const [error,setError] = useState(null)
-  const supabase = createClient()
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
 
   const handleLogin = async () => {
-    if(!email.trim()) return
+    if (!email || loading) return
     setLoading(true)
     setError(null)
-    const {error} = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     })
-    if(error){ setError('Something went wrong. Please try again.') }
-    else { setSent(true) }
-    setLoading(false)
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+    } else {
+      setSent(true)
+      setLoading(false)
+    }
   }
 
   return (
-    <div style={{minHeight:'100vh',background:'linear-gradient(155deg,#FDF8F3 0%,#F8EFE8 35%,#F4EAF0 70%,#F1EEF8 100%)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontFamily:fonts.sans,padding:24}}>
-      <div style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:20,padding:'52px 48px 44px',width:'100%',maxWidth:420,boxShadow:'0 24px 64px rgba(28,20,16,0.09)'}}>
-        <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:40}}>
-          <div style={{width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`}}/>
-          <span style={{fontFamily:fonts.serif,fontSize:20,fontWeight:400,color:T.w7,letterSpacing:'0.01em'}}>meet mario</span>
-          <span style={{marginLeft:'auto',fontFamily:fonts.mono,fontSize:8,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'2px 7px',letterSpacing:'0.12em'}}>MEDIBALANS</span>
+    <div style={{minHeight:"100vh",background:T.w,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:fonts.sans}}>
+      <div style={{width:"100%",maxWidth:400,padding:"0 24px"}}>
+
+        {/* Wordmark */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:48,justifyContent:"center"}}>
+          <div style={{width:9,height:9,borderRadius:"50%",background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`}}/>
+          <span style={{fontFamily:fonts.serif,fontSize:22,fontWeight:400,color:T.w7}}>meet mario</span>
         </div>
 
-        {sent ? (
+        {!sent ? (
           <div>
-            <div style={{width:44,height:44,borderRadius:'50%',background:`${T.ok}15`,border:`1px solid ${T.ok}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:18,marginBottom:20}}>✓</div>
-            <div style={{fontFamily:fonts.serif,fontSize:22,color:T.w7,marginBottom:12,fontWeight:400}}>Check your email</div>
-            <div style={{fontSize:13,color:T.w5,lineHeight:1.8,fontWeight:300,marginBottom:28}}>
-              A secure login link has been sent to <span style={{color:T.rg2,fontWeight:500}}>{email}</span>. Click the link to access your protocol.
+            <div style={{fontFamily:fonts.serif,fontSize:28,color:T.w7,marginBottom:8,fontWeight:400,lineHeight:1.2}}>
+              Welcome back
+            </div>
+            <div style={{fontSize:13,color:T.w5,marginBottom:32,lineHeight:1.6,fontWeight:300}}>
+              Enter your email. We'll send a secure login link — no password needed.
+            </div>
+
+            <div style={{marginBottom:16}}>
+              <div style={{fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:"0.16em",marginBottom:8}}>EMAIL</div>
+              <input
+                type="email"
+                value={email}
+                onChange={e=>setEmail(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&handleLogin()}
+                placeholder="your@email.com"
+                style={{width:"100%",background:T.w1,border:`1px solid ${T.w3}`,borderRadius:8,padding:"12px 14px",fontSize:14,fontFamily:fonts.sans,color:T.w7,boxSizing:"border-box",outline:"none"}}
+                autoFocus
+              />
+            </div>
+
+            {error && (
+              <div style={{fontSize:12,color:T.err,fontFamily:fonts.mono,marginBottom:12,letterSpacing:"0.06em"}}>{error}</div>
+            )}
+
+            <button
+              onClick={handleLogin}
+              disabled={!email||loading}
+              style={{width:"100%",background:loading?T.rg+"90":T.rg,color:"#fff",border:"none",borderRadius:9,padding:"13px",fontSize:13,fontFamily:fonts.sans,fontWeight:500,letterSpacing:"0.06em",cursor:email&&!loading?"pointer":"not-allowed",transition:"background .2s"}}
+            >
+              {loading?"SENDING…":"SEND LOGIN LINK"}
+            </button>
+
+            <div style={{marginTop:24,fontSize:11,color:T.w4,textAlign:"center",fontFamily:fonts.mono,letterSpacing:"0.08em"}}>
+              MEDIBALANS AB · KARLAVÄGEN 89, STOCKHOLM
             </div>
           </div>
         ) : (
-          <div>
-            <div style={{fontFamily:fonts.serif,fontSize:26,color:T.w7,fontWeight:400,marginBottom:8,lineHeight:1.2}}>
-              Your protocol<br/><em style={{fontStyle:'italic',color:T.rg2}}>awaits</em>
+          <div style={{textAlign:"center"}}>
+            <div style={{width:48,height:48,borderRadius:"50%",background:T.ok+"18",border:`1px solid ${T.ok}40`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",fontSize:20}}>
+              ✓
             </div>
-            <div style={{fontSize:13,color:T.w5,fontWeight:300,marginBottom:36,lineHeight:1.7}}>
-              Enter the email address you registered with MediBalans.
+            <div style={{fontFamily:fonts.serif,fontSize:24,color:T.w7,marginBottom:12,fontWeight:400}}>Check your email</div>
+            <div style={{fontSize:13,color:T.w5,lineHeight:1.7,fontWeight:300,marginBottom:8}}>
+              We sent a secure login link to
             </div>
-            <div style={{marginBottom:6,fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.20em',textTransform:'uppercase'}}>Email address</div>
-            <input
-              type="email" value={email}
-              onChange={e=>{setEmail(e.target.value);setError(null)}}
-              onKeyDown={e=>e.key==='Enter'&&handleLogin()}
-              placeholder="you@example.com" autoFocus
-              style={{display:'block',width:'100%',padding:'12px 0',border:'none',borderBottom:`1.5px solid ${error?T.err:T.w3}`,background:'transparent',fontSize:14,color:T.w7,outline:'none',fontFamily:fonts.sans,marginBottom:error?8:28}}
-            />
-            {error&&<div style={{fontSize:11,color:T.err,marginBottom:20}}>{error}</div>}
-            <button onClick={handleLogin} disabled={loading||!email.trim()}
-              style={{width:'100%',padding:'15px 24px',borderRadius:12,border:'none',cursor:loading||!email.trim()?'not-allowed':'pointer',background:loading||!email.trim()?T.w3:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,color:loading||!email.trim()?T.w4:'rgba(255,255,255,0.97)',fontSize:13,fontWeight:500,fontFamily:fonts.sans,letterSpacing:'0.08em',textTransform:'uppercase'}}>
-              {loading?'Sending…':'Send login link →'}
+            <div style={{fontFamily:fonts.mono,fontSize:12,color:T.rg2,marginBottom:32}}>{email}</div>
+            <div style={{fontSize:12,color:T.w4,lineHeight:1.6}}>
+              Click the link in the email to access your dashboard. The link expires in 60 minutes.
+            </div>
+            <button
+              onClick={()=>{setSent(false);setEmail('');}}
+              style={{marginTop:24,background:"none",border:`1px solid ${T.w3}`,borderRadius:7,padding:"8px 20px",fontSize:11,fontFamily:fonts.mono,color:T.w5,cursor:"pointer",letterSpacing:"0.1em"}}
+            >
+              USE DIFFERENT EMAIL
             </button>
           </div>
         )}
       </div>
-      <style>{`*{box-sizing:border-box;}input::placeholder{color:${T.w4};font-style:italic;}`}</style>
     </div>
   )
 }
