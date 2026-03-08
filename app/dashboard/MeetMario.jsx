@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 
 // --- DATA (unchanged) --------------------------------------------------------
 // P is now dynamic — set from ALCAT upload. Default = Christina.
