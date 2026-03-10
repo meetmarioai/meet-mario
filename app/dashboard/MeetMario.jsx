@@ -535,7 +535,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
  const allFoods = [...P.severe.map(f=>({food:f,level:"severe"})),...P.moderate.map(f=>({food:f,level:"moderate"})),...P.mild.map(f=>({food:f,level:"mild"})),...P.alsoAvoid.candida.map(f=>({food:f,level:"candida"})),...P.alsoAvoid.whey.map(f=>({food:f,level:"whey"}))];
  const foodResults = foodQ.length > 1 ? allFoods.filter(({food})=>food.toLowerCase().includes(foodQ.toLowerCase())).slice(0,10) : [];
 
- const TABS = [{id:"monitor",label:"🔴 Monitor"},{id:"glucose",label:"📊 Glucose"},{id:"protocol",label:"Protocol"},{id:"rotation",label:"Rotation"},{id:"meals",label:"Meals"},{id:"generate",label:"Generate"},{id:"grocery",label:"🛒 Grocery"},{id:"lookup",label:"Food Check"},{id:"chat",label:"Ask Mario"},{id:"outcomes",label:"Outcomes"}];
+ const TABS = [{id:"monitor",label:"🔴 Monitor"},{id:"glucose",label:"📊 Glucose"},{id:"protocol",label:"Protocol"},{id:"rotation",label:"Rotation"},{id:"meals",label:"Meals"},{id:"generate",label:"Generate"},{id:"grocery",label:"🛒 Grocery"},{id:"lookup",label:"Food Check"},{id:"chat",label:"Ask Mario"},{id:"outcomes",label:"Outcomes"},{id:"medications",label:"Medications"}];
  const PHASES = [
   {id:1,label:"21-Day Detox",range:"Days 1–21",color:S.gold,rules:["Green list only","6 meals every 3h","No sugars/yeast (Candida)","No milk (Whey)"],note:"Any deviation restarts the inflammatory clock."},
   {id:2,label:"Green Phase",range:"Months 1–3",color:"#7A9E60",rules:["Strict 4-day rotation","One legume day/week","Candida continues","Whey continues"],note:"Rotation prevents new sensitivities forming."},

@@ -1,495 +1,368 @@
-﻿"use client";
-import { useState } from "react";
+'use client'
+// app/onboarding/page.jsx — Meet Mario Onboarding v3
+import { useState } from 'react'
+import { createBrowserClient } from '@supabase/ssr'
 
-// â”€â”€ Design tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const T = {
-  bg:   "#FAF8F4",
-  w1:   "#F5F0E8",
-  w3:   "#E8E0D4",
-  w4:   "#C8BBA8",
-  w5:   "#9A8570",
-  w7:   "#2C2C2C",
-  gold: "#9A7240",
-  rg:   "#C4887A",
-  ok:   "#5A8A6A",
-  err:  "#C4544A",
-};
-
-const fonts = {
-  serif: "'Georgia', 'Times New Roman', serif",
-  sans:  "-apple-system, 'Helvetica Neue', Arial, sans-serif",
-  mono:  "'IBM Plex Mono', 'Courier New', monospace",
-};
-
-// â”€â”€ Population risk data (top reactors for predicted profile) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const POP_RISK = [
-  { name: "Walnut",     severe: 36.1, n: 180 },
-  { name: "Almond",     severe: 35.0, n: 506 },
-  { name: "Sugar",      severe: 34.9, n: 195 },
-  { name: "Sunflower",  severe: 34.1, n: 182 },
-  { name: "Yeast",      severe: 30.8, n: 506 },
-  { name: "Hazelnut",   severe: 30.6, n: 291 },
-  { name: "Brazil nut", severe: 28.9, n: 485 },
-  { name: "Capers",     severe: 26.8, n: 456 },
-  { name: "Sesame",     severe: 25.8, n: 178 },
-  { name: "Cumin",      severe: 24.5, n: 506 },
-  { name: "Cocoa",      severe: 23.7, n: 447 },
-  { name: "Beef",       severe: 21.6, n: 501 },
-  { name: "Corn",       severe: 21.6, n: 505 },
-  { name: "Garlic",     severe: 20.9, n: 297 },
-  { name: "Chickpea",   severe: 20.1, n: 502 },
-  { name: "Broccoli",   severe: 18.4, n: 1028 },
-  { name: "Coconut",    severe: 18.2, n: 413 },
-  { name: "Coffee",     severe: 13.2, n: 371 },
-  { name: "Mushroom",   severe: 13.4, n: 506 },
-  { name: "Salmon",     severe: 11.6, n: 502 },
-];
-
-// Symptom -> likely reactors mapping
-function getPredictedReactors(symptoms, diet) {
-  let scores = {};
-  POP_RISK.forEach(f => { scores[f.name] = f.severe; });
-
-  // Boost based on symptoms
-  if (symptoms.includes("gut"))       { scores["Yeast"] += 15; scores["Garlic"] += 10; scores["Corn"] += 8; }
-  if (symptoms.includes("skin"))      { scores["Walnut"] += 10; scores["Almond"] += 10; scores["Cocoa"] += 8; }
-  if (symptoms.includes("brain_fog")) { scores["Sugar"] += 12; scores["Yeast"] += 10; scores["Beef"] += 6; }
-  if (symptoms.includes("fatigue"))   { scores["Sugar"] += 10; scores["Gluten"] = 20; scores["Corn"] += 8; }
-  if (symptoms.includes("weight"))    { scores["Sugar"] += 15; scores["Corn"] += 10; scores["Beef"] += 8; }
-  if (symptoms.includes("hormonal"))  { scores["Soy"] = 25; scores["Corn"] += 12; scores["Sugar"] += 10; }
-
-  // Boost based on diet history
-  if (diet.includes("high_meat"))     { scores["Beef"] += 10; }
-  if (diet.includes("vegetarian"))    { scores["Soy"] = (scores["Soy"] || 0) + 15; scores["Almond"] += 8; }
-  if (diet.includes("high_dairy"))    { scores["Yeast"] += 8; }
-
-  return Object.entries(scores)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([name, severe]) => {
-      const pop = POP_RISK.find(f => f.name === name);
-      return { name, severe: Math.min(severe, 99), n: pop?.n || 200 };
-    });
+  bg: '#FAF7F2', w: '#FFFFFF', w1: '#F1EDE7', w3: '#D8D0C4', w4: '#B8ACA0',
+  w5: '#8A7E72', w6: '#4A4038', w7: '#1C1510',
+  rg: '#C4887A', rg2: '#9A6255', rg3: '#DEB0A4', rgBg: '#F8F0EE',
+  ok: '#6A9060', warn: '#B88040', err: '#B85040',
 }
+const serif = "'Playfair Display',Georgia,serif"
+const sans = "-apple-system,'Helvetica Neue',Arial,sans-serif"
+const mono = "'SF Mono','Fira Mono','Courier New',monospace"
 
-// â”€â”€ Components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-function Wordmark() {
-  return (
-    <div style={{ fontFamily: fonts.serif, fontSize: 20, letterSpacing: "0.04em", color: T.w7 }}>
-      meet <span style={{ color: T.rg }}>&#9673;</span> mario
-      <span style={{ display: "block", fontSize: 11, color: T.gold, letterSpacing: "0.1em", marginTop: 2, fontFamily: fonts.mono }}>
-        MEDIBALANS AB
-      </span>
-    </div>
-  );
-}
+const SYMPTOMS = [
+  {cat:"Gut",items:["Bloating","IBS / loose stools","Constipation","Acid reflux","Nausea","Abdominal pain"]},
+  {cat:"Energy",items:["Chronic fatigue","Brain fog","Poor sleep","Morning exhaustion","Post-meal crash"]},
+  {cat:"Skin",items:["Eczema","Psoriasis","Acne","Hives / urticaria","Rosacea","Dry skin"]},
+  {cat:"Immune",items:["Frequent infections","Autoimmune condition","Allergies","Sinusitis"]},
+  {cat:"Metabolic",items:["Weight gain","Insulin resistance / diabetes","High blood pressure","High cholesterol","Thyroid condition"]},
+  {cat:"Neurological",items:["Headaches / migraines","Anxiety","Depression","ADHD","Mood swings","Memory issues"]},
+  {cat:"Joints",items:["Joint pain","Muscle aches","Fibromyalgia","Stiffness on waking"]},
+  {cat:"Hormonal",items:["PMS / cycle irregularity","Menopausal symptoms","Low libido","Hair loss","Infertility"]},
+]
 
-function ProgressBar({ step, total }) {
-  return (
-    <div style={{ width: "100%", height: 2, background: T.w3, borderRadius: 1, margin: "24px 0 8px" }}>
-      <div style={{ height: "100%", width: `${(step / total) * 100}%`, background: T.rg, borderRadius: 1, transition: "width 0.4s ease" }} />
-    </div>
-  );
-}
+const TESTS = [
+  {id:"alcat",label:"ALCAT Food Sensitivity"},
+  {id:"cma",label:"CMA (Comprehensive Metabolic Array)"},
+  {id:"methyldetox",label:"MethylDetox (39-gene panel)"},
+  {id:"gimap",label:"GI-MAP (stool microbiome)"},
+  {id:"dutch",label:"DUTCH (hormone panel)"},
+  {id:"werlabs",label:"Werlabs / standard blood"},
+  {id:"wgs",label:"Whole Genome Sequencing (WGS)"},
+  {id:"rna",label:"RNA Transcriptomics"},
+  {id:"proteomics",label:"Proteomics"},
+]
 
-function StepLabel({ step, total, label }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
-      <span style={{ fontFamily: fonts.mono, fontSize: 10, color: T.w4, letterSpacing: "0.1em" }}>
-        STEP {step} OF {total}
-      </span>
-      <span style={{ fontFamily: fonts.mono, fontSize: 10, color: T.gold, letterSpacing: "0.08em" }}>
-        {label}
-      </span>
-    </div>
-  );
-}
+const GOALS = [
+  "Gut healing","Energy restoration","Weight management","Hormonal balance",
+  "Skin clarity","Brain clarity / focus","Inflammation reduction","Longevity / biological age reversal",
+  "Autoimmune management","Cardiovascular health","Mental health","Athletic performance",
+]
 
-function Q({ children }) {
-  return <h2 style={{ fontFamily: fonts.serif, fontSize: 22, fontWeight: "normal", color: T.w7, margin: "0 0 8px", lineHeight: 1.4 }}>{children}</h2>;
-}
-
-function Sub({ children }) {
-  return <p style={{ fontFamily: fonts.sans, fontSize: 14, color: T.w5, margin: "0 0 28px", lineHeight: 1.6 }}>{children}</p>;
-}
-
-function Input({ label, value, onChange, type = "text", placeholder }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.w5, letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
-      <input
-        type={type}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        style={{
-          width: "100%", boxSizing: "border-box",
-          border: "none", borderBottom: `1px solid ${T.w3}`,
-          background: "transparent", padding: "10px 0",
-          fontFamily: fonts.serif, fontSize: 16, color: T.w7,
-          outline: "none",
-        }}
-      />
-    </div>
-  );
-}
-
-function ChipGroup({ options, selected, onToggle, single }) {
-  return (
-    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 28 }}>
-      {options.map(opt => {
-        const active = single ? selected === opt.id : selected.includes(opt.id);
-        return (
-          <button
-            key={opt.id}
-            onClick={() => onToggle(opt.id)}
-            style={{
-              padding: "9px 16px", borderRadius: 20,
-              border: `1px solid ${active ? T.gold : T.w3}`,
-              background: active ? T.gold : "transparent",
-              color: active ? "#FAF8F4" : T.w5,
-              fontFamily: fonts.sans, fontSize: 13, cursor: "pointer",
-              transition: "all 0.2s",
-            }}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function NextBtn({ onClick, label = "Continue", disabled }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      style={{
-        width: "100%", padding: "16px",
-        background: disabled ? T.w3 : T.gold,
-        color: disabled ? T.w4 : "#FAF8F4",
-        border: "none", borderRadius: 2,
-        fontFamily: fonts.serif, fontSize: 15,
-        letterSpacing: "0.04em", cursor: disabled ? "not-allowed" : "pointer",
-        transition: "background 0.2s",
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-// â”€â”€ Main onboarding component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function OnboardingPage() {
-  const TOTAL_STEPS = 7;
-  const [step, setStep]       = useState(1);
-  const [saving, setSaving]   = useState(false);
-  const [done, setDone]       = useState(false);
-  const [error, setError]     = useState("");
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  )
 
-  // Form state
-  const [name, setName]           = useState("");
-  const [email, setEmail]         = useState("");
-  const [dob, setDob]             = useState("");
-  const [symptoms, setSymptoms]   = useState([]);
-  const [diet, setDiet]           = useState([]);
-  const [tests, setTests]         = useState([]);
-  const [otherTests, setOtherTests] = useState("");
-  const [meds, setMeds]           = useState("");
-  const [supplements, setSupps]   = useState("");
-  const [goals, setGoals]         = useState([]);
-  const [consent, setConsent]     = useState(false);
+  const [step, setStep] = useState(0)
+  const [data, setData] = useState({
+    name: '', email: '', dob: '', sex: '', hormonalStatus: '',
+    geographyOfOrigin: '', yearsInCurrentCountry: '',
+    symptoms: [], symptomDuration: '', familyHistory: '',
+    tests: [], otherTests: '',
+    goals: [],
+    substanceUse: [],
+    medications: [], supplements: '',
+    notes: '',
+  })
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
-  const toggleArr = (arr, setArr, id) => {
-    setArr(arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]);
-  };
+  const toggle = (field, val) => setData(d => ({
+    ...d,
+    [field]: d[field].includes(val) ? d[field].filter(x => x !== val) : [...d[field], val]
+  }))
 
-  const SYMPTOM_OPTS = [
-    { id: "fatigue",   label: "Fatigue / low energy" },
-    { id: "gut",       label: "Gut / bloating / IBS" },
-    { id: "skin",      label: "Skin / eczema / rash" },
-    { id: "weight",    label: "Weight / metabolism" },
-    { id: "brain_fog", label: "Brain fog / focus" },
-    { id: "hormonal",  label: "Hormonal / thyroid" },
-    { id: "joints",    label: "Joint / muscle pain" },
-    { id: "sleep",     label: "Sleep / recovery" },
-    { id: "mood",      label: "Mood / anxiety" },
-    { id: "autoimmune",label: "Autoimmune condition" },
-  ];
+  const steps = [
+    // Step 0 — Identity
+    <div key="identity">
+      <Step title="Who are you?" sub="Basic clinical profile">
+        <Field label="Full name">
+          <input style={inp} value={data.name} onChange={e=>setData(d=>({...d,name:e.target.value}))} placeholder="Your name" />
+        </Field>
+        <Field label="Date of birth">
+          <input style={inp} type="date" value={data.dob} onChange={e=>setData(d=>({...d,dob:e.target.value}))} />
+        </Field>
+        <Field label="Biological sex">
+          <ChipRow items={["Female","Male","Other"]} selected={data.sex} onSelect={v=>setData(d=>({...d,sex:v}))} single />
+        </Field>
+        <Field label="Hormonal status" hide={data.sex==="Male"}>
+          <ChipRow items={["Pre-menopausal","Peri-menopausal","Post-menopausal","On HRT","On contraceptive pill"]} selected={data.hormonalStatus} onSelect={v=>setData(d=>({...d,hormonalStatus:v}))} single />
+        </Field>
+        <Field label="Country of ancestral origin (where your family is from)">
+          <input style={inp} value={data.geographyOfOrigin} onChange={e=>setData(d=>({...d,geographyOfOrigin:e.target.value}))} placeholder="e.g. Sweden, Turkey, India, Ethiopia…" />
+        </Field>
+        {data.geographyOfOrigin && data.geographyOfOrigin.toLowerCase() !== 'sweden' && (
+          <Field label="Years living in current country">
+            <input style={{...inp,maxWidth:120}} type="number" value={data.yearsInCurrentCountry} onChange={e=>setData(d=>({...d,yearsInCurrentCountry:e.target.value}))} placeholder="Years" />
+          </Field>
+        )}
+      </Step>
+    </div>,
 
-  const DIET_OPTS = [
-    { id: "standard",    label: "Standard / mixed" },
-    { id: "vegetarian",  label: "Vegetarian" },
-    { id: "vegan",       label: "Vegan" },
-    { id: "high_meat",   label: "High meat / carnivore" },
-    { id: "high_dairy",  label: "High dairy" },
-    { id: "gluten_free", label: "Gluten-free" },
-    { id: "low_carb",    label: "Low carb / keto" },
-    { id: "mediterranean", label: "Mediterranean" },
-  ];
+    // Step 1 — Symptoms
+    <div key="symptoms">
+      <Step title="What brings you here?" sub="Select all that apply — be thorough">
+        {SYMPTOMS.map(({cat,items})=>(
+          <Field key={cat} label={cat}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {items.map(item=>{
+                const sel = data.symptoms.includes(item)
+                return <Chip key={item} label={item} active={sel} onClick={()=>toggle('symptoms',item)} />
+              })}
+            </div>
+          </Field>
+        ))}
+        <Field label="How long have you had these symptoms?">
+          <ChipRow items={["Under 1 year","1–3 years","3–5 years","5–10 years","Over 10 years"]} selected={data.symptomDuration} onSelect={v=>setData(d=>({...d,symptomDuration:v}))} single />
+        </Field>
+        <Field label="Family history of chronic disease">
+          <input style={inp} value={data.familyHistory} onChange={e=>setData(d=>({...d,familyHistory:e.target.value}))} placeholder="e.g. mother — autoimmune, father — type 2 diabetes" />
+        </Field>
+      </Step>
+    </div>,
 
-  const TEST_OPTS = [
-    { id: "alcat",      label: "ALCAT (previous)" },
-    { id: "bloodwork",  label: "Standard bloodwork" },
-    { id: "genetic",    label: "Genetic / DNA test" },
-    { id: "microbiome", label: "Microbiome / GI-MAP" },
-    { id: "dutch",      label: "DUTCH hormone panel" },
-    { id: "werlabs", label: "Werlabs / Unilabs" },
-    { id: "cma", label: "CMA (Metabolic Array)" },
-    { id: "none", label: "None yet" },
-  ];
+    // Step 2 — Tests done
+    <div key="tests">
+      <Step title="Prior testing" sub="Which tests have you had?">
+        <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:24}}>
+          {TESTS.map(t=>{
+            const sel = data.tests.includes(t.id)
+            return (
+              <button key={t.id} onClick={()=>toggle('tests',t.id)} style={{
+                background:sel?T.rgBg:T.w1, border:`1px solid ${sel?T.rg:T.w3}`,
+                color:sel?T.rg2:T.w5, borderRadius:8, padding:"8px 14px",
+                fontSize:12, cursor:"pointer", fontFamily:sans,
+              }}>{t.label}</button>
+            )
+          })}
+        </div>
+        <Field label="Other tests not listed">
+          <input style={inp} value={data.otherTests} onChange={e=>setData(d=>({...d,otherTests:e.target.value}))} placeholder="Any other tests, panels, or labs…" />
+        </Field>
+      </Step>
+    </div>,
 
-  const GOAL_OPTS = [
-    { id: "weight",      label: "Weight management" },
-    { id: "energy",      label: "Energy & vitality" },
-    { id: "longevity",   label: "Longevity / anti-aging" },
-    { id: "autoimmune",  label: "Autoimmune reduction" },
-    { id: "gut_healing", label: "Gut healing" },
-    { id: "hormones",    label: "Hormonal balance" },
-    { id: "cognition",   label: "Cognition / brain" },
-    { id: "athletics",   label: "Athletic performance" },
-  ];
+    // Step 3 — Goals
+    <div key="goals">
+      <Step title="What do you want to achieve?" sub="Select your primary goals">
+        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          {GOALS.map(g=>{
+            const sel = data.goals.includes(g)
+            return <Chip key={g} label={g} active={sel} onClick={()=>toggle('goals',g)} />
+          })}
+        </div>
+      </Step>
+    </div>,
 
-  async function submit() {
-    if (!consent) return;
-    setSaving(true);
-    setError("");
+    // Step 4 — Medications & lifestyle
+    <div key="meds">
+      <Step title="Current medications & lifestyle" sub="This helps Mario personalise your protocol">
+        <Field label="Current medications (type or select)">
+          <input style={inp} value={data.medications.join(', ')} onChange={e=>setData(d=>({...d,medications:e.target.value.split(',').map(x=>x.trim()).filter(Boolean)}))} placeholder="e.g. Levothyroxine, Metformin, estradiol patch…" />
+        </Field>
+        <Field label="Current supplements">
+          <input style={inp} value={data.supplements} onChange={e=>setData(d=>({...d,supplements:e.target.value}))} placeholder="e.g. Vitamin D, magnesium, omega-3…" />
+        </Field>
+        <Field label="Substance use (optional — helps calibrate protocol)">
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {["Alcohol (regular)","Alcohol (occasional)","Smoking","Cannabis","Recreational drugs"].map(s=>{
+              const sel = data.substanceUse.includes(s)
+              return <Chip key={s} label={s} active={sel} onClick={()=>toggle('substanceUse',s)} />
+            })}
+          </div>
+        </Field>
+        <Field label="Anything else Mario should know">
+          <textarea style={{...inp,height:80,resize:"vertical"}} value={data.notes} onChange={e=>setData(d=>({...d,notes:e.target.value}))} placeholder="Additional context, recent events, specific concerns…" />
+        </Field>
+      </Step>
+    </div>,
+  ]
 
-    const predictedReactors = getPredictedReactors(symptoms, diet);
-    const purgeAfter = new Date();
-    purgeAfter.setDate(purgeAfter.getDate() + 30);
-
+  async function handleSubmit() {
+    setLoading(true); setError(null)
     try {
-      // Save onboarding to Supabase
-      const res = await fetch("/api/onboarding", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('profiles').upsert({
+          id: user.id,
+          full_name: data.name,
+          email: data.email || user.email,
+          dob: data.dob || null,
+          sex: data.sex,
+          hormonal_status: data.hormonalStatus,
+          geography_of_origin: data.geographyOfOrigin,
+          years_in_current_country: data.yearsInCurrentCountry ? parseInt(data.yearsInCurrentCountry) : null,
+          symptoms: data.symptoms,
+          symptom_duration: data.symptomDuration,
+          family_history: data.familyHistory,
+          tests_done: [...data.tests, ...(data.otherTests ? [data.otherTests] : [])],
+          goals: data.goals,
+          medications: data.medications,
+          supplements: data.supplements,
+          substance_use: data.substanceUse,
+          notes: data.notes,
+        })
+      }
+      // Get AI analysis
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
         body: JSON.stringify({
-          full_name: name,
-          email,
-          dob,
-          symptoms,
-          diet_history: diet,
-          previous_tests: tests,
-          other_tests: otherTests || null,
-          medications: meds,
-          supplements,
-          goals,
-          predicted_reactors: predictedReactors,
-          purge_after: purgeAfter.toISOString(),
-          consent_gdpr: true,
-          consent_at: new Date().toISOString(),
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Save failed");
-
-      // Trigger email sequence
-      await fetch("/api/email/sequence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patient_id: data.patient_id || null,
-          patient_email: email,
-          patient_name: name,
-          predicted_reactors: predictedReactors,
-          symptom_profile: { symptoms, goals, diet },
-        }),
-      });
-
-      setDone(true);
-    } catch (err) {
-      setError(err.message);
+          age: data.dob ? Math.floor((Date.now()-new Date(data.dob).getTime())/(365.25*86400000)) : null,
+          symptoms: data.symptoms,
+          lifestyle: {
+            antibiotic: data.tests.includes('antibiotic') || data.medications.some(m=>m.toLowerCase().includes('antibiotic')),
+            stress: data.symptoms.includes('Anxiety') || data.symptoms.includes('Brain fog'),
+            processedFood: 3,
+            alcohol: data.substanceUse.some(s=>s.includes('Alcohol')),
+          }
+        })
+      })
+      const analysis = await res.json()
+      setResult(analysis)
+      setStep(steps.length)
+    } catch(e) {
+      setError(e.message)
     } finally {
-      setSaving(false);
+      setLoading(false)
     }
   }
 
-  // â”€â”€ Done screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  if (done) {
-    const firstName = name.split(" ")[0];
-    const predicted = getPredictedReactors(symptoms, diet);
-    return (
-      <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-        <div style={{ maxWidth: 520, width: "100%" }}>
-          <Wordmark />
-          <div style={{ marginTop: 48 }}>
-            <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.ok, letterSpacing: "0.12em", marginBottom: 16 }}>INTAKE COMPLETE</div>
-            <h2 style={{ fontFamily: fonts.serif, fontSize: 26, fontWeight: "normal", color: T.w7, margin: "0 0 16px" }}>
-              {firstName}, your clinical profile is ready.
-            </h2>
-            <p style={{ fontFamily: fonts.sans, fontSize: 15, color: T.w5, lineHeight: 1.7, margin: "0 0 32px" }}>
-              Based on your profile, I have reviewed your clinical profile and prepared your personalised protocol.
-            </p>
-
-            <div style={{ background: T.w1, borderRadius: 4, padding: "24px 28px", marginBottom: 28 }}>
-              <div style={{ fontFamily: fonts.mono, fontSize: 10, color: T.gold, letterSpacing: "0.1em", marginBottom: 16 }}>
-                YOUR PREDICTED HIGH-REACTIVITY FOODS
-              </div>
-              {predicted.slice(0, 6).map((f, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: `1px solid ${T.w3}`, fontSize: 13 }}>
-                  <span style={{ fontFamily: fonts.sans, color: T.w7 }}>{f.name}</span>
-                  <span style={{ fontFamily: fonts.mono, fontSize: 11, color: T.rg }}>{f.severe}% severe reactivity</span>
-                </div>
-              ))}
-              <div style={{ fontFamily: fonts.sans, fontSize: 11, color: T.w4, marginTop: 12 }}>
-                These are predictive indicators. ALCAT testing confirms your personal profile.
-              </div>
-            </div>
-
-            <div style={{ background: "#FDF6EC", borderLeft: `3px solid ${T.gold}`, padding: "16px 20px", marginBottom: 32, borderRadius: 2 }}>
-              <div style={{ fontFamily: fonts.sans, fontSize: 14, color: "#5C4A2A", lineHeight: 1.7 }}>
-                Check your inbox at <strong>{email}</strong>. You will receive your full protocol and clinical guidance over the next 21 days.
-              </div>
-            </div>
-
-            <a
-              href="/dashboard"
-              style={{
-                display: "block", width: "100%", boxSizing: "border-box",
-                padding: "16px", textAlign: "center",
-                background: T.gold, color: "#FAF8F4",
-                textDecoration: "none", borderRadius: 2,
-                fontFamily: fonts.serif, fontSize: 15, letterSpacing: "0.04em",
-              }}
-            >
-              Open your dashboard
-            </a>
-
-            <div style={{ fontFamily: fonts.sans, fontSize: 11, color: T.w4, textAlign: "center", marginTop: 20, lineHeight: 1.6 }}>
-              Your personal data will be anonymised after 30 days per GDPR Article 89.<br />
-              To request immediate deletion, email info@medibalans.se.
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // â”€â”€ Step renderer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const STEP_LABELS = ["", "IDENTITY", "SYMPTOMS", "DIET HISTORY", "PREVIOUS TESTS", "MEDICATIONS", "GOALS", "CONSENT"];
-
   return (
-    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ maxWidth: 520, width: "100%" }}>
-        <Wordmark />
-        <ProgressBar step={step} total={TOTAL_STEPS} />
-        <StepLabel step={step} total={TOTAL_STEPS} label={STEP_LABELS[step]} />
-
-        {/* STEP 1 â€” Identity */}
-        {step === 1 && (
-          <div>
-            <Q>Who are you?</Q>
-            <Sub>Your personal information is stored securely and anonymised after 30 days.</Sub>
-            <Input label="FULL NAME" value={name} onChange={e => setName(e.target.value)} placeholder="Christina Wohltahrt" />
-            <Input label="EMAIL ADDRESS" value={email} onChange={e => setEmail(e.target.value)} type="email" placeholder="you@email.com" />
-            <Input label="DATE OF BIRTH" value={dob} onChange={e => setDob(e.target.value)} type="date" />
-            <NextBtn onClick={() => setStep(2)} disabled={!name || !email || !dob} />
+    <div style={{minHeight:"100vh",background:T.bg,fontFamily:sans}}>
+      {/* Nav */}
+      <div style={{position:"sticky",top:0,zIndex:100,background:"rgba(250,247,242,0.92)",backdropFilter:"blur(20px)",borderBottom:`1px solid ${T.w3}`,padding:"0 40px",height:54,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontFamily:serif,fontSize:18,color:T.w7}}>◉ meet mario</div>
+        {step < steps.length && (
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {steps.map((_,i)=>(
+              <div key={i} style={{width:i===step?20:6,height:6,borderRadius:3,background:i<step?T.rg:i===step?T.rg:T.w3,transition:"all .3s"}}/>
+            ))}
           </div>
         )}
+      </div>
 
-        {/* STEP 2 â€” Symptoms */}
-        {step === 2 && (
-          <div>
-            <Q>What brings you here?</Q>
-            <Sub>Select all symptoms you experience regularly. This shapes your predicted reactivity profile.</Sub>
-            <ChipGroup options={SYMPTOM_OPTS} selected={symptoms} onToggle={id => toggleArr(symptoms, setSymptoms, id)} />
-            <NextBtn onClick={() => setStep(3)} disabled={symptoms.length === 0} />
-          </div>
-        )}
+      <div style={{maxWidth:680,margin:"0 auto",padding:"48px 24px 80px"}}>
 
-        {/* STEP 3 â€” Diet */}
-        {step === 3 && (
-          <div>
-            <Q>How do you currently eat?</Q>
-            <Sub>Your diet history helps us identify likely sensitisation patterns.</Sub>
-            <ChipGroup options={DIET_OPTS} selected={diet} onToggle={id => toggleArr(diet, setDiet, id)} />
-            <NextBtn onClick={() => setStep(4)} disabled={diet.length === 0} />
-          </div>
-        )}
-
-        {/* STEP 4 â€” Previous tests */}
-        {step === 4 && (
-          <div>
-            <Q>Have you done any of these tests?</Q>
-            <Sub>Previous results help us calibrate your protocol starting point.</Sub>
-            <ChipGroup options={TEST_OPTS} selected={tests} onToggle={id => toggleArr(tests, setTests, id)} />
-            <Input label="OTHER TESTS OR RESULTS (optional)" value={otherTests} onChange={e => setOtherTests(e.target.value)} placeholder="e.g. thyroid panel, cortisol, SIBO breath test" />
-            <NextBtn onClick={() => setStep(5)} disabled={tests.length === 0} />
-          </div>
-        )}
-
-        {/* STEP 5 â€” Medications & supplements */}
-        {step === 5 && (
-          <div>
-            <Q>Current medications and supplements?</Q>
-            <Sub>List anything you take regularly. Certain medications interact with elimination protocols.</Sub>
-            <Input label="MEDICATIONS" value={meds} onChange={e => setMeds(e.target.value)} placeholder="e.g. levothyroxine 50mcg, metformin" />
-            <Input label="SUPPLEMENTS" value={supplements} onChange={e => setSupps(e.target.value)} placeholder="e.g. vitamin D3, magnesium, omega-3" />
-            <NextBtn onClick={() => setStep(6)} label="Continue" />
-          </div>
-        )}
-
-        {/* STEP 6 â€” Goals */}
-        {step === 6 && (
-          <div>
-            <Q>What are your primary goals?</Q>
-            <Sub>Your goals determine how we weight the protocol recommendations.</Sub>
-            <ChipGroup options={GOAL_OPTS} selected={goals} onToggle={id => toggleArr(goals, setGoals, id)} />
-            <NextBtn onClick={() => setStep(7)} disabled={goals.length === 0} />
-          </div>
-        )}
-
-        {/* STEP 7 â€” Consent */}
-        {step === 7 && (
-          <div>
-            <Q>One last thing.</Q>
-            <Sub>We need your consent before we can process your clinical data.</Sub>
-
-            <div style={{ background: T.w1, borderRadius: 4, padding: "20px 24px", marginBottom: 28, fontSize: 13, fontFamily: fonts.sans, color: T.w5, lineHeight: 1.8 }}>
-              <strong style={{ color: T.w7, display: "block", marginBottom: 8 }}>Data processing agreement</strong>
-              MediBalans AB will store your personal data for up to 30 days to deliver your clinical protocol and email sequence. After 30 days, your name and email will be permanently deleted. Anonymised clinical patterns (symptoms, diet, goals) may be retained for medical research under GDPR Article 89. You may request immediate deletion at any time by emailing info@medibalans.se.
+        {step < steps.length ? (
+          <>
+            {steps[step]}
+            <div style={{display:"flex",gap:12,marginTop:32}}>
+              {step > 0 && (
+                <button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"14px",borderRadius:10,border:`1px solid ${T.w3}`,background:T.w1,color:T.w5,fontSize:13,cursor:"pointer",fontFamily:sans}}>
+                  Back
+                </button>
+              )}
+              <button onClick={step===steps.length-1?handleSubmit:()=>setStep(s=>s+1)} disabled={loading} style={{flex:2,padding:"14px",borderRadius:10,border:"none",background:T.rg,color:"#fff",fontSize:13,fontWeight:600,cursor:loading?"not-allowed":"pointer",fontFamily:sans,opacity:loading?0.7:1}}>
+                {loading?"Analysing…":step===steps.length-1?"Complete assessment →":"Continue →"}
+              </button>
             </div>
-
-            <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer", marginBottom: 32 }}>
-              <input
-                type="checkbox"
-                checked={consent}
-                onChange={e => setConsent(e.target.checked)}
-                style={{ marginTop: 3, accentColor: T.gold, width: 16, height: 16 }}
-              />
-              <span style={{ fontFamily: fonts.sans, fontSize: 14, color: T.w7, lineHeight: 1.6 }}>
-                I consent to MediBalans AB processing my data as described above, and I confirm I am 18 years or older.
-              </span>
-            </label>
-
-            {error && (
-              <div style={{ background: "#FEF0EF", border: `1px solid ${T.err}`, borderRadius: 4, padding: "12px 16px", marginBottom: 20, fontFamily: fonts.sans, fontSize: 13, color: T.err }}>
-                {error}
-              </div>
-            )}
-
-            <NextBtn
-              onClick={submit}
-              label={saving ? "Processing..." : "Start my protocol"}
-              disabled={!consent || saving}
-            />
-          </div>
-        )}
-
-        {/* Back navigation */}
-        {step > 1 && (
-          <button
-            onClick={() => setStep(step - 1)}
-            style={{ display: "block", margin: "16px auto 0", background: "none", border: "none", fontFamily: fonts.sans, fontSize: 13, color: T.w4, cursor: "pointer" }}
-          >
-            &larr; Back
-          </button>
-        )}
+            {error && <div style={{marginTop:16,color:T.err,fontSize:13}}>{error}</div>}
+            <div style={{textAlign:"center",marginTop:20}}>
+              <a href="/dashboard" style={{color:T.w4,fontSize:12,fontFamily:mono,letterSpacing:"0.08em",textDecoration:"none"}}>Skip — go to dashboard</a>
+            </div>
+          </>
+        ) : result ? (
+          <Results result={result} name={data.name} />
+        ) : null}
       </div>
     </div>
-  );
+  )
 }
 
+function Step({title,sub,children}) {
+  return (
+    <div>
+      <div style={{marginBottom:32}}>
+        <div style={{fontFamily:serif,fontSize:32,fontWeight:400,color:T.w7,marginBottom:8}}>{title}</div>
+        {sub && <div style={{fontSize:14,color:T.w5}}>{sub}</div>}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:24}}>{children}</div>
+    </div>
+  )
+}
+
+function Field({label,children,hide}) {
+  if(hide) return null
+  return (
+    <div>
+      <div style={{fontFamily:mono,fontSize:9,color:T.w4,letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:10}}>{label}</div>
+      {children}
+    </div>
+  )
+}
+
+const inp = {
+  width:"100%",padding:"12px 14px",borderRadius:10,border:`1px solid ${T.w3}`,
+  fontSize:14,background:T.w,color:T.w7,outline:"none",fontFamily:sans,boxSizing:"border-box",
+}
+
+function Chip({label,active,onClick}) {
+  return (
+    <button onClick={onClick} style={{
+      background:active?T.rgBg:T.w1, border:`1px solid ${active?T.rg:T.w3}`,
+      color:active?T.rg2:T.w5, borderRadius:6, padding:"6px 12px",
+      fontSize:12, cursor:"pointer", fontFamily:sans,
+    }}>{label}</button>
+  )
+}
+
+function ChipRow({items,selected,onSelect,single}) {
+  return (
+    <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+      {items.map(item=>(
+        <Chip key={item} label={item} active={single?selected===item:selected?.includes(item)} onClick={()=>onSelect(item)} />
+      ))}
+    </div>
+  )
+}
+
+function Results({result,name}) {
+  const bes = result.bes || 0
+  const besColor = bes < 50 ? T.ok : bes < 65 ? T.warn : bes < 80 ? '#C47030' : T.err
+  const top = result.topSevere || []
+  return (
+    <div>
+      <div style={{fontFamily:serif,fontSize:32,fontWeight:400,color:T.w7,marginBottom:8}}>
+        {name ? `${name.split(' ')[0]}, here's your profile` : "Your clinical profile"}
+      </div>
+      <div style={{fontSize:14,color:T.w5,marginBottom:40}}>Based on your responses. ALCAT testing will confirm individual molecular reactivity.</div>
+
+      {/* BES gauge */}
+      <div style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:16,padding:"28px 32px",marginBottom:24}}>
+        <div style={{fontFamily:mono,fontSize:9,letterSpacing:"0.18em",color:T.w4,textTransform:"uppercase",marginBottom:16}}>Biological Entropy Score</div>
+        <div style={{display:"flex",alignItems:"center",gap:20,marginBottom:16}}>
+          <div style={{fontFamily:serif,fontSize:52,fontWeight:400,color:besColor}}>{bes}</div>
+          <div>
+            <div style={{fontSize:16,fontWeight:600,color:besColor,fontFamily:sans}}>{result.besBand}</div>
+            <div style={{fontSize:13,color:T.w5,fontFamily:sans,marginTop:4,maxWidth:320}}>{result.interpretation}</div>
+          </div>
+        </div>
+        <div style={{height:6,borderRadius:3,background:T.w3,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${bes}%`,background:besColor,transition:"width 1s ease"}}/>
+        </div>
+      </div>
+
+      {/* Top reactive predictions */}
+      {top.length > 0 && (
+        <div style={{background:T.w,border:`1px solid ${T.w3}`,borderRadius:16,padding:"28px 32px",marginBottom:24}}>
+          <div style={{fontFamily:mono,fontSize:9,letterSpacing:"0.18em",color:T.w4,textTransform:"uppercase",marginBottom:20}}>Predicted High-Reactivity Foods</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {top.slice(0,8).map(({food,score})=>(
+              <div key={food} style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{width:140,fontSize:12,fontFamily:sans,color:T.w6}}>{food}</div>
+                <div style={{flex:1,height:6,borderRadius:3,background:T.w2,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${score}%`,background:T.rg,borderRadius:3}}/>
+                </div>
+                <div style={{width:36,fontSize:11,fontFamily:mono,color:T.rg2,textAlign:"right"}}>{score}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:16,fontSize:11,color:T.w4,fontFamily:mono,letterSpacing:"0.1em"}}>
+            Personal risk index 0–100. Statistical prediction based on clinical population data. ALCAT confirms individual reactivity.
+          </div>
+        </div>
+      )}
+
+      <a href="/dashboard" style={{display:"block",textAlign:"center",background:T.rg,color:"#fff",borderRadius:12,padding:"16px",fontSize:14,fontWeight:600,fontFamily:sans,textDecoration:"none",marginTop:8}}>
+        Open your dashboard →
+      </a>
+    </div>
+  )
+}
