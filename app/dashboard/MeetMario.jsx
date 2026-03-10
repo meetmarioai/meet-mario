@@ -97,11 +97,9 @@ function detectSpikes(pts) {
  return spikes;
 }
 const S = {
- bg:"#0D0C0A", card:"#131210", border:"#252318",
- gold:"#C8A86A", goldDim:"#8A7040",
- text:"#E2D9C8", muted:"#6A6050",
- severe:"#D44040", moderate:"#C87030", mild:"#C4A830",
- green:"#6A9060", candida:"#906080", whey:"#5080A8",
+  bg:"#FAF7F2", card:"#FFFFFF", border:"#D8D0C4", text:"#1C1510", muted:"#8A7E72",
+  gold:"#B88040", goldDim:"#C8A060", green:"#5A8850",
+  severe:"#B85040", moderate:"#C4887A", mild:"#B8A060", candida:"#7A70A0", whey:"#607890",
 };
 const CUISINES = [
  {id:"mediterranean",label:"Mediterranean",flag:"🫒",desc:"Olive oil, herbs, fish"},
@@ -658,7 +656,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
     <div style={{display:FX,justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
      <div>
       <div style={{fontSize:8,letterSpacing:5,color:S.goldDim,fontFamily:FF,fontWeight:600}}>MEDIBALANS AB · STOCKHOLM</div>
-      <div style={{fontSize:22,fontWeight:700,letterSpacing:-1,lineHeight:1.1,marginTop:1}}>meet mario</div>
+      <div style={{fontSize:22,fontWeight:700,letterSpacing:-1,lineHeight:1.1,marginTop:1}}>◉ meet mario</div>
       <div style={{fontSize:10,color:S.muted,fontFamily:FF,marginTop:1}}> · </div>
       <div style={{display:FX,alignItems:"center",gap:4,marginTop:3}}>
        <a href="/pregnancy" style={{fontFamily:FF,fontSize:8,color:"#8BAF8A",textDecoration:"none",letterSpacing:"0.12em",border:"1px solid #3A4030",borderRadius:5,padding:"3px 10px",display:"flex",alignItems:"center",gap:5}}><div style={{width:5,height:5,borderRadius:"50%",background:"#8BAF8A"}}/>BABY BALANS</a>
