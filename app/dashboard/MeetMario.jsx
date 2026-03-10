@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createBrowserClient } from "@supabase/ssr";
 const FF="sans-serif",FX="flex",CP="pointer";
 const P = {
  name: "Christina Wohltahrt", dob: "07/21/1960",
@@ -116,7 +117,7 @@ const EAT_PATS = [
  {id:"if18_6",   label:"IF 18:6",   emoji:"🕑", desc:"18h fast · 6h window",   fasting:true,  detail:"Window 13:00–19:00"},
  {id:"if5_2",    label:"5:2",       emoji:"📆", desc:"5 normal · 2 low-cal",   fasting:true,  detail:"~500 kcal fasting days"},
 ];
-const MARIO_SYS = `You are Meet Mario, clinical AI for MediBalans AB, Stockholm. Patient: Christina Wohltahrt, 64, post-menopausal. ALCAT April 2024. Markers: Candida mild (no sugar/yeast/vinegar 3mo), Whey moderate (no milk 6mo). Severe reactors (9mo): beef, coffee, garlic, onion, tomato, all rice, black tea, cauliflower, bell pepper, chickpea, cilantro, lobster, pistachio, poppy seed, capers, cumin, jalapeño, egg white, sea bass, wakame. Rules: No seed oils. CPF every meal. Respond in clear prose, no bullet points.`;
+const buildMarioSys = (name) => `You are Meet Mario, clinical AI for MediBalans AB, Stockholm. Patient: ${name||"this patient"}. Rules: No seed oils. CPF every meal. Respond in clear prose, no bullet points.`;
 
 async function callClaude(messages, system, extra = {}) {
  const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -127,6 +128,22 @@ async function callClaude(messages, system, extra = {}) {
  return (d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
 }
 export default function MeetMario() {
+  // ─── Auth / patient ──────────────────────────────────────────────────────
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+  const [patientName, setPatientName] = useState("Loading…");
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "Patient";
+        setPatientName(name);
+        P.name = name;
+      }
+    });
+  }, []);
+
  const [tab,       setTab]       = useState("monitor");
  const [rotDay,    setRotDay]    = useState(1);
  const [proteins,  setProteins]  = useState({});
@@ -140,7 +157,7 @@ export default function MeetMario() {
  const [research,  setResearch]  = useState({});
  const [resLoad,   setResLoad]   = useState(null);
  const [foodQ,     setFoodQ]     = useState("");
- const [chatMsgs,  setChatMsgs]  = useState([{role:"assistant",content:"Good day, Christina. Your ALCAT results from April 2024 are loaded — Candida mild and Whey moderate are your two active markers. Where would you like to start?"}]);
+ const [chatMsgs,  setChatMsgs]  = useState([{role:"assistant",content:"Good day. Your ALCAT results are loaded. Where would you like to start?"}]);
  const [chatIn,    setChatIn]    = useState("");
  const [chatLoad,  setChatLoad]  = useState(false);
  const [expandPh,  setExpandPh]  = useState(null);
@@ -454,7 +471,7 @@ Patient profile: 64yo post-menopausal, Candida mild, Whey moderate, ALCAT protoc
 
 Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h, (3) one protocol adjustment for next meal, (4) whether to flag to clinician. Keep it to 4 short paragraphs.`;
   let analysis = "";
-  try { analysis = await callClaude([{role:"user",content:prompt}], MARIO_SYS); }
+  try { analysis = await callClaude([{role:"user",content:prompt}], buildMarioSys(patientName)); }
   catch { analysis = "Analysis unavailable. Please log this event and contact your MediBalans clinician."; }
   setPopupAnalysis(analysis);
   setPopupLoading(false);
@@ -490,7 +507,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
   const um = {role:"user",content:chatIn};
   const msgs = [...chatMsgs, um];
   setChatMsgs(msgs); setChatIn(""); setChatLoad(true);
-  try { const r = await callClaude(msgs, MARIO_SYS); setChatMsgs([...msgs,{role:"assistant",content:r}]); }
+  try { const r = await callClaude(msgs, buildMarioSys(patientName)); setChatMsgs([...msgs,{role:"assistant",content:r}]); }
   catch { setChatMsgs([...msgs,{role:"assistant",content:"Connection error."}]); }
   setChatLoad(false);
  };
