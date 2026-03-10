@@ -349,8 +349,7 @@ CLINICAL NOTE: One sentence on why this preparation supports the ALCAT protocol.
   const allFoodsList = days.map(d => {
    const r = ROT[d];
    return `Day ${d}: Grains: ${r.grains.slice(0,3).join(", ")} | Veg: ${r.veg.slice(0,5).join(", ")} | Protein: ${r.protein.slice(0,3).join(", ")} | Fruit: ${r.fruit.slice(0,3).join(", ")} | Misc: ${r.misc.slice(0,3).join(", ")}`;
-  }).join("
-");
+  }).join(String.fromCharCode(10));
   const prompt = `Generate a structured weekly grocery list for the ALCAT rotation protocol.
 
 Rotation days included this week: ${days.join(", ")}
