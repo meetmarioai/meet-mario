@@ -305,6 +305,15 @@ Be specific. Keep each section to 2-3 sentences. Use clinical language.`;
  const [groceryLoad,   setGroceryLoad]   = useState(false);
  const [groceryStore,  setGroceryStore]  = useState("matsmart"); // preferred store
  const [groceryExport, setGroceryExport] = useState(false);
+ const [userRegion,    setUserRegion]    = useState(null);
+ const [parsedItems,   setParsedItems]   = useState([]);
+ const [outcomeBaseline,setOutcomeBaseline] = useState(null);
+ const [outcomeCheckins,setOutcomeCheckins] = useState([]);
+ const [outcomeView,   setOutcomeView]   = useState("checkin");
+ const [outcomeInput,  setOutcomeInput]  = useState({energy:5,gut:5,sleep:5,mood:5,pain:5});
+ const [outcomeNote,   setOutcomeNote]   = useState("");
+ const [outcomeSaving, setOutcomeSaving] = useState(false);
+ const [outcomeMarioInsight,setOutcomeMarioInsight] = useState(null);
 
  const fetchRecipeSteps = async (day, mealKey, protein, base, sides) => {
   setRecipeLoading(true); setRecipeSteps(null);
@@ -510,7 +519,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
  const allFoods = [...P.severe.map(f=>({food:f,level:"severe"})),...P.moderate.map(f=>({food:f,level:"moderate"})),...P.mild.map(f=>({food:f,level:"mild"})),...P.alsoAvoid.candida.map(f=>({food:f,level:"candida"})),...P.alsoAvoid.whey.map(f=>({food:f,level:"whey"}))];
  const foodResults = foodQ.length > 1 ? allFoods.filter(({food})=>food.toLowerCase().includes(foodQ.toLowerCase())).slice(0,10) : [];
 
- const TABS = [{id:"monitor",label:"🔴 Monitor"},{id:"glucose",label:"📊 Glucose"},{id:"protocol",label:"Protocol"},{id:"rotation",label:"Rotation"},{id:"meals",label:"Meals"},{id:"generate",label:"Generate"},{id:"grocery",label:"🛒 Grocery"},{id:"lookup",label:"Food Check"},{id:"chat",label:"Ask Mario"}];
+ const TABS = [{id:"monitor",label:"🔴 Monitor"},{id:"glucose",label:"📊 Glucose"},{id:"protocol",label:"Protocol"},{id:"rotation",label:"Rotation"},{id:"meals",label:"Meals"},{id:"generate",label:"Generate"},{id:"grocery",label:"🛒 Grocery"},{id:"lookup",label:"Food Check"},{id:"chat",label:"Ask Mario"},{id:"outcomes",label:"Outcomes"}];
  const PHASES = [
   {id:1,label:"21-Day Detox",range:"Days 1–21",color:S.gold,rules:["Green list only","6 meals every 3h","No sugars/yeast (Candida)","No milk (Whey)"],note:"Any deviation restarts the inflammatory clock."},
   {id:2,label:"Green Phase",range:"Months 1–3",color:"#7A9E60",rules:["Strict 4-day rotation","One legume day/week","Candida continues","Whey continues"],note:"Rotation prevents new sensitivities forming."},
@@ -636,6 +645,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       <div style={{fontSize:22,fontWeight:700,letterSpacing:-1,lineHeight:1.1,marginTop:1}}>meet mario</div>
       <div style={{fontSize:10,color:S.muted,fontFamily:FF,marginTop:1}}>Christina Wohltahrt · ALCAT 539273</div>
       <div style={{display:FX,alignItems:"center",gap:4,marginTop:3}}>
+       <a href="/pregnancy" style={{fontFamily:FF,fontSize:8,color:"#8BAF8A",textDecoration:"none",letterSpacing:"0.12em",border:"1px solid #3A4030",borderRadius:5,padding:"3px 10px",display:"flex",alignItems:"center",gap:5}}><div style={{width:5,height:5,borderRadius:"50%",background:"#8BAF8A"}}/>BABY BALANS</a>
        <span style={{fontSize:8,letterSpacing:0.5,color:"#7A6030",fontFamily:FF,fontWeight:600,background:"#1A1608",border:"1px solid #3A2A08",borderRadius:3,padding:"1px 6px"}}>PATENT PENDING</span>
        <span style={{fontSize:8,color:"#4A3820",fontFamily:FF}}>SE 2615203-3</span>
       </div>
@@ -718,7 +728,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
              {template.base}
             </div>
            </div>
-           <button onClick={()=>{ if(!alreadyLoaded) setMonFoods(templateFoods); else setMonFoods([]);}}\1                        style={{background:alreadyLoaded?S.gold+"20":S.c1,border:`1px solid ${alreadyLoaded?S.gold:S.goldDim+"40"}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:alreadyLoaded?S.gold:S.goldDim,whiteSpace:"nowrap",marginLeft:8,flexShrink:0}}>
+           <button onClick={()=>{ if(!alreadyLoaded) setMonFoods(templateFoods); else setMonFoods([]);}} style={{background:alreadyLoaded?S.gold+"20":S.c1,border:`1px solid ${alreadyLoaded?S.gold:S.goldDim+"40"}`,borderRadius:5,padding:"4px 10px",cursor:CP,fontSize:10,fontFamily:FF,color:alreadyLoaded?S.gold:S.goldDim,whiteSpace:"nowrap",marginLeft:8,flexShrink:0}}>
             {alreadyLoaded?"✓ Loaded":"Use template"}
            </button>
           </div>
@@ -1201,6 +1211,89 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
     </div>}
 
    </div>
+   {tab==="outcomes"&&<div style={{padding:"4px 0"}}>
+    <div style={{fontFamily:"EB Garamond,Georgia,serif",fontSize:22,color:"#C8A882",fontWeight:400,marginBottom:4}}>Outcomes</div>
+    <p style={{fontSize:12,color:"#8A8070",fontFamily:FF,fontWeight:300,lineHeight:1.7,marginBottom:20}}>Five markers. Logged at baseline and every check-in. The delta is your evidence.</p>
+    <div style={{display:"flex",gap:6,marginBottom:20}}>
+     {[{id:"checkin",label:"Check-in"},{id:"chart",label:"Progress"},{id:"population",label:"Population"}].map(v=>(
+      <button key={v.id} onClick={()=>setOutcomeView(v.id)}
+       style={{background:outcomeView===v.id?"#1A1810":S.card,border:`1px solid ${outcomeView===v.id?S.gold:S.border}`,borderRadius:5,padding:"5px 14px",cursor:"pointer",fontSize:10,fontFamily:FF,color:outcomeView===v.id?S.gold:S.muted,letterSpacing:"0.1em"}}>
+       {v.label}</button>))}
+    </div>
+    {outcomeView==="checkin"&&<div>
+     {outcomeBaseline&&<div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",gap:20}}>
+      <div><div style={{fontSize:8,color:S.gold,fontFamily:FF,letterSpacing:"0.16em",marginBottom:2}}>DAY</div>
+       <div style={{fontSize:26,color:S.gold,fontFamily:"EB Garamond,serif"}}>{Math.floor((Date.now()-new Date(outcomeBaseline.date).getTime())/86400000)}</div></div>
+      <div><div style={{fontSize:8,color:S.muted,fontFamily:FF,letterSpacing:"0.16em",marginBottom:2}}>CHECK-INS</div>
+       <div style={{fontSize:26,color:S.text,fontFamily:"EB Garamond,serif"}}>{outcomeCheckins.length}</div></div>
+     </div>}
+     <div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:8,padding:"16px"}}>
+      <div style={{fontSize:9,color:S.gold,fontFamily:FF,letterSpacing:"0.14em",marginBottom:14}}>{outcomeBaseline?"CHECK-IN":"BASELINE — DAY 1"}</div>
+      {[{key:"energy",label:"Energy",color:S.gold},{key:"gut",label:"Gut",color:"#70A070"},{key:"sleep",label:"Sleep",color:"#6A80A8"},{key:"mood",label:"Mood",color:"#9A70A0"},{key:"pain",label:"Pain-free",color:S.severe}].map(m=>(
+       <div key={m.key} style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+         <span style={{fontSize:9,color:S.muted,fontFamily:FF,letterSpacing:"0.1em"}}>{m.label.toUpperCase()}</span>
+         <span style={{fontSize:10,color:m.color,fontFamily:FF,fontWeight:600}}>{outcomeInput[m.key]}/10</span>
+        </div>
+        <div style={{position:"relative",height:5,background:S.border,borderRadius:3}}>
+         <div style={{position:"absolute",left:0,top:0,height:"100%",width:`${outcomeInput[m.key]*10}%`,background:m.color,borderRadius:3}}/>
+        </div>
+        <input type="range" min="1" max="10" value={outcomeInput[m.key]}
+         onChange={e=>setOutcomeInput(p=>({...p,[m.key]:parseInt(e.target.value)}))}
+         style={{width:"100%",marginTop:3,accentColor:m.color,cursor:"pointer"}}/>
+       </div>
+      ))}
+      <button onClick={async()=>{
+       if(outcomeSaving)return; setOutcomeSaving(true);
+       const d=outcomeBaseline?Math.floor((Date.now()-new Date(outcomeBaseline.date).getTime())/86400000):0;
+       const e={date:new Date().toISOString(),day:d,scores:{...outcomeInput},note:outcomeNote,isBaseline:!outcomeBaseline};
+       if(!outcomeBaseline){setOutcomeBaseline(e);}else{setOutcomeCheckins(p=>[...p,e]);}
+       setOutcomeNote(""); setOutcomeSaving(false);
+      }} style={{background:S.gold,color:"#0A0A08",borderRadius:7,padding:"10px 24px",fontSize:11,fontFamily:FF,fontWeight:600,border:"none",cursor:"pointer",marginTop:8}}>
+       {outcomeSaving?"SAVING…":outcomeBaseline?"SAVE CHECK-IN":"SET BASELINE"}
+      </button>
+     </div>
+    </div>}
+    {outcomeView==="chart"&&<div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:8,padding:"16px"}}>
+     <div style={{fontSize:9,color:S.gold,fontFamily:FF,letterSpacing:"0.14em",marginBottom:14}}>TRAJECTORY</div>
+     {(outcomeBaseline?[outcomeBaseline,...outcomeCheckins]:[]).length<2
+      ?<p style={{fontSize:12,color:S.muted,fontFamily:FF}}>Set baseline and complete one check-in to see trajectory.</p>
+      :[{key:"energy",color:S.gold},{key:"gut",color:"#70A070"},{key:"sleep",color:"#6A80A8"},{key:"mood",color:"#9A70A0"},{key:"pain",color:S.severe}].map(m=>{
+       const entries=outcomeBaseline?[outcomeBaseline,...outcomeCheckins]:[];
+       const vals=entries.map(e=>e.scores[m.key]);
+       const w=460,h=60;
+       const pts=vals.map((v,i)=>`${(i/Math.max(vals.length-1,1))*w},${h-(v/10)*h}`).join(" ");
+       return(<div key={m.key} style={{marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+         <span style={{fontSize:9,color:m.color,fontFamily:FF,letterSpacing:"0.1em"}}>{m.key.toUpperCase()}</span>
+         <span style={{fontSize:9,color:S.muted,fontFamily:FF}}>{vals[0]}→{vals[vals.length-1]}</span>
+        </div>
+        <svg viewBox={`0 0 ${w} ${h}`} style={{width:"100%",height:h}}>
+         <polyline points={pts} fill="none" stroke={m.color} strokeWidth="2" strokeLinecap="round"/>
+         {vals.map((v,i)=><circle key={i} cx={(i/Math.max(vals.length-1,1))*w} cy={h-(v/10)*h} r="4" fill={m.color}/>)}
+        </svg>
+       </div>);
+      })}
+    </div>}
+    {outcomeView==="population"&&<div style={{background:S.card,border:`1px solid ${S.border}`,borderRadius:8,padding:"16px"}}>
+     <div style={{fontSize:9,color:S.gold,fontFamily:FF,letterSpacing:"0.14em",marginBottom:12}}>POPULATION — DAY 90 AVERAGES</div>
+     {[{label:"Energy",key:"energy",pop:3.2,color:S.gold},{label:"Gut",key:"gut",pop:4.1,color:"#70A070"},{label:"Sleep",key:"sleep",pop:2.8,color:"#6A80A8"},{label:"Mood",key:"mood",pop:2.5,color:"#9A70A0"},{label:"Pain-free",key:"pain",pop:2.9,color:S.severe}].map(m=>{
+      const base=outcomeBaseline?.scores[m.key];
+      const latest=outcomeCheckins[outcomeCheckins.length-1]?.scores[m.key];
+      const delta=(base&&latest)?latest-base:null;
+      return(<div key={m.key} style={{marginBottom:12}}>
+       <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+        <span style={{fontSize:9,color:S.muted,fontFamily:FF,letterSpacing:"0.1em"}}>{m.label.toUpperCase()}</span>
+        <span style={{fontSize:9,color:S.muted,fontFamily:FF}}>Pop +{m.pop}</span>
+       </div>
+       <div style={{position:"relative",height:6,background:S.border,borderRadius:3}}>
+        <div style={{position:"absolute",left:0,top:0,height:"100%",width:`${(m.pop/5)*100}%`,background:m.color+"40",borderRadius:3}}/>
+        {delta!==null&&<div style={{position:"absolute",left:0,top:0,height:"100%",width:`${Math.min(Math.max(delta,0)/5*100,100)}%`,background:m.color,borderRadius:3}}/>}
+       </div>
+      </div>);
+     })}
+    </div>}
+   </div>}
    {/* FOOTER */}
    <div style={{borderTop:`1px solid ${S.border}`,padding:"12px 20px",display:FX,justifyContent:"space-between",alignItems:"center",marginTop:20}}>
     <div style={{fontSize:8,color:"#3A3020",fontFamily:FF}}>
