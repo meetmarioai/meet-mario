@@ -139,7 +139,7 @@ export default function MeetMario() {
       if (user) {
         const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "Patient";
         setPatientName(name);
-        "Your Account" = name;
+        P.name = name;
       }
     });
   }, []);
