@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
-const FF="sans-serif",FX="flex",CP="pointer";
+const FF="'SF Mono','Fira Mono',monospace",FX="flex",CP="pointer";
 const P = {
  name: "", dob: "07/21/1960",
  testDate: "April 8, 2024", labId: "",
@@ -658,8 +658,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
       <div style={{fontSize:8,letterSpacing:5,color:S.goldDim,fontFamily:FF,fontWeight:600}}>MEDIBALANS AB · STOCKHOLM</div>
       <div style={{fontSize:22,fontWeight:700,letterSpacing:-1,lineHeight:1.1,marginTop:1}}>◉ meet mario</div>
       <div style={{fontSize:10,color:S.muted,fontFamily:FF,marginTop:1}}> · </div>
-      <div style={{display:FX,alignItems:"center",gap:4,marginTop:3}}>
-       <a href="/pregnancy" style={{fontFamily:FF,fontSize:8,color:"#8BAF8A",textDecoration:"none",letterSpacing:"0.12em",border:"1px solid #3A4030",borderRadius:5,padding:"3px 10px",display:"flex",alignItems:"center",gap:5}}><div style={{width:5,height:5,borderRadius:"50%",background:"#8BAF8A"}}/>BABY BALANS</a>
+<div style={{fontFamily:"'Playfair Display',Georgia,serif",fontSize:22,fontWeight:400,letterSpacing:"-0.02em",lineHeight:1.1,marginTop:1,color:"#1C1510"}}>◉ meet mario</div>     <a href="/pregnancy" style={{fontFamily:FF,fontSize:8,color:"#8BAF8A",textDecoration:"none",letterSpacing:"0.12em",border:"1px solid #3A4030",borderRadius:5,padding:"3px 10px",display:"flex",alignItems:"center",gap:5}}><div style={{width:5,height:5,borderRadius:"50%",background:"#8BAF8A"}}/>BABY BALANS</a>
        <span style={{fontSize:8,letterSpacing:0.5,color:"#7A6030",fontFamily:FF,fontWeight:600,background:"#1A1608",border:"1px solid #3A2A08",borderRadius:3,padding:"1px 6px"}}>PATENT PENDING</span>
        <span style={{fontSize:8,color:"#4A3820",fontFamily:FF}}>SE 2615203-3</span>
       </div>
