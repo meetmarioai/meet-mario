@@ -4,15 +4,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { createBrowserClient } from '@supabase/ssr'
 
 const PLANS = {
   monthly: { label: 'Monthly', price: 299, period: '/month', priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY },
-  annual:  { label: 'Annual',  price: 2490, period: '/year', priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ANNUAL, saving: 'Save 2 months' },
+  annual:  { label: 'Annual',  price: 2990, period: '/year', priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_ANNUAL, saving: 'Save 2 months' },
 }
 
 export default function PricingPage() {
-  const supabase = createClientComponentClient()
+  const supabase = createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
   const [billing, setBilling] = useState('annual')
   const [loading, setLoading] = useState(false)
 
