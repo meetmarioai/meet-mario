@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 // app/login/page.jsx
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
@@ -39,7 +39,7 @@ export default function LoginPage() {
 
         <div style={{ textAlign: 'center', marginBottom: '36px' }}>
           <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: '26px', letterSpacing: '0.04em', color: '#1a1a1a' }}>
-            meet <span style={{ color: '#C9956C' }}>◉</span> mario
+            <span style={{ color: '#C9956C' }}>◉</span> meet mario
           </div>
           <div style={{ marginTop: '8px', fontSize: '13px', color: '#888', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
             MediBalans Precision Medicine
