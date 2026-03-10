@@ -2,8 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 const FF="sans-serif",FX="flex",CP="pointer";
 const P = {
- name: "Christina Wohltahrt", dob: "07/21/1960",
- testDate: "April 8, 2024", labId: "539273",
+ name: "", dob: "07/21/1960",
+ testDate: "April 8, 2024", labId: "",
  age: 64, sex: "female", hormonalStatus: "post-menopausal",
  conditions: ["Candida (mild)", "Whey sensitivity (moderate)", "ALCAT food protocol"],
  severe: ["BEEF","BLACK TEA","BELL PEPPER","BRUSSELS SPROUT","CABBAGE","CANOLA OIL","CAPERS","CAULIFLOWER","CHICKPEA","CILANTRO","COFFEE","CUMIN","ENDIVE","GARLIC","GREEN TEA","HONEYDEW MELON","JALAPEÑO PEPPER","LOBSTER","MONK FRUIT","MULBERRY","ONION","PINTO BEAN","PISTACHIO","POPPY SEED","RICE (ALL)","SCALLION","SEA BASS","TOMATO","WAKAME SEAWEED","EGG WHITE"],
@@ -139,7 +139,7 @@ export default function MeetMario() {
       if (user) {
         const name = user.user_metadata?.full_name || user.email?.split("@")[0] || "Patient";
         setPatientName(name);
-        P.name = name;
+        "Your Account" = name;
       }
     });
   }, []);
@@ -460,7 +460,7 @@ Be specific with quantities (e.g. "2 fillets sardine" not just "sardine").`;
   const spikeDesc = popup ? `${popup.label} (${popup.val}) at ${popup.min} minutes post-meal` : "biometric spike";
   const foodList  = monFoods.length ? monFoods.join(", ") : "not logged";
   const symList   = popupSymptoms.length ? popupSymptoms.join(", ") : "none reported";
-  const prompt = `Christina just had a post-meal biometric reaction. Analyse and advise.
+  const prompt = `The patient just had a post-meal biometric reaction. Analyse and advise.
 Meal: ${monMealLabel} at ${new Date().toLocaleTimeString()}
 Foods eaten: ${foodList}
 Spike detected: ${spikeDesc}
@@ -659,7 +659,7 @@ Give: (1) most likely cause of this reaction, (2) what to monitor in the next 2h
      <div>
       <div style={{fontSize:8,letterSpacing:5,color:S.goldDim,fontFamily:FF,fontWeight:600}}>MEDIBALANS AB · STOCKHOLM</div>
       <div style={{fontSize:22,fontWeight:700,letterSpacing:-1,lineHeight:1.1,marginTop:1}}>meet mario</div>
-      <div style={{fontSize:10,color:S.muted,fontFamily:FF,marginTop:1}}>Christina Wohltahrt · ALCAT 539273</div>
+      <div style={{fontSize:10,color:S.muted,fontFamily:FF,marginTop:1}}> · </div>
       <div style={{display:FX,alignItems:"center",gap:4,marginTop:3}}>
        <a href="/pregnancy" style={{fontFamily:FF,fontSize:8,color:"#8BAF8A",textDecoration:"none",letterSpacing:"0.12em",border:"1px solid #3A4030",borderRadius:5,padding:"3px 10px",display:"flex",alignItems:"center",gap:5}}><div style={{width:5,height:5,borderRadius:"50%",background:"#8BAF8A"}}/>BABY BALANS</a>
        <span style={{fontSize:8,letterSpacing:0.5,color:"#7A6030",fontFamily:FF,fontWeight:600,background:"#1A1608",border:"1px solid #3A2A08",borderRadius:3,padding:"1px 6px"}}>PATENT PENDING</span>
