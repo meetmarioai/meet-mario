@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 // app/trial/page.jsx
 // Meet Mario — 21-Day Universal Detox Diet
 // Proprietary MediBalans clinical data — methodology not disclosed

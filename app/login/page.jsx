@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 // app/login/page.jsx
 import { useState, useEffect } from 'react'
 import { createBrowserClient } from '@supabase/ssr'
