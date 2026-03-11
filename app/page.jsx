@@ -400,7 +400,12 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
         }),
       });
       const d = await res.json();
-      const text = (d.content||[]).filter(b => b.type === 'text').map(b => b.text).join('');
+      if (d.error) {
+        console.error('[Lab parse] API error:', d.error);
+        throw new Error(d.error);
+      }
+      const text = (Array.isArray(d.content) ? d.content : [])
+        .filter(b => b.type === 'text').map(b => b.text).join('');
 
       let json = { severe:[], moderate:[], mild:[] };
       try {
