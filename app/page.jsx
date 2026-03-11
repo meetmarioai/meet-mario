@@ -179,7 +179,46 @@ function Onboarding({ onComplete }) {
     geographyOfOrigin:'', yearsInCurrentCountry:'',
     symptoms:[], tests:[],
     medications:'', supplements:'', conditions:'', goals:[],
+    alcat_severe:[], alcat_moderate:[], alcat_mild:[], alcat_raw:'',
   });
+  const [labFile, setLabFile] = useState(null);
+  const [labParsing, setLabParsing] = useState(false);
+  const [labParsed, setLabParsed] = useState(false);
+
+  const parseLabFile = async (file) => {
+    if (!file) return;
+    setLabParsing(true); setLabParsed(false);
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const base64 = e.target.result.split(',')[1];
+      const mediaType = file.type || 'image/jpeg';
+      const isImage = file.type.startsWith('image/');
+      const isPDF = file.type === 'application/pdf';
+      try {
+        const content = isImage
+          ? [{ type:'image', source:{ type:'base64', media_type:mediaType, data:base64 }},
+             { type:'text', text:'This is a patient ALCAT immune reactivity test result. Extract ALL foods/substances listed. Categorise them STRICTLY as severe, moderate, or mild reactors. Return ONLY valid JSON in this exact format: {"severe":["food1","food2"],"moderate":["food1"],"mild":["food1"]} — food names in lowercase. No explanation, no markdown, no code fences.' }]
+          : [{ type:'text', text:'This is text from an ALCAT test result PDF. Extract ALL foods/substances listed. Categorise as severe, moderate, or mild reactors. Return ONLY valid JSON: {"severe":[],"moderate":[],"mild":[]}' }];
+        const res = await fetch('/api/chat', {
+          method:'POST',
+          headers:{ 'Content-Type':'application/json' },
+          body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:2000, system:'You extract structured data from medical lab results. Return only valid JSON.', messages:[{ role:'user', content }] }),
+        });
+        const d = await res.json();
+        const text = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+        const json = JSON.parse(text.replace(/```json|```/g,'').trim());
+        u('alcat_severe', json.severe||[]);
+        u('alcat_moderate', json.moderate||[]);
+        u('alcat_mild', json.mild||[]);
+        u('alcat_raw', text);
+        setLabParsed(true);
+      } catch(err) {
+        alert('Could not parse this file. Please try a clearer image or contact support.');
+      }
+      setLabParsing(false);
+    };
+    reader.readAsDataURL(file);
+  };
   const u = (k, v) => setData(p => ({ ...p, [k]:v }));
   const toggle = (k, v) => setData(p => ({ ...p, [k]: p[k].includes(v) ? p[k].filter(x => x !== v) : [...p[k], v] }));
 
@@ -275,6 +314,63 @@ function Onboarding({ onComplete }) {
       ),
     },
     {
+      title:"Upload Your Lab Results", sub:"Upload your ALCAT, blood work, or any test results. Mario reads them automatically and builds your reactive food profile.",
+      render:() => (
+        <div>
+          <div style={{ border:`2px dashed ${labParsed?T.ok:T.w3}`, borderRadius:12, padding:'32px 24px', textAlign:'center', background:labParsed?`${T.ok}08`:T.w1, transition:'all 0.3s', marginBottom:20 }}>
+            {!labParsed && !labParsing && (
+              <>
+                <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w6, marginBottom:8 }}>Drop your ALCAT results here</div>
+                <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:20 }}>Photo of your results, PDF, or screenshot — Mario reads it automatically</div>
+                <label style={{ cursor:'pointer' }}>
+                  <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                    onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f); } }}/>
+                  <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'11px 28px', display:'inline-block', fontFamily:fonts.sans, fontSize:13, fontWeight:700 }}>
+                    Choose file
+                  </div>
+                </label>
+                <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:12, letterSpacing:'0.1em' }}>
+                  ALCAT · CMA · BLOOD WORK · ANY FORMAT
+                </div>
+              </>
+            )}
+            {labParsing && (
+              <div>
+                <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w6, marginBottom:16 }}>Reading your results...</div>
+                <div style={{ display:'flex', gap:6, justifyContent:'center' }}>
+                  {[0,1,2].map(i=><div key={i} style={{ width:7,height:7,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+                </div>
+              </div>
+            )}
+            {labParsed && (
+              <div>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:16 }}>RESULTS PARSED</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, textAlign:'left' }}>
+                  {[['Severe',data.alcat_severe,T.err],['Moderate',data.alcat_moderate,T.warn],['Mild',data.alcat_mild,T.w5]].map(([label,items,color])=>(
+                    <div key={label} style={{ background:'#fff', borderRadius:8, padding:'12px 14px', border:`1px solid ${color}30` }}>
+                      <div style={{ fontFamily:fonts.mono, fontSize:8, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>{label} · {items.length}</div>
+                      {items.slice(0,8).map(f=>(
+                        <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
+                      ))}
+                      {items.length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>+{items.length-8} more</div>}
+                    </div>
+                  ))}
+                </div>
+                <label style={{ cursor:'pointer', display:'inline-block', marginTop:16 }}>
+                  <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                    onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); setLabParsed(false); parseLabFile(f); } }}/>
+                  <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>Upload different file</div>
+                </label>
+              </div>
+            )}
+          </div>
+          <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, textAlign:'center', letterSpacing:'0.1em' }}>
+            No results yet? Skip and upload later in the Protocol tab.
+          </div>
+        </div>
+      ),
+    },
+    {
       title:"Medications & Supplements", sub:"Your full protocol — free text. Hormonal therapies, micronutrients, pharmaceutical medications, herbal supplements, anything relevant.",
       render:() => (
         <div>
@@ -300,7 +396,9 @@ function Onboarding({ onComplete }) {
       profileComplete: true,
       protocol: 'Option A — 21-day universal detox',
       phase: 1, dayInProtocol: 1,
-      severe:[], moderate:[], mild:[],
+      severe: data.alcat_severe || [],
+      moderate: data.alcat_moderate || [],
+      mild: data.alcat_mild || [],
       alsoAvoid:{ candida:[], whey:[] },
       markers:[],
       rotation:{ 1:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 2:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 3:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 4:{grains:[],veg:[],fruit:[],protein:[],misc:[]} },
@@ -357,6 +455,11 @@ export default function MeetMario({ patient: patientProp }) {
   const [patient, setPatient] = useState(patientProp || {});
   const [showLanding, setShowLanding] = useState(!patientProp?.name);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showBES, setShowBES] = useState(false);
+  const [besScore, setBesScore] = useState(null);
+  const [showDiet, setShowDiet] = useState(false);
+  const [dietPlan, setDietPlan] = useState('');
+  const [dietLoading, setDietLoading] = useState(false);
   const [tab, setTab] = useState('monitor');
   const [country, setCountry] = useState('SE');
 
@@ -421,11 +524,17 @@ export default function MeetMario({ patient: patientProp }) {
   const [gutLogs, setGutLogs] = useState([]);
   const [gutType, setGutType] = useState(null);
   const [gutNotes, setGutNotes] = useState('');
+  const [gutPhoto, setGutPhoto] = useState(null);
+  const [gutPhotoB64, setGutPhotoB64] = useState(null);
+  const [gutAnalysis, setGutAnalysis] = useState('');
+  const [gutAnalysisLoad, setGutAnalysisLoad] = useState(false);
 
   // PlateCheck
   const [plateDesc, setPlateDesc] = useState('');
   const [plateResult, setPlateResult] = useState(null);
   const [plateLoad, setPlateLoad] = useState(false);
+  const [platePhoto, setPlatePhoto] = useState(null);
+  const [platePhotoB64, setPlatePhotoB64] = useState(null);
 
   // Medications
   const [medRx, setMedRx] = useState(patient?.medications || '');
@@ -524,11 +633,28 @@ export default function MeetMario({ patient: patientProp }) {
   };
 
   const runPlateCheck = async () => {
-    if (!plateDesc.trim()) return; setPlateLoad(true); setPlateResult(null);
+    if (!plateDesc.trim() && !platePhotoB64) return;
+    setPlateLoad(true); setPlateResult(null);
     const severe = (patient.severe||[]).join(', ') || 'none on file';
     const moderate = (patient.moderate||[]).join(', ') || 'none on file';
-    const prompt = `Analyse this meal description against the patient's ALCAT reactive foods.\nMeal: "${plateDesc}"\nPatient severe reactors: ${severe}\nPatient moderate reactors: ${moderate}\nAlso flag: seed oils, garlic, onion, tomato, yeast/fermented ingredients, dairy, sugar.\nOutput:\n- COMPLIANCE: PASS / REVIEW / FAIL\n- FLAGS: list any reactive ingredients found\n- SUBSTITUTIONS: suggest safer swaps if any\n- VERDICT: one sentence clinical note`;
-    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setPlateResult(r); } catch { setPlateResult('Error. Please try again.'); }
+    const rulesSuffix = `\nPatient severe reactors (AVOID): ${severe}\nPatient moderate reactors (AVOID): ${moderate}\nAlso flag: seed oils, canola, sunflower oil, garlic, onion, tomato, yeast, fermented foods, dairy, sugar, oats, legumes if detox phase.\nOutput format:\nCOMPLIANCE: PASS / REVIEW / FAIL\nFLAGS: [list reactive ingredients]\nSUBSTITUTIONS: [safer swaps if needed]\nVERDICT: [one sentence clinical note]`;
+    try {
+      let content;
+      if (platePhotoB64) {
+        content = [
+          { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:platePhotoB64 }},
+          { type:'text', text:`Identify all foods visible in this meal photo. Then assess protocol compliance.${rulesSuffix}${plateDesc ? '\nAdditional context: ' + plateDesc : ''}` }
+        ];
+      } else {
+        content = `Analyse this meal: "${plateDesc}".${rulesSuffix}`;
+      }
+      const res = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:600, system:buildMarioSystemPrompt(patient), messages:[{ role:'user', content }] })
+      });
+      const d = await res.json();
+      setPlateResult((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
+    } catch { setPlateResult('Error. Please try again.'); }
     setPlateLoad(false);
   };
 
@@ -549,10 +675,32 @@ export default function MeetMario({ patient: patientProp }) {
     setOutSymptoms([]); setOutEnergy(5); setOutNotes('');
   };
 
-  const logGut = () => {
-    if (gutType === null) return;
-    setGutLogs(p => [{ id:Date.now(), ts:new Date(), type:gutType, notes:gutNotes }, ...p]);
-    setGutType(null); setGutNotes('');
+  const logGut = async () => {
+    if (gutType === null && !gutPhotoB64) return;
+    setGutAnalysisLoad(true); setGutAnalysis('');
+    try {
+      let content;
+      if (gutPhotoB64) {
+        content = [
+          { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:gutPhotoB64 }},
+          { type:'text', text:`Analyse this stool sample photo using the Bristol Stool Scale (1-7). Identify: (1) Bristol type, (2) colour, (3) consistency, (4) any clinically notable features. The patient is on day ${P?.dayInProtocol||1} of the ALCAT elimination protocol. Provide a brief clinical interpretation relevant to gut healing progress. 3-4 sentences. No emojis.` }
+        ];
+      } else {
+        content = `Patient logged Bristol Type ${gutType}. Day ${P?.dayInProtocol||1} of protocol. Notes: ${gutNotes||'none'}. Severe reactors on file: ${(P?.severe||[]).slice(0,5).join(', ')||'none'}. Give a brief 2-sentence clinical interpretation for gut repair context.`;
+      }
+      const sys = buildMarioSystemPrompt(P);
+      const msgs = [{ role:'user', content }];
+      const res = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:400, system:sys, messages:msgs })
+      });
+      const d = await res.json();
+      const analysis = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      setGutAnalysis(analysis);
+      setGutLogs(prev => [{ id:Date.now(), ts:new Date(), type:gutType, notes:gutNotes, photo:gutPhotoB64?true:false, analysis }, ...prev]);
+    } catch { setGutAnalysis('Analysis unavailable. Entry logged.'); }
+    setGutAnalysisLoad(false);
+    setGutType(null); setGutNotes(''); setGutPhoto(null); setGutPhotoB64(null);
   };
 
   const allFoods = [
@@ -1261,20 +1409,37 @@ export default function MeetMario({ patient: patientProp }) {
               </button>
             ))}
           </div>
+          {/* Photo upload */}
+          <div style={{ marginBottom:16 }}>
+            <FieldLabel>Photo (optional — Mario reads it automatically)</FieldLabel>
+            <label style={{ display:'block', border:`2px dashed ${gutPhoto?T.rg:T.w3}`, borderRadius:10, padding:'16px', textAlign:'center', cursor:'pointer', background:gutPhoto?T.rgBg:T.w1, transition:'all 0.2s' }}>
+              <input type="file" accept="image/*" capture="environment" style={{ display:'none' }}
+                onChange={e=>{ const f=e.target.files[0]; if(f){ setGutPhoto(URL.createObjectURL(f)); const r=new FileReader(); r.onload=ev=>setGutPhotoB64(ev.target.result.split(',')[1]); r.readAsDataURL(f); }}}/>
+              {gutPhoto
+                ? <img src={gutPhoto} alt="stool sample" style={{ maxHeight:120, borderRadius:8, display:'block', margin:'0 auto' }}/>
+                : <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4 }}>Tap to take photo or upload · Mario analyses Bristol type automatically</div>
+              }
+            </label>
+          </div>
           <FieldLabel>Notes</FieldLabel>
           <RuledInput value={gutNotes} onChange={e=>setGutNotes(e.target.value)} placeholder="Any relevant notes — pain, urgency, colour, timing…" style={{ marginBottom:16 }}/>
-          <BtnPrimary onClick={logGut} disabled={gutType===null}>Log entry</BtnPrimary>
+          <BtnPrimary onClick={logGut} disabled={gutType===null && !gutPhotoB64}>{gutAnalysisLoad?'Analysing…':'Log & Analyse'}</BtnPrimary>
+          {gutAnalysis && <div style={{ marginTop:16, padding:'14px 16px', background:T.rgBg, borderRadius:8, borderLeft:`3px solid ${T.rg}` }}>
+            <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.rg, letterSpacing:'0.14em', marginBottom:8 }}>MARIO ANALYSIS</div>
+            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.7 }}>{gutAnalysis}</div>
+          </div>}
         </Panel>
         {gutLogs.length > 0 && <Panel>
           <FieldLabel>Journal ({gutLogs.length} entries)</FieldLabel>
           {gutLogs.slice(0,10).map(e=>(
             <div key={e.id} style={{ display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${T.w2}` }}>
-              <div style={{ width:32,height:32,borderRadius:'50%',background:e.type<=2||e.type>=6?`${T.err}18`:e.type===4?`${T.ok}18`:`${T.warn}18`,border:`1px solid ${e.type<=2||e.type>=6?T.err:e.type===4?T.ok:T.warn}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                <span style={{ fontFamily:fonts.mono,fontSize:12,fontWeight:500,color:e.type<=2||e.type>=6?T.err:e.type===4?T.ok:T.warn }}>{e.type}</span>
+              <div style={{ width:32,height:32,borderRadius:'50%',background:e.type&&e.type<=2||e.type>=6?`${T.err}18`:e.type===4?`${T.ok}18`:`${T.warn}18`,border:`1px solid ${e.type&&e.type<=2||e.type>=6?T.err:e.type===4?T.ok:T.warn}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                <span style={{ fontFamily:fonts.mono,fontSize:12,fontWeight:500,color:e.type&&e.type<=2||e.type>=6?T.err:e.type===4?T.ok:T.warn }}>{e.type||'P'}</span>
               </div>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.mono }}>{new Date(e.ts).toLocaleDateString('en-SE')} {new Date(e.ts).toLocaleTimeString('en-SE',{hour:'2-digit',minute:'2-digit'})}</div>
+                <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.mono }}>{new Date(e.ts).toLocaleDateString('en-SE')} {new Date(e.ts).toLocaleTimeString('en-SE',{hour:'2-digit',minute:'2-digit'})}{e.photo?' · photo':''}</div>
                 {e.notes && <div style={{ fontSize:12,color:T.w5,fontFamily:fonts.sans,fontWeight:300,marginTop:2 }}>{e.notes}</div>}
+                {e.analysis && <div style={{ fontSize:11,color:T.w5,fontFamily:fonts.sans,marginTop:4,fontStyle:'italic' }}>{e.analysis.slice(0,120)}…</div>}
               </div>
             </div>
           ))}
@@ -1288,9 +1453,21 @@ export default function MeetMario({ patient: patientProp }) {
         <Eyebrow>AI meal compliance scanner</Eyebrow>
         <SectionTitle>Plate<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Check</em></SectionTitle>
         <Panel>
-          <FieldLabel>Describe your meal</FieldLabel>
-          <RuledInput multiline rows={3} value={plateDesc} onChange={e=>setPlateDesc(e.target.value)} placeholder="e.g. Grilled salmon with roasted broccoli, olive oil, and quinoa. Side salad with lemon dressing." style={{ marginBottom:20 }}/>
-          <BtnPrimary onClick={runPlateCheck} loading={plateLoad} disabled={!plateDesc.trim()}>Scan meal for compliance</BtnPrimary>
+          {/* Photo */}
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>Photo your plate</FieldLabel>
+            <label style={{ display:'block', border:`2px dashed ${platePhoto?T.rg:T.w3}`, borderRadius:10, padding:'20px', textAlign:'center', cursor:'pointer', background:platePhoto?T.rgBg:T.w1, transition:'all 0.2s' }}>
+              <input type="file" accept="image/*" capture="environment" style={{ display:'none' }}
+                onChange={e=>{ const f=e.target.files[0]; if(f){ setPlatePhoto(URL.createObjectURL(f)); const r=new FileReader(); r.onload=ev=>setPlatePhotoB64(ev.target.result.split(',')[1]); r.readAsDataURL(f); }}}/>
+              {platePhoto
+                ? <img src={platePhoto} alt="meal" style={{ maxHeight:180, borderRadius:8, display:'block', margin:'0 auto' }}/>
+                : <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w4 }}>Tap to take a photo of your plate — Mario identifies every ingredient</div>
+              }
+            </label>
+          </div>
+          <FieldLabel>Or describe your meal</FieldLabel>
+          <RuledInput multiline rows={2} value={plateDesc} onChange={e=>setPlateDesc(e.target.value)} placeholder="e.g. Grilled salmon with roasted broccoli, olive oil, and quinoa. Side salad with lemon dressing." style={{ marginBottom:20 }}/>
+          <BtnPrimary onClick={runPlateCheck} disabled={plateLoad||(!plateDesc.trim()&&!platePhotoB64)}>{plateLoad?'Scanning…':'Scan for compliance'}</BtnPrimary>
         </Panel>
         {plateResult && <Panel>
           {(() => {
@@ -1409,27 +1586,29 @@ export default function MeetMario({ patient: patientProp }) {
         </div>
         <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
       </div>
-      {/* Hero */}
-      <div style={{ position:'relative',zIndex:2,padding:'80px 72px 100px',maxWidth:860 }}>
-        <div style={{ display:'inline-flex',alignItems:'center',gap:12,marginBottom:44 }}>
+      {/* Hero — everything above the fold, no scroll */}
+      <div style={{ position:'relative',zIndex:2,padding:'28px 60px 0',maxWidth:860,height:'calc(100vh - 58px)',display:'flex',flexDirection:'column',justifyContent:'center' }}>
+        <div style={{ display:'inline-flex',alignItems:'center',gap:12,marginBottom:20 }}>
           <div style={{ width:28,height:1,background:T.rg }}/>
           <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.24em',textTransform:'uppercase' }}>precision medicine · stockholm</span>
         </div>
-        <h1 style={{ fontFamily:fonts.serif,fontSize:72,fontWeight:400,lineHeight:0.95,letterSpacing:'-0.02em',color:T.w7,marginBottom:28 }}>
+        <h1 style={{ fontFamily:fonts.serif,fontSize:54,fontWeight:400,lineHeight:1.0,letterSpacing:'-0.02em',color:T.w7,marginBottom:16 }}>
           Your body has<br/>been speaking.<br/>
           <em style={{ fontStyle:'italic',background:`linear-gradient(118deg,${T.rg2} 0%,${T.rg} 22%,#ECC8B8 36%,${T.rg} 50%,${T.rg2} 72%,${T.rg3} 88%,${T.rg} 100%)`,backgroundSize:'220% auto',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',animation:'shimmer 5.5s linear infinite' }}>We translate it.</em>
         </h1>
-        <p style={{ fontSize:16,fontWeight:300,color:T.w5,lineHeight:1.8,maxWidth:480,marginBottom:52,fontFamily:fonts.sans }}>A clinical intake built on proprietary immune reactivity data. Ten minutes. A 21-day anti-inflammatory protocol designed for your precise biology.</p>
-        <div style={{ display:'flex',gap:0,borderTop:`1px solid ${T.w3}`,borderBottom:`1px solid ${T.w3}`,marginBottom:52,width:'fit-content' }}>
+        <p style={{ fontSize:15,fontWeight:300,color:T.w5,lineHeight:1.7,maxWidth:480,marginBottom:28,fontFamily:fonts.sans }}>A clinical intake built on proprietary immune reactivity data. Ten minutes. A 21-day protocol designed for your precise biology.</p>
+        <div style={{ display:'flex',gap:0,borderTop:`1px solid ${T.w3}`,borderBottom:`1px solid ${T.w3}`,marginBottom:32,width:'fit-content' }}>
           {[['21','Day Protocol'],['10′','Intake Time'],['7','Patent Claims'],['4','Diagnostic Pillars']].map(([n,l],i,arr)=>(
-            <div key={l} style={{ padding:'18px 36px 16px 0',marginRight:36,borderRight:i<arr.length-1?`1px solid ${T.w3}`:'none' }}>
-              <div style={{ fontFamily:fonts.serif,fontSize:34,fontWeight:400,color:T.w7,letterSpacing:'-0.03em',lineHeight:1,marginBottom:5 }}>{n}</div>
-              <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>{l}</div>
+            <div key={l} style={{ padding:'12px 28px 10px 0',marginRight:28,borderRight:i<arr.length-1?`1px solid ${T.w3}`:'none' }}>
+              <div style={{ fontFamily:fonts.serif,fontSize:26,fontWeight:400,color:T.w7,letterSpacing:'-0.03em',lineHeight:1,marginBottom:4 }}>{n}</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>{l}</div>
             </div>
           ))}
         </div>
-        <BtnPrimary onClick={()=>{setShowLanding(false);setShowOnboarding(true);}}>Begin Assessment</BtnPrimary>
-        <p style={{ marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em' }}>~10 minutes · GDPR compliant · No credit card required</p>
+        <div style={{ display:'flex',alignItems:'center',gap:20 }}>
+          <BtnPrimary onClick={()=>{setShowLanding(false);setShowOnboarding(true);}}>Begin Assessment</BtnPrimary>
+          <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.12em' }}>~10 min · GDPR · No card required</span>
+        </div>
       </div>
       <style>{`@keyframes ob1{0%,100%{transform:translate(0,0) scale(1) rotate(0deg)}25%{transform:translate(36px,-30px) scale(1.04) rotate(4deg)}50%{transform:translate(14px,38px) scale(.97) rotate(-3deg)}75%{transform:translate(-24px,12px) scale(1.02) rotate(6deg)}}@keyframes ob2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-28px,22px) scale(.95)}70%{transform:translate(20px,-16px) scale(1.03)}}@keyframes ob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-18px,-24px) scale(1.07)}}@keyframes ca1{0%,100%{opacity:.38;transform:rotate(-6deg) scaleX(1)}50%{opacity:.08;transform:rotate(-3deg) scaleX(1.45)}}@keyframes ca2{0%,100%{opacity:.32;transform:rotate(9deg) scaleX(1)}50%{opacity:.06;transform:rotate(6deg) scaleX(.62)}}@keyframes shimmer{0%{background-position:0% center}100%{background-position:220% center}}`}</style>
     </div>
@@ -1437,7 +1616,172 @@ export default function MeetMario({ patient: patientProp }) {
 
   // ── ONBOARDING ────────────────────────────────────────────────────────────────
   if (showOnboarding) return (
-    <Onboarding onComplete={(data)=>{ setPatient(data); setShowOnboarding(false); setTab('monitor'); }}/>
+    <Onboarding onComplete={(data)=>{
+      setPatient(data);
+      setShowOnboarding(false);
+      let score = 20;
+      if (data.symptoms?.length >= 5) score += 25;
+      else if (data.symptoms?.length >= 3) score += 15;
+      else if (data.symptoms?.length >= 1) score += 8;
+      if (data.yearsInCurrentCountry && +data.yearsInCurrentCountry < 5) score += 12;
+      if (data.hormonalStatus && data.hormonalStatus !== 'Not applicable') score += 8;
+      if (data.medications?.trim()) score += 10;
+      if (data.conditions?.trim()) score += 10;
+      setBesScore(Math.min(score, 92));
+      setShowBES(true);
+    }}/>
+  );
+
+  // ── BES RESULTS ────────────────────────────────────────────────────────────────
+  if (showBES) {
+    const s = besScore;
+    const level = s < 35 ? 'Low' : s < 60 ? 'Moderate' : 'Elevated';
+    const levelColor = s < 35 ? T.ok : s < 60 ? T.warn : T.err;
+    const arc = Math.round((s / 100) * 180);
+    const desc = s < 35
+      ? 'Your biological signals suggest a relatively low entropic burden. Your system has strong repair capacity and is likely to respond quickly to the protocol.'
+      : s < 60
+      ? 'Your biological signals suggest a moderate entropic burden accumulated over time. Your system has good repair capacity but will benefit from the full 90-day protocol.'
+      : 'Your biological signals suggest an elevated entropic burden with deeper systemic involvement. Your system will respond — but in layers. The full multi-stage protocol is what your biology needs.';
+    return (
+      <div style={{ minHeight:'100vh', background:T.w, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:fonts.sans }}>
+        <div style={{ maxWidth:520, width:'100%', padding:'0 24px', textAlign:'center' }}>
+          <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:20 }}>
+            Biological Entropy Score
+          </div>
+          {/* SVG Gauge */}
+          <svg width={260} height={150} viewBox="0 0 260 150" style={{ display:'block', margin:'0 auto 8px' }}>
+            <path d="M 20 140 A 110 110 0 0 1 240 140" fill="none" stroke={T.w2} strokeWidth={14} strokeLinecap="round"/>
+            <path d="M 20 140 A 110 110 0 0 1 240 140" fill="none" stroke={levelColor} strokeWidth={14} strokeLinecap="round"
+              strokeDasharray={`${arc * 1.92} 346`} style={{ transition:'stroke-dasharray 1.2s ease' }}/>
+            <text x={130} y={120} textAnchor="middle" fontFamily="'Playfair Display',serif" fontSize={48} fontWeight={400} fill={T.w7}>{s}</text>
+            <text x={130} y={142} textAnchor="middle" fontFamily="'IBM Plex Mono',monospace" fontSize={9} fill={T.w4} letterSpacing="4">/ 100</text>
+          </svg>
+          <div style={{ fontFamily:fonts.mono, fontSize:11, fontWeight:500, color:levelColor, letterSpacing:'0.15em', textTransform:'uppercase', marginBottom:16 }}>
+            {level} Entropy
+          </div>
+          <h2 style={{ fontFamily:fonts.serif, fontSize:26, fontWeight:400, color:T.w7, marginBottom:16, lineHeight:1.3 }}>
+            Your biology is ready<br/>to begin the reset.
+          </h2>
+          <p style={{ fontSize:14, color:T.w5, lineHeight:1.7, marginBottom:32 }}>{desc}</p>
+          <div style={{ background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:10, padding:'14px 20px', marginBottom:32, textAlign:'left' }}>
+            <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>Protocol assigned</div>
+            <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w7 }}>Option A — 21-Day Universal GCR Detox</div>
+            <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5, marginTop:4 }}>The fastest path to immune silence. Saves 3 months vs rotation-only approach.</div>
+          </div>
+          <button onClick={async()=>{
+            setShowBES(false); setShowDiet(true); setDietLoading(true); setDietPlan('');
+            const pd = patient;
+            const severe = (pd.severe||[]).join(', ') || 'none uploaded yet';
+            const mild = (pd.mild||[]).join(', ') || 'none';
+            const origin = pd.geographyOfOrigin || 'not specified';
+            const symptoms = (pd.symptoms||[]).join(', ') || 'not specified';
+            const prompt = `Generate a complete 21-day GCR elimination diet plan for this patient.
+
+PATIENT PROFILE:
+- Foods to AVOID (severe reactors): ${severe}
+- Foods to AVOID (mild reactors): ${mild}
+- Ancestral origin: ${origin}
+- Chief symptoms: ${symptoms}
+- Protocol: Option A — 21-day universal GCR detox
+
+UNIVERSAL RULES (apply regardless of ALCAT):
+- No seed oils (use olive oil, coconut oil, tallow only)
+- No dairy (21 days minimum)
+- No yeast, fermented foods, vinegar, mushrooms
+- No sugar (Manuka UMF 10+ 1 tsp morning only)
+- No oats, no legumes during detox
+- No grapes or grape products
+- Wild-caught fish only
+- Meals every 3 hours — CPF balance
+- High fresh whole fruit (from green list) — microbiome restoration
+
+MEAL TIMING:
+06:00-07:00 Breakfast: fruit + crispbread + Manuka + nut butter
+09:30 Mid-morning: fruit or veg snack
+12:30 Lunch: veg + salad + weekly protein rotation
+15:30 Snack: veg or fruit
+19:00 Dinner: mirror lunch structure
+
+WEEKLY ROTATION:
+Mon: grains/starch | Tue: soup | Wed: legumes | Thu: white protein | Fri: vegetarian | Sat: fish | Sun: red meat
+
+Generate each of the 21 days with: breakfast, mid-morning, lunch, snack, dinner.
+Keep dishes simple and clinical. No emojis. Format clearly by day.
+Tailor to the patient's ancestral origin where possible in the post-detox rebuild notes.`;
+            try {
+              const res = await fetch('/api/chat', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:4000, system:buildMarioSystemPrompt(pd), messages:[{role:'user',content:prompt}] })
+              });
+              const d = await res.json();
+              setDietPlan((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
+            } catch { setDietPlan('Generation failed. Your dashboard is ready — use the Generate tab to create your meal plan.'); }
+            setDietLoading(false);
+          }} style={{
+            background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px',
+            fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'0.04em',
+          }}>
+            Generate My 21-Day Plan
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 21-DAY DIET SCREEN ─────────────────────────────────────────────────────
+  if (showDiet) return (
+    <div style={{ minHeight:'100vh', background:T.w, fontFamily:fonts.sans }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}`}</style>
+      <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')}/>
+      <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px' }}>
+        <Eyebrow>Your personalised protocol</Eyebrow>
+        <div style={{ fontFamily:fonts.serif, fontSize:32, fontWeight:400, color:T.w7, marginBottom:8, lineHeight:1.2 }}>
+          21-Day GCR Elimination Diet
+        </div>
+        <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:32 }}>
+          Built on your ALCAT results and ancestral food library.
+        </div>
+        {dietLoading ? (
+          <Panel style={{ textAlign:'center', padding:60 }}>
+            <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w5, marginBottom:20, fontStyle:'italic' }}>
+              Building your personalised protocol...
+            </div>
+            <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
+              {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+            </div>
+            <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:20, letterSpacing:'0.12em' }}>
+              CROSS-REFERENCING ALCAT DATA · CALIBRATING TO ANCESTRAL LIBRARY
+            </div>
+          </Panel>
+        ) : (
+          <Panel>
+            <pre style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.9, whiteSpace:'pre-wrap', margin:0 }}>{dietPlan}</pre>
+          </Panel>
+        )}
+        {!dietLoading && (
+          <div style={{ display:'flex', gap:12, marginTop:24 }}>
+            <button onClick={()=>{ setShowDiet(false); setTab('monitor'); }} style={{
+              background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px',
+              fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer',
+            }}>
+              Enter Dashboard
+            </button>
+            <button onClick={()=>{
+              const el = document.createElement('a');
+              el.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(dietPlan);
+              el.download = 'MeetMario-21Day-Plan.txt';
+              el.click();
+            }} style={{
+              background:'transparent', color:T.rg, border:`1px solid ${T.rg3}`, borderRadius:9, padding:'13px 28px',
+              fontFamily:fonts.sans, fontSize:13, fontWeight:600, cursor:'pointer',
+            }}>
+              Download Plan
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 
   // ── DASHBOARD ─────────────────────────────────────────────────────────────────
