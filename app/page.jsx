@@ -916,19 +916,87 @@ export default function MeetMario({ patient: patientProp }) {
     const isImage = file.type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'].includes(ext);
     const isVCF = ext === 'vcf' || ext === 'txt';
     const isWord = ext === 'doc' || ext === 'docx';
+    const isZip = ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
     const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
     try {
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = e => res(e.target.result.split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      // ZIP files — extract and process each file inside
+      if (isZip) {
+        const arrayBuffer = await file.arrayBuffer();
+        // Parse ZIP directory (minimal ZIP reader — handles standard ZIP files)
+        const view = new DataView(arrayBuffer);
+        const files = [];
+        // Find end of central directory
+        let eocdOffset = -1;
+        for (let i = arrayBuffer.byteLength - 22; i >= Math.max(0, arrayBuffer.byteLength - 65557); i--) {
+          if (view.getUint32(i, true) === 0x06054b50) { eocdOffset = i; break; }
+        }
+        if (eocdOffset >= 0) {
+          const cdOffset = view.getUint32(eocdOffset + 16, true);
+          const cdEntries = view.getUint16(eocdOffset + 10, true);
+          let pos = cdOffset;
+          for (let i = 0; i < cdEntries && pos < arrayBuffer.byteLength; i++) {
+            if (view.getUint32(pos, true) !== 0x02014b50) break;
+            const compMethod = view.getUint16(pos + 10, true);
+            const compSize = view.getUint32(pos + 20, true);
+            const uncompSize = view.getUint32(pos + 24, true);
+            const nameLen = view.getUint16(pos + 28, true);
+            const extraLen = view.getUint16(pos + 30, true);
+            const commentLen = view.getUint16(pos + 32, true);
+            const localOffset = view.getUint32(pos + 42, true);
+            const name = new TextDecoder().decode(new Uint8Array(arrayBuffer, pos + 46, nameLen));
+            pos += 46 + nameLen + extraLen + commentLen;
+            if (name.endsWith('/') || compSize === 0) continue; // skip directories
+            // Read local file header to find data start
+            const localNameLen = view.getUint16(localOffset + 26, true);
+            const localExtraLen = view.getUint16(localOffset + 28, true);
+            const dataStart = localOffset + 30 + localNameLen + localExtraLen;
+            const rawData = new Uint8Array(arrayBuffer, dataStart, compSize);
+            let fileData;
+            if (compMethod === 0) { fileData = rawData; }
+            else if (compMethod === 8) {
+              try { const ds = new DecompressionStream('deflate-raw'); const w = ds.writable.getWriter(); const rr = ds.readable.getReader(); w.write(rawData); w.close(); const chunks = []; let done = false; while (!done) { const { value, done: d } = await rr.read(); if (value) chunks.push(value); done = d; } fileData = new Uint8Array(chunks.reduce((a, c) => a + c.length, 0)); let off = 0; for (const c of chunks) { fileData.set(c, off); off += c.length; } } catch { continue; }
+            } else continue;
+            const fileExt = name.split('.').pop().toLowerCase();
+            if (['vcf','txt','csv','tsv'].includes(fileExt)) {
+              files.push({ name, text: new TextDecoder().decode(fileData), type: 'text' });
+            } else if (['pdf'].includes(fileExt)) {
+              files.push({ name, data: fileData, type: 'pdf' });
+            } else if (['jpg','jpeg','png','gif','webp'].includes(fileExt)) {
+              files.push({ name, data: fileData, type: 'image', ext: fileExt });
+            }
+          }
+        }
+        if (files.length === 0) { setDashLabError('No readable files found in ZIP'); setDashLabParsing(false); return; }
+        // Process each extracted file
+        for (const zf of files) {
+          if (zf.type === 'text') {
+            const blob = new Blob([zf.text], { type: 'text/plain' });
+            const extracted = new File([blob], zf.name, { type: 'text/plain' });
+            await dashParseFile(extracted, isAdditional || files.indexOf(zf) > 0);
+          } else if (zf.type === 'pdf') {
+            const blob = new Blob([zf.data], { type: 'application/pdf' });
+            const extracted = new File([blob], zf.name, { type: 'application/pdf' });
+            await dashParseFile(extracted, isAdditional || files.indexOf(zf) > 0);
+          } else if (zf.type === 'image') {
+            const mtype = zf.ext === 'png' ? 'image/png' : zf.ext === 'webp' ? 'image/webp' : 'image/jpeg';
+            const blob = new Blob([zf.data], { type: mtype });
+            const extracted = new File([blob], zf.name, { type: mtype });
+            await dashParseFile(extracted, isAdditional || files.indexOf(zf) > 0);
+          }
+        }
+        setDashLabParsing(false);
+        return;
+      }
 
-      // VCF / text files — send as text content
+      // VCF / text files — read as text (not base64) to avoid encoding issues
       if (isVCF || isWord) {
-        const textContent = atob(base64);
+        const textContent = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsText(file);
+        });
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -972,7 +1040,13 @@ export default function MeetMario({ patient: patientProp }) {
         return;
       }
 
-      // PDF / Image — use document or image block
+      // PDF / Image — read as base64, then use document or image block
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
       const fileBlock = isPDF
         ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
         : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
@@ -2306,7 +2380,7 @@ Lowercase English names. Translate Swedish to English.` }
             ) : (
               <div>
                 <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w6, marginBottom:6 }}>Drop your lab results here</div>
-                <div style={{ fontFamily:fonts.sans, fontSize:11, color:T.w4, marginBottom:14 }}>ALCAT PDF · CMA/CNA report · Lab photo · VCF genetic data</div>
+                <div style={{ fontFamily:fonts.sans, fontSize:11, color:T.w4, marginBottom:14 }}>ALCAT PDF · CMA/CNA report · Lab photo · VCF genetic data · ZIP archive</div>
               </div>
             )}
 
@@ -2316,7 +2390,7 @@ Lowercase English names. Translate Swedish to English.` }
 
             <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:12, flexWrap:'wrap' }}>
               <label style={{ cursor:'pointer' }}>
-                <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx" style={{ display:'none' }}
+                <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx,.zip" style={{ display:'none' }}
                   onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, false); } }}/>
                 <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600 }}>
                   {dashLabSuccess ? 'Replace results' : 'Choose file'}
@@ -2324,7 +2398,7 @@ Lowercase English names. Translate Swedish to English.` }
               </label>
               {dashLabSuccess && (
                 <label style={{ cursor:'pointer' }}>
-                  <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx" style={{ display:'none' }}
+                  <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx,.zip" style={{ display:'none' }}
                     onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, true); } }}/>
                   <div style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg, borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600 }}>
                     + Add another file
@@ -2357,8 +2431,9 @@ Lowercase English names. Translate Swedish to English.` }
             {[
               { type:'ALCAT / CMA / CNA', formats:'PDF, photo, screenshot', desc:'Food reactivity & nutrient analysis' },
               { type:'Blood work', formats:'PDF, photo', desc:'Standard blood panels, thyroid, hormones' },
-              { type:'VCF genetic data', formats:'.vcf, .txt', desc:'23andMe, AncestryDNA, Dante Labs exports' },
+              { type:'VCF genetic data', formats:'.vcf, .txt, .zip', desc:'23andMe, AncestryDNA, Dante Labs exports' },
               { type:'Clinical reports', formats:'.doc, .docx, PDF', desc:'Doctor\'s notes, specialist reports' },
+              { type:'ZIP archives', formats:'.zip', desc:'Upload multiple files at once — auto-extracted' },
             ].map(ft => (
               <div key={ft.type} style={{ background:T.w, border:`1px solid ${T.w3}`, borderRadius:8, padding:12 }}>
                 <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg2, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:4 }}>{ft.type}</div>
