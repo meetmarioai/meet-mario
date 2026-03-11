@@ -17,7 +17,7 @@ const T = {
   dark: "#18120E", dark2: "#221A14",
 };
 const fonts = {
-  serif: "'Playfair Display', Georgia, 'Times New Roman', serif",
+  serif: "'EB Garamond', Georgia, 'Times New Roman', serif",
   sans:  "'Lato', -apple-system, 'Helvetica Neue', Arial, sans-serif",
   mono:  "'IBM Plex Mono', 'SF Mono', 'Fira Mono', 'Courier New', monospace",
 };
@@ -123,10 +123,20 @@ function detectSpikes(pts) {
 // ── PRIMITIVES ─────────────────────────────────────────────────────────────────
 const Nav = ({ onBabyBalans }) => (
   <div style={{ position:'sticky',top:0,zIndex:200,height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 44px',background:'rgba(247,244,240,0.92)',backdropFilter:'blur(24px) saturate(180%)',WebkitBackdropFilter:'blur(24px) saturate(180%)',borderBottom:`1px solid ${T.w3}` }}>
-    <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-      <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
-      <span style={{ fontFamily:fonts.serif,fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
-    </div>
+    <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
+      <defs>
+        <linearGradient id="rg4s" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#C4887A"/>
+          <stop offset="50%" stopColor="#9A6255"/>
+          <stop offset="100%" stopColor="#C4887A"/>
+        </linearGradient>
+      </defs>
+      <circle cx="3" cy="14" r="2.4" stroke="#C4887A" strokeWidth="0.5" fill="none"/>
+      <circle cx="3" cy="14" r="0.9" fill="#C4887A"/>
+      <text x="9" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">m</text>
+      <path d="M43 14 C43 9.5 36.5 7.5 33 9.5 C29 11.5 29 17.5 33 19.5 C36.5 21.5 43 19.5 43 14 C43 9.5 49.5 7.5 53 9.5 C57 11.5 57 17.5 53 19.5 C49.5 21.5 43 19.5 43 14 Z" fill="none" stroke="url(#rg4s)" strokeWidth="1.5" strokeLinecap="round"/>
+      <text x="57" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">t mario</text>
+    </svg>
     <div style={{ display:'flex',alignItems:'center',gap:18 }}>
       <button onClick={onBabyBalans} style={{ background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',padding:'4px 10px',borderRadius:4,transition:'all .15s' }}>
         Baby Balans
@@ -209,13 +219,17 @@ function AuthScreen({ onAuthed }) {
 
   return (
     <div style={{ minHeight:'100vh', background:T.w, fontFamily:fonts.sans, display:'flex', flexDirection:'column' }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
 
       {/* Nav */}
       <div style={{ padding:'20px 32px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.w2}` }}>
-        <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w7, letterSpacing:'0.02em' }}>
-          <span style={{ color:T.rg, marginRight:6 }}>◉</span>meet mario
-        </div>
+        <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
+          <defs><linearGradient id="rg4a" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#C4887A"/><stop offset="50%" stopColor="#9A6255"/><stop offset="100%" stopColor="#C4887A"/></linearGradient></defs>
+          <circle cx="3" cy="14" r="2.4" stroke="#C4887A" strokeWidth="0.5" fill="none"/><circle cx="3" cy="14" r="0.9" fill="#C4887A"/>
+          <text x="9" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">m</text>
+          <path d="M43 14 C43 9.5 36.5 7.5 33 9.5 C29 11.5 29 17.5 33 19.5 C36.5 21.5 43 19.5 43 14 C43 9.5 49.5 7.5 53 9.5 C57 11.5 57 17.5 53 19.5 C49.5 21.5 43 19.5 43 14 Z" fill="none" stroke="url(#rg4a)" strokeWidth="1.5" strokeLinecap="round"/>
+          <text x="57" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">t mario</text>
+        </svg>
         <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, letterSpacing:'0.16em' }}>MEDIBALANS AB · STOCKHOLM</div>
       </div>
 
@@ -749,7 +763,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
 
   return (
     <div style={{ minHeight:'100vh',background:T.w,fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
       <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
       <div style={{ maxWidth:640,margin:'0 auto',padding:'64px 32px 80px' }}>
         {/* Progress */}
@@ -2106,7 +2120,7 @@ export default function MeetMario({ patient: patientProp }) {
 
   if (showLanding) return (
     <div style={{ minHeight:'100vh',background:T.w,overflow:'hidden',position:'relative' }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}button:hover{opacity:0.88}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}button:hover{opacity:0.88}`}</style>
       {/* Orbs */}
       {[{s:520,c:`rgba(220,180,168,0.22)`,an:'ob1',t:'8%',l:'58%'},{s:360,c:`rgba(196,136,122,0.14)`,an:'ob2',t:'40%',l:'72%'},{s:440,c:`rgba(240,210,195,0.16)`,an:'ob3',t:'-8%',l:'36%'}].map((o,i)=>(
         <div key={i} style={{ position:'absolute',top:o.t,left:o.l,width:o.s,height:o.s,borderRadius:'50%',background:o.c,filter:'blur(80px)',animation:`${o.an} ${14+i*2.5}s ease-in-out infinite`,pointerEvents:'none' }}/>
@@ -2117,10 +2131,13 @@ export default function MeetMario({ patient: patientProp }) {
       ))}
       {/* Nav */}
       <div style={{ position:'relative',zIndex:10,height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 60px',borderBottom:`1px solid ${T.w3}` }}>
-        <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-          <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)` }}/>
-          <span style={{ fontFamily:fonts.serif,fontSize:18,fontWeight:400,color:T.w7 }}>meet mario</span>
-        </div>
+        <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
+          <defs><linearGradient id="rg4l" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#C4887A"/><stop offset="50%" stopColor="#9A6255"/><stop offset="100%" stopColor="#C4887A"/></linearGradient></defs>
+          <circle cx="3" cy="14" r="2.4" stroke="#C4887A" strokeWidth="0.5" fill="none"/><circle cx="3" cy="14" r="0.9" fill="#C4887A"/>
+          <text x="9" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">m</text>
+          <path d="M43 14 C43 9.5 36.5 7.5 33 9.5 C29 11.5 29 17.5 33 19.5 C36.5 21.5 43 19.5 43 14 C43 9.5 49.5 7.5 53 9.5 C57 11.5 57 17.5 53 19.5 C49.5 21.5 43 19.5 43 14 Z" fill="none" stroke="url(#rg4l)" strokeWidth="1.5" strokeLinecap="round"/>
+          <text x="57" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">t mario</text>
+        </svg>
         <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
       </div>
       {/* Hero — everything above the fold, no scroll */}
@@ -2331,7 +2348,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
   // ── 21-DAY DIET SCREEN ─────────────────────────────────────────────────────
   if (showDiet) return (
     <div style={{ minHeight:'100vh', background:T.w, fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}`}</style>
       <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
       <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px' }}>
         <Eyebrow>Your personalised protocol</Eyebrow>
@@ -2386,7 +2403,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
   // ── DASHBOARD ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight:'100vh',background:T.w,color:T.w7,fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:${T.w3};border-radius:2px}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:${T.w3};border-radius:2px}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
       {popup && <SpikePopup/>}
       <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
       {/* Tab bar */}
