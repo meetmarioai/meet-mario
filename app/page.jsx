@@ -377,23 +377,36 @@ function Onboarding({ onComplete }) {
     const ext = (file.name || '').split('.').pop().toLowerCase();
     const isPDF = file.type === 'application/pdf' || ext === 'pdf';
     const isImage = file.type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'].includes(ext);
+    const isVCF = ext === 'vcf' || ext === 'txt' || file.type === 'text/plain';
     const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
-    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| size:', (file.size/1024).toFixed(0)+'KB');
+    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| size:', (file.size/1024).toFixed(0)+'KB');
 
     try {
-      const base64 = await fileToBase64(file);
+      let content;
 
-      // Build content — PDFs use document type (native Anthropic support), images use image type
-      const fileBlock = isPDF
-        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-        : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
+      if (isVCF) {
+        // VCF / plain-text — read as string, truncate to ~120 KB to stay within token limits
+        const rawText = await file.text();
+        const truncated = rawText.length > 120000 ? rawText.slice(0, 120000) + '\n...[truncated]' : rawText;
+        console.log('[Lab parse] Sending VCF text, chars:', truncated.length);
+        content = [
+          { type: 'text', text: `This is a genomic VCF (Variant Call Format) file. Extract all clinically significant variants.\n\nFile contents:\n\`\`\`\n${truncated}\n\`\`\`` },
+          { type: 'text', text: `Return ONLY this JSON (no markdown):\n{"report_type":"VCF","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}\n\nMap variants to arrays by clinical significance: pathogenic/likely pathogenic → "severe", variant of uncertain significance → "moderate", benign/likely benign → "mild". Use HGVS notation or gene+variant name. Lowercase.` }
+        ];
+      } else {
+        const base64 = await fileToBase64(file);
 
-      console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'block, base64 length:', base64.length);
+        // Build content — PDFs use document type (native Anthropic support), images use image type
+        const fileBlock = isPDF
+          ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+          : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
 
-      const content = [
-        fileBlock,
-        { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
+        console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'block, base64 length:', base64.length);
+
+        content = [
+          fileBlock,
+          { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
 
 REPORT TYPE 1 — ALCAT (food immune reactivity):
 Extract every food/substance with a reactivity level.
@@ -415,7 +428,8 @@ Extract any out-of-range markers into "moderate", normal into "mild".
 Return ONLY this JSON (no markdown):
 {"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}
 Lowercase English names. Translate Swedish to English. Include EVERY nutrient found.` }
-      ];
+        ];
+      } // end else (PDF / image)
 
       const res = await fetch('/api/chat', {
         method: 'POST',
