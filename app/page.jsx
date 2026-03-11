@@ -2372,7 +2372,61 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
               {P.name ? `Hello${P.name?' — this is your personalised clinical AI built on your ALCAT data and the full MediBalans protocol.':'.'}` : 'Introduce yourself and I will personalise my responses to your protocol.'}
             </div>
             <div style={{ display:'flex',flexWrap:'wrap',gap:7 }}>
-              {['Why can I not eat oats?','What should I eat on Day 2?','I feel worse — is this normal?','Explain my Candida protocol','Can I exercise on the detox?'].map(q=>(
+              {(() => {
+                const day = P.dayInProtocol || 1;
+                const hasAlcat = (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0;
+                const hasCma = (P.cmaDeficiencies?.length||0) > 0;
+                const hasSnps = (P.genomicSnps?.length||0) > 0;
+                const hasRedox = P.redoxScore != null;
+                // Day 1-3: Getting started
+                if (day <= 3) return [
+                  'What should I eat today?',
+                  'Why do we remove these specific foods?',
+                  hasAlcat ? 'Walk me through my ALCAT results' : 'What tests should I start with?',
+                  'What is the 3-hour meal rhythm?',
+                  hasCma ? 'What do my CMA results mean?' : 'How does this protocol work?',
+                ];
+                // Day 4-7: Detox reactions likely
+                if (day <= 7) return [
+                  'I feel different — is this the detox reaction?',
+                  `What should I eat on Day ${day}?`,
+                  'Why am I so tired?',
+                  hasSnps ? 'How do my genetics affect the detox?' : 'Can I exercise during detox?',
+                  'What can I eat at a restaurant?',
+                ];
+                // Day 8-14: Settling in
+                if (day <= 14) return [
+                  `Day ${day} — am I on track?`,
+                  'When should I start intermittent fasting?',
+                  hasCma ? 'Which foods correct my deficiencies?' : 'What supplements should I consider?',
+                  hasSnps ? 'How should I train based on my genetics?' : 'What exercise is best right now?',
+                  'Explain the gut healing timeline',
+                ];
+                // Day 15-21: Final detox push
+                if (day <= 21) return [
+                  `Day ${day} — what changes should I notice?`,
+                  'What happens after the 21-day detox?',
+                  hasRedox ? `My REDOX is ${P.redoxScore} — what does that mean for my diet?` : 'How do I maintain these results?',
+                  hasSnps ? 'Explain my methylation pathway' : 'What is methylation and why does it matter?',
+                  'Design my post-detox longevity diet',
+                ];
+                // Day 22-60: Post-detox rebuild
+                if (day <= 60) return [
+                  'Which foods can I reintroduce now?',
+                  hasCma ? 'Are my nutrient deficiencies improving?' : 'What should I track at this stage?',
+                  hasSnps ? 'How do my genes affect my recovery timeline?' : 'When will I feel fully better?',
+                  'Optimise my circadian rhythm for recovery',
+                  hasRedox ? 'What should my REDOX target be?' : 'Explain the 90-day biological arc',
+                ];
+                // Day 61+: Longevity phase
+                return [
+                  'Design my long-term longevity diet',
+                  hasSnps ? 'What hormetic practices suit my genetics?' : 'What is hormesis and how do I use it?',
+                  'How do I maintain immune silence long-term?',
+                  hasCma ? 'Review my current nutrient status' : 'What should I test next?',
+                  'Explain my biological age trajectory',
+                ];
+              })().map(q=>(
                 <button key={q} onClick={()=>setChatIn(q)} style={{ background:T.rgBg,border:`1px solid ${T.rg}25`,borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:11.5,fontFamily:fonts.sans,color:T.rg2 }}>{q}</button>
               ))}
             </div>
