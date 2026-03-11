@@ -351,8 +351,14 @@ function Onboarding({ onComplete }) {
     if (!file) return;
     setLabParsing(true); setLabParsed(false); setLabParseError(false);
     setLabFileName(file.name);
-    const isPDF = file.type === 'application/pdf';
-    const isImage = file.type.startsWith('image/');
+
+    // Detect file type — fall back to extension if browser doesn't set MIME
+    const ext = (file.name || '').split('.').pop().toLowerCase();
+    const isPDF = file.type === 'application/pdf' || ext === 'pdf';
+    const isImage = file.type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'].includes(ext);
+    const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| size:', (file.size/1024).toFixed(0)+'KB');
 
     try {
       // Read file as base64
@@ -366,11 +372,13 @@ function Onboarding({ onComplete }) {
       // Build content — PDFs use document type (native Anthropic support), images use image type
       const fileBlock = isPDF
         ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-        : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } };
+        : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
+
+      console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'block, base64 length:', base64.length);
 
       const content = [
         fileBlock,
-        { type: 'text', text: `This is a medical lab test result — an ALCAT food immune reactivity report, CMA intracellular analysis, or blood work panel.
+        { type: 'text', text: `This is a medical lab test result — an ALCAT food immune reactivity report, CMA/CNA intracellular analysis, or blood work panel.
 
 TASK: Find every food, substance, or analyte with a reactivity level assigned.
 
@@ -380,12 +388,12 @@ ALCAT classification:
 - Yellow / Class 1 / MILD → "mild" array
 - Green / Class 0 / ACCEPTABLE → omit entirely
 
-CMA reports: "low" or "deficient" nutrients → "mild" array.
+CMA/CNA reports list intracellular nutrient levels. Put any nutrient marked "low", "deficient", or below reference range into the "mild" array.
 
 Return ONLY this JSON (no text before/after, no markdown):
-{"severe":["food1","food2"],"moderate":["food1"],"mild":["food1"]}
+{"severe":["item1","item2"],"moderate":["item1"],"mild":["item1"]}
 
-Lowercase English food names. Translate Swedish to English.
+Lowercase English names. Translate Swedish to English.
 If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
       ];
 
@@ -393,12 +401,18 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
           max_tokens: 4000,
           system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
           messages: [{ role: 'user', content }],
         }),
       });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('[Lab parse] HTTP', res.status, errText.slice(0, 500));
+        throw new Error('API returned ' + res.status);
+      }
+
       const d = await res.json();
       if (d.error) {
         console.error('[Lab parse] API error:', d.error);
@@ -406,6 +420,8 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
       }
       const text = (Array.isArray(d.content) ? d.content : [])
         .filter(b => b.type === 'text').map(b => b.text).join('');
+
+      console.log('[Lab parse] Raw response:', text.slice(0, 300));
 
       let json = { severe:[], moderate:[], mild:[] };
       try {

@@ -1,6 +1,9 @@
 // app/api/chat/route.js
 // Uses raw fetch to Anthropic API — bypasses SDK version issues with document/PDF blocks
 
+// Increase Vercel function timeout (default 10s is too short for PDF parsing)
+export const maxDuration = 60;
+
 export async function POST(req) {
   try {
     const { system, messages, max_tokens = 1200 } = await req.json()
