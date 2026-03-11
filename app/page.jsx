@@ -841,6 +841,7 @@ export default function MeetMario({ patient: patientProp }) {
   const [popupLoading, setPopupLoading] = useState(false);
   const [popupAnalysis, setPopupAnalysis] = useState('');
   const [showDoctorPopup, setShowDoctorPopup] = useState(false);
+  const [showDietBasis, setShowDietBasis] = useState(false);
   const [diary, setDiary] = useState([]);
 
   // Rotation / Meals
@@ -1044,13 +1045,27 @@ export default function MeetMario({ patient: patientProp }) {
         const headerLines = lines.filter(l => l.startsWith('#')).slice(-1); // just the column header
         const dataLines = lines.filter(l => !l.startsWith('#') && l.trim());
 
-        // Filter to clinically relevant SNPs
+        // Detect delimiter — VCFs use tabs, but some exports use spaces or commas
+        const sampleLine = dataLines[0] || '';
+        const delim = sampleLine.includes('\t') ? '\t' : sampleLine.includes(',') ? ',' : /\s+/;
+
+        // Filter to clinically relevant SNPs — also search entire line for rsID patterns
         let relevantLines = dataLines.filter(l => {
-          const id = l.split('\t')[2];
-          return id && clinicalRsIds.has(id);
+          const cols = l.split(delim);
+          const id = cols[2]?.trim();
+          if (id && clinicalRsIds.has(id)) return true;
+          // Some VCFs put rsID in INFO field or other columns — scan whole line
+          const rsMatch = l.match(/rs\d+/g);
+          if (rsMatch) return rsMatch.some(rs => clinicalRsIds.has(rs));
+          return false;
         });
 
-        // If no rsID matches (some VCFs use different ID formats), take first 200 data lines
+        // If no rsID matches, look for ANY rs-prefixed IDs and take those
+        if (relevantLines.length === 0) {
+          relevantLines = dataLines.filter(l => /rs\d+/.test(l)).slice(0, 300);
+        }
+
+        // Final fallback — take first 200 data lines regardless
         if (relevantLines.length === 0) {
           relevantLines = dataLines.slice(0, 200);
         }
@@ -1069,20 +1084,22 @@ export default function MeetMario({ patient: patientProp }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 4000,
-            system: 'You are a clinical genomics analyst. Extract SNP data from VCF files and return structured JSON. Focus on clinically actionable variants.',
-            messages: [{ role: 'user', content: `This is a VCF genetic data file (pre-filtered to ${snpCount} clinically relevant SNPs out of ${dataLines.length} total variants).
+            system: 'You are a clinical genomics analyst. Extract SNP data from VCF/genetic files and return structured JSON. You MUST return valid JSON even if the file format is unusual. Focus on clinically actionable variants.',
+            messages: [{ role: 'user', content: `This is genetic data (VCF or similar format) with ${snpCount} lines containing clinically relevant SNPs out of ${dataLines.length} total variants.
 
-For each SNP found, provide:
-- rsid (e.g. rs1801133)
-- gene name (e.g. MTHFR)
-- genotype (e.g. CT, TT, CC)
+TASK: For each SNP/variant found, extract:
+- rsid (e.g. rs1801133) — look in ID column or anywhere in the line
+- gene name (e.g. MTHFR) — infer from rsID if not explicit
+- genotype (e.g. CT, TT, CC) — from GT field, ALT/REF columns, or genotype columns
 - status: "risk" (homozygous variant), "carrier" (heterozygous), or "normal" (wild type)
-- impact: one sentence clinical relevance for methylation, detox, nutrient metabolism, or inflammation
+- impact: one sentence clinical relevance
 
-Return ONLY this JSON:
-{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","impact":"Reduced folate metabolism ~35%, supplement with methylfolate"}],"severe":[],"moderate":[],"mild":[]}
+IMPORTANT: The data may use tabs, spaces, or commas as delimiters. Adapt to whatever format you see.
 
-VCF data:
+Return ONLY this JSON (no markdown, no explanation):
+{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","impact":"Reduced folate metabolism ~35%"}]}
+
+Data:
 ${filteredContent.slice(0, 30000)}` }],
           }),
         });
@@ -1091,9 +1108,25 @@ ${filteredContent.slice(0, 30000)}` }],
         if (d.error) throw new Error(d.error);
         const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
         let json = {};
-        try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch {
-          const m = text.match(/\{[\s\S]*?"snps"[\s\S]*?\}/);
-          if (m) try { json = JSON.parse(m[0]); } catch {}
+        const cleanText = text.replace(/```json|```/g, '').trim();
+        try { json = JSON.parse(cleanText); } catch {
+          // Find the outermost JSON object containing "snps"
+          const start = cleanText.indexOf('{"snps"');
+          const start2 = cleanText.indexOf('{ "snps"');
+          const idx = start >= 0 ? start : start2;
+          if (idx >= 0) {
+            let depth = 0; let end = idx;
+            for (let i = idx; i < cleanText.length; i++) {
+              if (cleanText[i] === '{') depth++;
+              else if (cleanText[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+            }
+            try { json = JSON.parse(cleanText.slice(idx, end)); } catch {}
+          }
+          // Last resort — try to find any JSON with snps array
+          if (!json.snps) {
+            const m = cleanText.match(/\{[\s\S]*"snps"\s*:\s*\[[\s\S]*\]\s*[\s\S]*\}/);
+            if (m) try { json = JSON.parse(m[0]); } catch {}
+          }
         }
         if (json.snps?.length) {
           setPatient(p => ({ ...p, genomicSnps: [...(p.genomicSnps || []).filter(s => !json.snps.find(n => n.rsid === s.rsid)), ...json.snps] }));
@@ -2911,13 +2944,58 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w7 }}>Option A — 21-Day Universal GCR Detox</div>
             <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5, marginTop:4 }}>The fastest path to immune silence. Saves 3 months vs rotation-only approach.</div>
           </div>
-          <button onClick={async()=>{
-            setShowBES(false); setShowDiet(true); setDietLoading(true); setDietPlan('');
-            const pd = patient;
+          <button onClick={()=>setShowDietBasis(true)} style={{
+            background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px',
+            fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'0.04em',
+          }}>
+            Generate My 21-Day Plan
+          </button>
+
+          {/* Diet basis explanation popup */}
+          {showDietBasis && (
+            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }} onClick={()=>setShowDietBasis(false)}>
+              <div onClick={e=>e.stopPropagation()} style={{ background:T.w, borderRadius:16, maxWidth:540, width:'100%', padding:'36px 32px', boxShadow:'0 24px 80px rgba(0,0,0,0.25)' }}>
+                <div style={{ fontFamily:fonts.serif, fontSize:22, color:T.w7, marginBottom:6 }}>How we design your protocol</div>
+                <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, lineHeight:1.7, marginBottom:20 }}>
+                  Your personalised diet is not generic advice. It is built from multiple layers of your own biological data:
+                </div>
+                <div style={{ display:'grid', gap:12, marginBottom:20 }}>
+                  {[
+                    { icon:'🛡️', title:'Immune system (ALCAT)', desc:'Your innate immune reactivity profile — which foods your immune system recognises as threats. These are excluded to achieve immune silence.', active:(patient.severe?.length||0)+(patient.moderate?.length||0)+(patient.mild?.length||0)>0 },
+                    { icon:'🔬', title:'Cellular function (CMA/CNA)', desc:'Your intracellular micronutrient levels — 55 nutrients measured inside your cells. Deficiencies are corrected through targeted food selection.', active:(patient.cmaDeficiencies?.length||0)+(patient.cmaAdequate?.length||0)>0 },
+                    { icon:'⚡', title:'Antioxidant defence (REDOX)', desc:'Your total antioxidant capacity and individual antioxidant levels. Every meal is designed to restore your redox balance.', active:patient.redoxScore!=null },
+                    { icon:'🧬', title:'Genetics (VCF)', desc:'Your genetic variants in methylation, detox, nutrient metabolism, hormesis response, and autonomic balance. Genes tell us WHY — the protocol addresses WHAT.', active:(patient.genomicSnps?.length||0)>0 },
+                    { icon:'🔮', title:'Proteomics & RNA (coming soon)', desc:'Protein expression and transcriptomic profiling will add the final layer — measuring which genes are actively expressing and which proteins are circulating.', active:false },
+                  ].map(layer => (
+                    <div key={layer.title} style={{ display:'flex', gap:14, padding:'12px 16px', background:layer.active?`${T.ok}06`:T.w1, border:`1px solid ${layer.active?T.ok+'25':T.w3}`, borderRadius:10 }}>
+                      <div style={{ fontSize:20, lineHeight:1 }}>{layer.icon}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:3 }}>
+                          <span style={{ fontFamily:fonts.sans, fontSize:13, fontWeight:600, color:T.w7 }}>{layer.title}</span>
+                          {layer.active ? <span style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, letterSpacing:'0.1em', textTransform:'uppercase', background:`${T.ok}12`, padding:'1px 6px', borderRadius:3 }}>UPLOADED</span>
+                          : layer.title.includes('coming') ? <span style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', textTransform:'uppercase' }}>COMING SOON</span>
+                          : <span style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, letterSpacing:'0.1em', textTransform:'uppercase' }}>NOT YET UPLOADED</span>}
+                        </div>
+                        <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5, lineHeight:1.5 }}>{layer.desc}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, lineHeight:1.6, marginBottom:20, padding:'10px 14px', background:T.w1, borderRadius:8 }}>
+                  The more data layers available, the more precise your protocol. You can always upload additional tests later — Mario will recalibrate automatically.
+                </div>
+                <div style={{ display:'flex', gap:12 }}>
+                  <button onClick={async()=>{
+                    setShowDietBasis(false);
+                    setShowBES(false); setShowDiet(true); setDietLoading(true); setDietPlan('');
+                    const pd = patient;
             const severe = (pd.severe||[]).join(', ') || 'none uploaded yet';
             const mild = (pd.mild||[]).join(', ') || 'none';
             const origin = pd.geographyOfOrigin || 'not specified';
             const symptoms = (pd.symptoms||[]).join(', ') || 'not specified';
+            const cmaD = (pd.cmaDeficiencies||[]).join(', ') || 'not tested';
+            const redox = pd.redoxScore != null ? pd.redoxScore : 'not tested';
+            const snps = (pd.genomicSnps||[]).map(s=>`${s.gene} ${s.rsid} [${s.status}]`).join(', ') || 'not tested';
             const prompt = `Generate a complete 21-day GCR elimination diet plan for this patient.
 
 PATIENT PROFILE:
@@ -2925,7 +3003,17 @@ PATIENT PROFILE:
 - Foods to AVOID (mild reactors): ${mild}
 - Ancestral origin: ${origin}
 - Chief symptoms: ${symptoms}
+- CMA deficiencies to correct via diet: ${cmaD}
+- REDOX score: ${redox}
+- Genetic variants: ${snps}
 - Protocol: Option A — 21-day universal GCR detox
+
+INTEGRATION RULES:
+- Every meal must respect ALCAT exclusions (immune layer)
+- Prioritise foods that correct CMA deficiencies (cellular layer)
+- If REDOX is <75, front-load antioxidant-dense foods at every meal
+- Cross-reference genetic variants: slow COMT = moderate polyphenols, MTHFR = methylfolate greens, GSTP1 = glutathione precursors, FADS1 = direct EPA/DHA sources, FTO = strict meal timing
+- Note which genetic/nutrient considerations apply to specific meal choices
 
 UNIVERSAL RULES (apply regardless of ALCAT):
 - No seed oils (use olive oil, coconut oil, tallow only)
@@ -2961,11 +3049,21 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
             } catch { setDietPlan('Generation failed. Your dashboard is ready — use the Generate tab to create your meal plan.'); }
             setDietLoading(false);
           }} style={{
-            background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px',
-            fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'0.04em',
+            background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 32px',
+            fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer',
           }}>
-            Generate My 21-Day Plan
-          </button>
+                    Generate my protocol
+                  </button>
+                  <button onClick={()=>setShowDietBasis(false)} style={{
+                    background:'none', border:`1px solid ${T.w3}`, borderRadius:9, padding:'13px 24px',
+                    fontFamily:fonts.sans, fontSize:13, color:T.w5, cursor:'pointer',
+                  }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -2982,7 +3080,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
           21-Day GCR Elimination Diet
         </div>
         <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:32 }}>
-          Built on your ALCAT results and ancestral food library.
+          Built on your immune reactivity, cellular micronutrients, antioxidant status, and genetic architecture.
         </div>
         {dietLoading ? (
           <Panel style={{ textAlign:'center', padding:60 }}>
@@ -2993,7 +3091,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
               {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
             </div>
             <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:20, letterSpacing:'0.12em' }}>
-              CROSS-REFERENCING ALCAT DATA · CALIBRATING TO ANCESTRAL LIBRARY
+              CROSS-REFERENCING IMMUNITY · MICRONUTRIENTS · REDOX · GENETICS
             </div>
           </Panel>
         ) : (
