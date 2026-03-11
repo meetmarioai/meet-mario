@@ -397,7 +397,6 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
           max_tokens: 4000,
           system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
           messages: [{ role: 'user', content }],
-          betas: ['pdfs-2024-09-25']
         }),
       });
       const d = await res.json();

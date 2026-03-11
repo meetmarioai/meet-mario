@@ -1,21 +1,33 @@
+// app/api/chat/route.js
 import Anthropic from '@anthropic-ai/sdk'
-import { NextResponse } from 'next/server'
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-export async function POST(request) {
+export async function POST(req) {
   try {
-    const { messages, system } = await request.json()
-    const response = await client.messages.create({
+    const { system, messages, max_tokens = 1200, betas } = await req.json()
+
+    const params = {
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      system: system || 'You are Meet Mario, a clinical AI assistant at MediBalans AB.',
+      max_tokens,
+      system: system || 'You are Meet Mario, a clinical AI assistant for MediBalans AB.',
       messages,
-    })
-    const text = response.content.map(b => b.text || '').join('')
-    return NextResponse.json({ text })
+    }
+
+    let msg
+    if (betas && betas.length > 0) {
+      // Use beta endpoint for PDF support
+      msg = await client.beta.messages.create({
+        ...params,
+        betas,
+      })
+    } else {
+      msg = await client.messages.create(params)
+    }
+
+    return Response.json({ content: msg.content })
   } catch (err) {
-    console.error(err)
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    console.error('[/api/chat]', err)
+    return Response.json({ error: err.message }, { status: 500 })
   }
 }
