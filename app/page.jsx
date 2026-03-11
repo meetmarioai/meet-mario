@@ -881,10 +881,10 @@ export default function MeetMario({ patient: patientProp }) {
       const local = sessionStorage.getItem('mm_profile_' + user.id);
       if (local) {
         const pd = JSON.parse(local);
-        if (pd?.name) { console.log('Profile from sessionStorage'); return pd; }
+        if (pd?.name) { console.log('[profile] from sessionStorage'); return pd; }
       }
     } catch {}
-    // 2. Try profiles.patient_data
+    // 2. Try profiles.patient_data (primary source — camelCase JSON blob)
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -895,11 +895,34 @@ export default function MeetMario({ patient: patientProp }) {
         const pd = typeof data.patient_data === 'string'
           ? JSON.parse(data.patient_data)
           : data.patient_data;
-        if (pd?.name) return pd;
+        if (pd?.name) {
+          console.log('[profile] from profiles.patient_data');
+          // Also load ALCAT results if not already in patient_data
+          if (!(pd.alcat_severe?.length || pd.alcat_moderate?.length || pd.alcat_mild?.length)) {
+            try {
+              const { data: alcat } = await supabase
+                .from('alcat_results')
+                .select('severe, moderate, mild')
+                .eq('patient_id', user.id)
+                .single();
+              if (alcat) {
+                pd.alcat_severe = alcat.severe || [];
+                pd.alcat_moderate = alcat.moderate || [];
+                pd.alcat_mild = alcat.mild || [];
+                pd.severe = alcat.severe || [];
+                pd.moderate = alcat.moderate || [];
+                pd.mild = alcat.mild || [];
+              }
+            } catch {}
+          }
+          // Cache to sessionStorage for next time
+          try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
+          return pd;
+        }
       }
       if (!error && data?.full_name) return { name: data.full_name };
-    } catch {}
-    // 3. Try onboarding_intake
+    } catch (e) { console.error('[profile] profiles query failed:', e); }
+    // 3. Try onboarding_intake (fallback — map snake_case → camelCase)
     try {
       const { data, error } = await supabase
         .from('onboarding_intake')
@@ -908,8 +931,64 @@ export default function MeetMario({ patient: patientProp }) {
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
-      if (!error && data?.name) return data;
-    } catch {}
+      if (!error && data?.name) {
+        console.log('[profile] from onboarding_intake (mapping snake_case)');
+        const pd = {
+          name: data.name,
+          dob: data.dob,
+          sex: data.sex,
+          hormonalStatus: data.hormonal_status || data.hormonalStatus || '',
+          geographyOfOrigin: data.geography_of_origin || data.geographyOfOrigin || '',
+          yearsInCurrentCountry: data.years_in_current_country || data.yearsInCurrentCountry || '',
+          symptoms: data.symptoms || [],
+          tests: data.tests || [],
+          medications: data.medications || '',
+          supplements: data.supplements || '',
+          conditions: data.conditions || '',
+          goals: data.goals || [],
+          alcat_severe: data.alcat_severe || [],
+          alcat_moderate: data.alcat_moderate || [],
+          alcat_mild: data.alcat_mild || [],
+          severe: data.alcat_severe || [],
+          moderate: data.alcat_moderate || [],
+          mild: data.alcat_mild || [],
+          profileComplete: true,
+          protocol: 'Option A — 21-day universal detox',
+          phase: 1, dayInProtocol: 1,
+          alsoAvoid: { candida: [], whey: [] },
+          markers: [],
+        };
+        // Also check alcat_results table
+        try {
+          const { data: alcat } = await supabase
+            .from('alcat_results')
+            .select('severe, moderate, mild')
+            .eq('patient_id', user.id)
+            .single();
+          if (alcat) {
+            pd.alcat_severe = alcat.severe || pd.alcat_severe;
+            pd.alcat_moderate = alcat.moderate || pd.alcat_moderate;
+            pd.alcat_mild = alcat.mild || pd.alcat_mild;
+            pd.severe = alcat.severe || pd.severe;
+            pd.moderate = alcat.moderate || pd.moderate;
+            pd.mild = alcat.mild || pd.mild;
+          }
+        } catch {}
+        // Cache to sessionStorage
+        try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
+        // Backfill profiles table so next login is faster
+        try {
+          await supabase.from('profiles').upsert({
+            id: user.id,
+            full_name: pd.name,
+            onboarding_complete: true,
+            patient_data: JSON.stringify(pd),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+        } catch {}
+        return pd;
+      }
+    } catch (e) { console.error('[profile] onboarding_intake query failed:', e); }
     return null;
   };
 
@@ -2048,7 +2127,7 @@ export default function MeetMario({ patient: patientProp }) {
           ))}
         </div>
         <div style={{ display:'flex',alignItems:'center',gap:20 }}>
-          <BtnPrimary onClick={()=>{setShowLanding(false);setShowOnboarding(true);}}>Begin Assessment</BtnPrimary>
+          <BtnPrimary onClick={()=>{setShowLanding(false); if(authUser){setShowOnboarding(true);}else{setShowAuth(true);}}}>Begin Assessment</BtnPrimary>
           <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.12em' }}>~10 min · GDPR · No card required</span>
         </div>
       </div>
@@ -2084,19 +2163,21 @@ export default function MeetMario({ patient: patientProp }) {
         try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(profilePayload)); } catch {}
       }
       if (authUser?.id) {
-        // Try profiles table (always exists)
+        // Save to profiles table (primary)
         try {
-          await supabase.from('profiles').upsert({
+          const { error: profileErr } = await supabase.from('profiles').upsert({
             id: authUser.id,
             full_name: data.name,
             onboarding_complete: true,
             patient_data: JSON.stringify(profilePayload),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
-        } catch(e) { console.error('Profile save (profiles) error:', e); }
-        // Also try onboarding_intake
+          if (profileErr) console.error('[save] profiles upsert error:', profileErr.message);
+          else console.log('[save] profiles saved OK');
+        } catch(e) { console.error('[save] profiles exception:', e); }
+        // Save to onboarding_intake (backup)
         try {
-          await supabase.from('onboarding_intake').upsert({
+          const { error: intakeErr } = await supabase.from('onboarding_intake').upsert({
             user_id: authUser.id,
             name: data.name,
             dob: data.dob,
@@ -2115,7 +2196,11 @@ export default function MeetMario({ patient: patientProp }) {
             alcat_mild: data.alcat_mild || [],
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
-        } catch(e) { console.error('Profile save (intake) error:', e); }
+          if (intakeErr) console.error('[save] onboarding_intake upsert error:', intakeErr.message);
+          else console.log('[save] onboarding_intake saved OK');
+        } catch(e) { console.error('[save] onboarding_intake exception:', e); }
+      } else {
+        console.warn('[save] No authUser — onboarding data NOT saved to database');
       }
       let score = 20;
       if (data.symptoms?.length >= 5) score += 25;
