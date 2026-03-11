@@ -2488,6 +2488,42 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         <Eyebrow>Upload & manage lab data</Eyebrow>
         <SectionTitle>Lab<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Results</em></SectionTitle>
 
+        {/* Tests on file — shows which data drives conclusions */}
+        <Panel>
+          <FieldLabel>Tests on file</FieldLabel>
+          <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:14, lineHeight:1.5 }}>
+            These uploaded results inform your personalised protocol, meal design, and supplement recommendations.
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            {[
+              { name:'ALCAT food reactivity', active: (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0, detail: `${(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)} reactive foods identified` },
+              { name:'CMA/CNA micronutrients', active: (P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0, detail: `${(P.cmaAllNutrients||[]).length} nutrients tested` },
+              { name:'REDOX / Spectrox', active: P.redoxScore != null, detail: P.redoxScore != null ? `Score: ${P.redoxScore}/100` : null },
+              { name:'Antioxidant panel', active: (P.cmaAntioxidants||[]).length > 0, detail: `${(P.cmaAntioxidants||[]).length} markers` },
+              { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0, detail: `${(P.genomicSnps||[]).length} SNPs analysed` },
+              { name:'Blood work / Other labs', active: P.customLabs?.length > 0, detail: P.customLabs?.length ? `${P.customLabs.length} reports` : null },
+            ].map(t => (
+              <div key={t.name} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: t.active ? `${T.ok}08` : T.w1, border:`1px solid ${t.active ? T.ok+'30' : T.w3}`, borderRadius:8 }}>
+                <div style={{ width:22, height:22, borderRadius:'50%', background: t.active ? T.ok : T.w3, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                  {t.active
+                    ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 3V9M3 6H9" stroke={T.w5} strokeWidth="1.2" strokeLinecap="round"/></svg>}
+                </div>
+                <div>
+                  <div style={{ fontFamily:fonts.sans, fontSize:12, color: t.active ? T.w7 : T.w4, fontWeight: t.active ? 500 : 400 }}>{t.name}</div>
+                  {t.active && t.detail && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.06em', marginTop:1 }}>{t.detail}</div>}
+                  {!t.active && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.06em', marginTop:1 }}>Not uploaded</div>}
+                </div>
+              </div>
+            ))}
+          </div>
+          {((P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)+(P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0)+(P.genomicSnps?.length||0)) === 0 && (
+            <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.warn, marginTop:14, padding:'10px 14px', background:`${T.warn}08`, borderRadius:8, lineHeight:1.5 }}>
+              No lab data uploaded yet. Upload your test results below so Mario can build your evidence-based protocol.
+            </div>
+          )}
+        </Panel>
+
         {/* Current ALCAT results summary */}
         {(P.severe?.length > 0 || P.moderate?.length > 0 || P.mild?.length > 0) && (
           <Panel>
@@ -2597,7 +2633,13 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             ) : dashLabSuccess ? (
               <div>
                 <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:8 }}>
-                  RESULTS UPDATED — {(P.severe||[]).length + (P.moderate||[]).length + (P.mild||[]).length + (P.cmaDeficiencies||[]).length + (P.cmaAdequate||[]).length} items loaded
+                  RESULTS UPDATED
+                </div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8, marginBottom:8 }}>
+                  {(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>ALCAT: {(P.severe||[]).length+(P.moderate||[]).length+(P.mild||[]).length} foods</span>}
+                  {(P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>CMA: {(P.cmaAllNutrients||[]).length} nutrients</span>}
+                  {P.redoxScore != null && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>REDOX: {P.redoxScore}/100</span>}
+                  {(P.genomicSnps||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>VCF: {(P.genomicSnps||[]).length} SNPs</span>}
                 </div>
                 {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>{fn}</div>)}
               </div>
