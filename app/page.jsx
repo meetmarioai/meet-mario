@@ -468,9 +468,10 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       });
 
       if (!res.ok) {
-        const errText = await res.text();
-        console.error('[Lab parse] HTTP', res.status, errText.slice(0, 500));
-        throw new Error('API returned ' + res.status);
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData.error || 'API returned ' + res.status;
+        console.error('[Lab parse] HTTP', res.status, msg);
+        throw new Error(msg);
       }
 
       const d = await res.json();
