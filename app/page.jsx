@@ -915,6 +915,11 @@ export default function MeetMario({ patient: patientProp }) {
 
   // Auth state on mount
   useEffect(() => {
+    // Safety timeout — never stay stuck on LOADING
+    const authTimeout = setTimeout(() => {
+      setAuthChecked(prev => { if (!prev) console.warn('[auth] timeout — forcing authChecked'); return true; });
+    }, 5000);
+
     // Check existing session and load profile
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const user = session?.user || null;
@@ -933,6 +938,11 @@ export default function MeetMario({ patient: patientProp }) {
           setShowOnboarding(true);
         }
       }
+      clearTimeout(authTimeout);
+      setAuthChecked(true);
+    }).catch(err => {
+      console.error('[auth] getSession failed:', err);
+      clearTimeout(authTimeout);
       setAuthChecked(true);
     });
 
@@ -958,7 +968,7 @@ export default function MeetMario({ patient: patientProp }) {
         setPatient({});
       }
     });
-    return () => subscription.unsubscribe();
+    return () => { subscription.unsubscribe(); clearTimeout(authTimeout); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
