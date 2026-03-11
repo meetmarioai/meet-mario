@@ -994,8 +994,123 @@ export default function MeetMario({ patient: patientProp }) {
         return;
       }
 
-      // VCF / text files — read as text (not base64) to avoid encoding issues
-      if (isVCF || isWord) {
+      // VCF genetic files — pre-filter clinically relevant SNPs before sending to Claude
+      if (isVCF) {
+        const textContent = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result);
+          r.onerror = rej;
+          r.readAsText(file);
+        });
+
+        // Known clinically relevant rsIDs for methylation, detox, inflammation, nutrient metabolism
+        const clinicalRsIds = new Set([
+          'rs1801133','rs1801131', // MTHFR C677T, A1298C
+          'rs1805087', // MTR A2756G
+          'rs1801394', // MTRR A66G
+          'rs4680',    // COMT Val158Met
+          'rs6323',    // MAOA
+          'rs4633','rs4818', // COMT
+          'rs1799945','rs1800562', // HFE (iron)
+          'rs7946',    // PEMT (choline)
+          'rs12325817', // FOLR1
+          'rs602662','rs601338', // FUT2 (B12)
+          'rs234706',  // CBS
+          'rs1695',    // GSTP1 (glutathione)
+          'rs1138272',  // GSTP1
+          'rs4588','rs7041', // GC/VDBP (vitamin D)
+          'rs12934922','rs7501331', // BCMO1 (beta-carotene→vitamin A)
+          'rs174547','rs174546', // FADS1 (omega-3)
+          'rs1799853','rs1057910', // CYP2C9
+          'rs762551',  // CYP1A2 (caffeine)
+          'rs4244285', // CYP2C19
+          'rs1800497', // DRD2/ANKK1 (dopamine)
+          'rs53576',   // OXTR (oxytocin receptor)
+          'rs9939609', // FTO (appetite/obesity)
+          'rs7903146', // TCF7L2 (diabetes risk)
+          'rs429358','rs7412', // APOE (lipid metabolism)
+          'rs4149056', // SLCO1B1 (statin metabolism)
+          'rs1042713', // ADRB2
+          'rs10741657', // CYP2R1 (vitamin D hydroxylation)
+          'rs2228570', // VDR (vitamin D receptor)
+          'rs1544410','rs7975232', // VDR
+          'rs4654748', // NBPF3 (B6)
+          'rs2060793', // CYP2R1
+          'rs11568820', // VDR Cdx2
+        ]);
+
+        // Parse VCF: extract header + matching lines
+        const lines = textContent.split('\n');
+        const headerLines = lines.filter(l => l.startsWith('#')).slice(-1); // just the column header
+        const dataLines = lines.filter(l => !l.startsWith('#') && l.trim());
+
+        // Filter to clinically relevant SNPs
+        let relevantLines = dataLines.filter(l => {
+          const id = l.split('\t')[2];
+          return id && clinicalRsIds.has(id);
+        });
+
+        // If no rsID matches (some VCFs use different ID formats), take first 200 data lines
+        if (relevantLines.length === 0) {
+          relevantLines = dataLines.slice(0, 200);
+        }
+
+        const filteredContent = [...headerLines, ...relevantLines].join('\n');
+        const snpCount = relevantLines.length;
+
+        if (snpCount === 0 && dataLines.length === 0) {
+          setDashLabError('No genetic data found in this file. Is it a valid VCF?');
+          setDashLabParsing(false);
+          return;
+        }
+
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_tokens: 4000,
+            system: 'You are a clinical genomics analyst. Extract SNP data from VCF files and return structured JSON. Focus on clinically actionable variants.',
+            messages: [{ role: 'user', content: `This is a VCF genetic data file (pre-filtered to ${snpCount} clinically relevant SNPs out of ${dataLines.length} total variants).
+
+For each SNP found, provide:
+- rsid (e.g. rs1801133)
+- gene name (e.g. MTHFR)
+- genotype (e.g. CT, TT, CC)
+- status: "risk" (homozygous variant), "carrier" (heterozygous), or "normal" (wild type)
+- impact: one sentence clinical relevance for methylation, detox, nutrient metabolism, or inflammation
+
+Return ONLY this JSON:
+{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","impact":"Reduced folate metabolism ~35%, supplement with methylfolate"}],"severe":[],"moderate":[],"mild":[]}
+
+VCF data:
+${filteredContent.slice(0, 30000)}` }],
+          }),
+        });
+        if (!res.ok) throw new Error('API returned ' + res.status);
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+        let json = {};
+        try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch {
+          const m = text.match(/\{[\s\S]*?"snps"[\s\S]*?\}/);
+          if (m) try { json = JSON.parse(m[0]); } catch {}
+        }
+        if (json.snps?.length) {
+          setPatient(p => ({ ...p, genomicSnps: [...(p.genomicSnps || []).filter(s => !json.snps.find(n => n.rsid === s.rsid)), ...json.snps] }));
+        }
+        setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+        const hasData = (json.snps?.length || 0) > 0;
+        if (hasData) {
+          setDashLabSuccess(true);
+        } else {
+          setDashLabError('No clinically relevant SNPs found in this VCF file');
+        }
+        setDashLabParsing(false);
+        return;
+      }
+
+      // Word / text files — read as text
+      if (isWord) {
         const textContent = await new Promise((res, rej) => {
           const r = new FileReader();
           r.onload = e => res(e.target.result);
@@ -1007,36 +1122,28 @@ export default function MeetMario({ patient: patientProp }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 4000,
-            system: 'You extract structured data from medical lab results and genetic reports. Return only valid JSON.',
-            messages: [{ role: 'user', content: `This is a ${isVCF ? 'VCF (Variant Call Format) genetic data file' : 'Word document with lab results'}. Extract any relevant health data.\n\nFor genetic/VCF data, identify clinically relevant SNPs and return:\n{"snps":[{"rsid":"rs12345","gene":"MTHFR","genotype":"CT","impact":"description"}],"severe":[],"moderate":[],"mild":[]}\n\nFor lab results, extract reactive foods:\n{"severe":[],"moderate":[],"mild":[]}\n\nFile contents:\n${textContent.slice(0, 50000)}` }],
+            system: 'You extract structured data from medical lab results. Return only valid JSON.',
+            messages: [{ role: 'user', content: `This is a document with lab results. Extract any relevant health data.\n\nExtract reactive foods:\n{"severe":[],"moderate":[],"mild":[]}\n\nFile contents:\n${textContent.slice(0, 50000)}` }],
           }),
         });
+        if (!res.ok) throw new Error('API returned ' + res.status);
         const d = await res.json();
         if (d.error) throw new Error(d.error);
         const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-        let json = {};
+        let json = { severe: [], moderate: [], mild: [] };
         try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch {}
-        if (json.snps?.length) {
-          setPatient(p => ({ ...p, genomicSnps: [...(p.genomicSnps || []), ...json.snps] }));
-        }
         const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
-        if (json.severe?.length || json.moderate?.length || json.mild?.length) {
+        const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
+        if (newS.length || newM.length || newMi.length) {
           if (isAdditional) {
             setPatient(p => ({
               ...p,
-              severe: [...new Set([...(p.severe||[]), ...norm(json.severe)])],
-              moderate: [...new Set([...(p.moderate||[]), ...norm(json.moderate)])],
-              mild: [...new Set([...(p.mild||[]), ...norm(json.mild)])],
-              alcat_severe: [...new Set([...(p.alcat_severe||[]), ...norm(json.severe)])],
-              alcat_moderate: [...new Set([...(p.alcat_moderate||[]), ...norm(json.moderate)])],
-              alcat_mild: [...new Set([...(p.alcat_mild||[]), ...norm(json.mild)])],
+              severe: [...new Set([...(p.severe||[]), ...newS])],
+              moderate: [...new Set([...(p.moderate||[]), ...newM])],
+              mild: [...new Set([...(p.mild||[]), ...newMi])],
             }));
           } else {
-            setPatient(p => ({
-              ...p,
-              severe: norm(json.severe), moderate: norm(json.moderate), mild: norm(json.mild),
-              alcat_severe: norm(json.severe), alcat_moderate: norm(json.moderate), alcat_mild: norm(json.mild),
-            }));
+            setPatient(p => ({ ...p, severe: newS, moderate: newM, mild: newMi }));
           }
         }
         setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
