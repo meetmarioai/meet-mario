@@ -17,9 +17,10 @@ const T = {
   dark: "#18120E", dark2: "#221A14",
 };
 const fonts = {
-  serif: "'EB Garamond', Georgia, 'Times New Roman', serif",
-  sans:  "'Lato', -apple-system, 'Helvetica Neue', Arial, sans-serif",
-  mono:  "'IBM Plex Mono', 'SF Mono', 'Fira Mono', 'Courier New', monospace",
+  brand: "'EB Garamond', Georgia, serif",
+  serif: "'EB Garamond', Georgia, serif",
+  sans:  "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+  mono:  "'SF Mono', ui-monospace, Menlo, 'Fira Code', monospace",
 };
 
 // ── GEO-ADAPTIVE STORES ────────────────────────────────────────────────────────
@@ -128,10 +129,10 @@ const Nav = ({ onBabyBalans }) => (
       <span style={{ fontFamily:"'EB Garamond', Georgia, serif",fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
     </div>
     <div style={{ display:'flex',alignItems:'center',gap:18 }}>
-      <button onClick={onBabyBalans} style={{ background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',padding:'4px 10px',borderRadius:4,transition:'all .15s' }}>
+      <button onClick={onBabyBalans} style={{ background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',padding:'4px 10px',borderRadius:4,transition:'all .15s' }}>
         Baby Balans
       </button>
-      <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
+      <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
     </div>
   </div>
 );
@@ -154,10 +155,10 @@ const BtnPrimary = ({ children, onClick, disabled, loading, small }) => (
 );
 
 const FieldLabel = ({ children }) => (
-  <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.22em',textTransform:'uppercase',marginBottom:12 }}>{children}</div>
+  <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.22em',textTransform:'uppercase',marginBottom:12 }}>{children}</div>
 );
 const Eyebrow = ({ children }) => (
-  <div style={{ fontFamily:fonts.mono,fontSize:9,color:`rgba(196,136,122,0.60)`,letterSpacing:'0.24em',textTransform:'uppercase',marginBottom:12 }}>{children}</div>
+  <div style={{ fontFamily:fonts.mono,fontSize:11,color:`rgba(196,136,122,0.60)`,letterSpacing:'0.24em',textTransform:'uppercase',marginBottom:12 }}>{children}</div>
 );
 const SectionTitle = ({ children }) => (
   <h2 style={{ fontFamily:fonts.serif,fontSize:32,fontWeight:400,color:T.w7,letterSpacing:'-0.01em',lineHeight:1.16,marginBottom:32 }}>{children}</h2>
@@ -209,7 +210,7 @@ function AuthScreen({ onAuthed }) {
 
   return (
     <div style={{ minHeight:'100vh', background:T.w, fontFamily:fonts.sans, display:'flex', flexDirection:'column' }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');*{box-sizing:border-box}input::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
 
       {/* Nav */}
       <div style={{ padding:'20px 32px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.w2}` }}>
@@ -217,7 +218,7 @@ function AuthScreen({ onAuthed }) {
           <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
           <span style={{ fontFamily:"'EB Garamond', Georgia, serif",fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
         </div>
-        <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, letterSpacing:'0.16em' }}>MEDIBALANS AB · STOCKHOLM</div>
+        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.16em' }}>MEDIBALANS AB · STOCKHOLM</div>
       </div>
 
       {/* Content */}
@@ -228,7 +229,7 @@ function AuthScreen({ onAuthed }) {
             <>
               {/* Header */}
               <div style={{ textAlign:'center', marginBottom:40 }}>
-                <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:16 }}>
+                <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:16 }}>
                   {mode === 'login' ? 'Welcome back' : 'Reset access'}
                 </div>
                 <div style={{ fontFamily:fonts.serif, fontSize:36, fontWeight:400, color:T.w7, lineHeight:1.15, marginBottom:12 }}>
@@ -244,7 +245,7 @@ function AuthScreen({ onAuthed }) {
               {/* Form */}
               <div style={{ background:'#fff', borderRadius:14, padding:'32px 28px', boxShadow:`0 2px 20px ${T.w3}60`, border:`1px solid ${T.w2}` }}>
                 <div style={{ marginBottom:20 }}>
-                  <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w5, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:8 }}>Email address</div>
+                  <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:8 }}>Email address</div>
                   <input
                     type="email"
                     value={email}
@@ -284,7 +285,7 @@ function AuthScreen({ onAuthed }) {
                 <div style={{ textAlign:'center', marginTop:16 }}>
                   <button
                     onClick={() => { setMode(m => m === 'login' ? 'forgot' : 'login'); setError(''); }}
-                    style={{ background:'none', border:'none', cursor:'pointer', fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', textDecoration:'underline' }}>
+                    style={{ background:'none', border:'none', cursor:'pointer', fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.1em', textDecoration:'underline' }}>
                     {mode === 'login' ? 'Forgot / no access?' : '← Back to login'}
                   </button>
                 </div>
@@ -293,7 +294,7 @@ function AuthScreen({ onAuthed }) {
               {/* Trust signals */}
               <div style={{ marginTop:28, display:'flex', justifyContent:'center', gap:24 }}>
                 {['GDPR · Frankfurt servers','No password stored','Magic link · 15 min expiry'].map(t => (
-                  <div key={t} style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, letterSpacing:'0.1em', textAlign:'center' }}>{t}</div>
+                  <div key={t} style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.1em', textAlign:'center' }}>{t}</div>
                 ))}
               </div>
             </>
@@ -303,18 +304,18 @@ function AuthScreen({ onAuthed }) {
               <div style={{ width:64, height:64, borderRadius:'50%', background:`${T.ok}15`, border:`1px solid ${T.ok}40`, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 24px', fontSize:24 }}>
                 ✓
               </div>
-              <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:14 }}>Link sent</div>
+              <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.ok, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:14 }}>Link sent</div>
               <div style={{ fontFamily:fonts.serif, fontSize:28, color:T.w7, marginBottom:12 }}>Check your email.</div>
               <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w4, fontWeight:300, lineHeight:1.8, maxWidth:320, margin:'0 auto 32px' }}>
                 We sent a secure link to <span style={{ color:T.w6, fontWeight:500 }}>{email}</span>.<br/>
                 Click it to enter your dashboard. Link expires in 15 minutes.
               </div>
-              <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', marginBottom:16 }}>
+              <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.1em', marginBottom:16 }}>
                 No email? Check your spam folder.
               </div>
               <button
                 onClick={() => { setSent(false); setEmail(''); }}
-                style={{ background:'none', border:`1px solid ${T.w3}`, borderRadius:8, padding:'9px 20px', cursor:'pointer', fontFamily:fonts.mono, fontSize:9, color:T.w5, letterSpacing:'0.1em' }}>
+                style={{ background:'none', border:`1px solid ${T.w3}`, borderRadius:8, padding:'9px 20px', cursor:'pointer', fontFamily:fonts.mono, fontSize:11, color:T.w5, letterSpacing:'0.1em' }}>
                 Try different email
               </button>
             </div>
@@ -324,7 +325,7 @@ function AuthScreen({ onAuthed }) {
 
       {/* Footer */}
       <div style={{ padding:'16px 32px', borderTop:`1px solid ${T.w2}`, textAlign:'center' }}>
-        <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, letterSpacing:'0.1em' }}>
+        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.1em' }}>
           MediBalans AB · Karlavägen 89, Stockholm · Patent Pending SE 2615203-3
         </div>
       </div>
@@ -641,7 +642,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
                     Choose file
                   </div>
                 </label>
-                <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:12, letterSpacing:'0.1em' }}>
+                <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:12, letterSpacing:'0.1em' }}>
                   ALCAT · CMA · BLOOD WORK · ANY FORMAT
                 </div>
               </>
@@ -661,7 +662,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
                   <div style={{ marginBottom:14 }}>
                     {labFiles.map(fn => (
                       <div key={fn} style={{ display:'inline-flex', alignItems:'center', gap:6, background:T.w2, borderRadius:6, padding:'4px 10px', marginRight:6, marginBottom:6 }}>
-                        <span style={{ fontFamily:fonts.mono, fontSize:8, color:T.ok }}>✓</span>
+                        <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok }}>✓</span>
                         <span style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{fn}</span>
                       </div>
                     ))}
@@ -670,10 +671,10 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
 
                 {labParseError ? (
                   <div style={{ padding:'12px 16px', background:`${T.warn}15`, border:`1px solid ${T.warn}40`, borderRadius:8, marginBottom:14 }}>
-                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ REACTIVE FOODS</div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ REACTIVE FOODS</div>
                     <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5 }}>Mario couldn't extract the food list from this file. Try a clearer photo, or upload the other page of the report. You can also skip and add results manually in the Protocol tab.</div>
                     {typeof labParseError === 'string' && labParseError !== 'true' && (
-                      <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:6 }}>{labParseError}</div>
+                      <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:6 }}>{labParseError}</div>
                     )}
                   </div>
                 ) : (
@@ -684,11 +685,11 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
                       {[['Severe',data.alcat_severe,T.err],['Moderate',data.alcat_moderate,T.warn],['Mild',data.alcat_mild,T.w5]].map(([label,items,color])=>(
                         <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
-                          <div style={{ fontFamily:fonts.mono, fontSize:8, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {items.length}</div>
+                          <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {items.length}</div>
                           {items.slice(0,8).map(f=>(
                             <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
                           ))}
-                          {items.length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>+{items.length-8} more</div>}
+                          {items.length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{items.length-8} more</div>}
                         </div>
                       ))}
                     </div>
@@ -699,18 +700,18 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
                   <label style={{ cursor:'pointer' }}>
                     <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
                       onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f, true); } }}/>
-                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>+ Add another file (CMA / page 2)</div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>+ Add another file (CMA / page 2)</div>
                   </label>
                   <label style={{ cursor:'pointer' }}>
                     <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
                       onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); setLabFiles([]); setLabParsed(false); parseLabFile(f, false); } }}/>
-                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>Replace with different file</div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>Replace with different file</div>
                   </label>
                 </div>
               </div>
             )}
           </div>
-          <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, textAlign:'center', letterSpacing:'0.1em' }}>
+          <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, textAlign:'center', letterSpacing:'0.1em' }}>
             No results yet? Skip and upload later in the Protocol tab.
           </div>
         </div>
@@ -754,7 +755,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
 
   return (
     <div style={{ minHeight:'100vh',background:T.w,fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
       <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
       <div style={{ maxWidth:640,margin:'0 auto',padding:'64px 32px 80px' }}>
         {/* Progress */}
@@ -762,7 +763,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
           {STEPS.map((_,i)=>(
             <div key={i} style={{ flex:1,height:2,background:i<=step?T.rg:T.w3,borderRadius:2,transition:'background .3s' }}/>
           ))}
-          <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em',whiteSpace:'nowrap',marginLeft:8 }}>{step+1} / {STEPS.length}</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.14em',whiteSpace:'nowrap',marginLeft:8 }}>{step+1} / {STEPS.length}</span>
         </div>
         {/* Header */}
         <div style={{ marginBottom:36 }}>
@@ -787,7 +788,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
         </div>
         {/* Protocol note */}
         <div style={{ marginTop:32,borderTop:`1px solid ${T.w2}`,paddingTop:20 }}>
-          <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.14em',lineHeight:2 }}>
+          <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',lineHeight:2 }}>
             Your data is stored securely on GDPR-compliant servers in Frankfurt, Germany. MediBalans AB · Karlavägen 89, Stockholm · Patent Pending SE 2615203-3
           </div>
         </div>
@@ -1435,7 +1436,7 @@ Lowercase English names. Translate Swedish to English.` }
           <div style={{ borderBottom:`1px solid ${T.w3}`,padding:'18px 24px 16px' }}>
             <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:6 }}>
               <div style={{ width:8,height:8,borderRadius:'50%',background:lc,boxShadow:`0 0 10px ${lc}` }}/>
-              <span style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.18em',color:lc,textTransform:'uppercase' }}>{popup.level} reaction detected · {popup.min}min post-meal</span>
+              <span style={{ fontFamily:fonts.mono,fontSize:11,letterSpacing:'0.18em',color:lc,textTransform:'uppercase' }}>{popup.level} reaction detected · {popup.min}min post-meal</span>
             </div>
             <div style={{ fontFamily:fonts.serif,fontSize:22,color:T.w7,fontWeight:400 }}>{popup.label} {popup.val}</div>
           </div>
@@ -1445,17 +1446,17 @@ Lowercase English names. Translate Swedish to English.` }
                 Your <strong style={{ color:lc,fontWeight:500 }}>{popup.label}</strong> spiked unusually.
                 {monFoods.length > 0 && <span style={{ display:'block',marginTop:6,fontSize:11,color:T.w4,fontFamily:fonts.mono }}>Meal logged: {monFoods.join(', ')}</span>}
               </p>
-              <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:12 }}>Did you eat anything outside your green list?</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:12 }}>Did you eat anything outside your green list?</div>
               <div style={{ display:'flex',gap:8 }}>
                 <button onClick={()=>{setPopupReactive(true);setPopupStep(1);}} style={{ flex:1,background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:9,padding:'11px',cursor:'pointer',color:T.rg2,fontSize:12,fontFamily:fonts.sans,fontWeight:500 }}>Yes — possibly</button>
                 <button onClick={()=>{setPopupReactive(false);setPopupStep(1);}} style={{ flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:'11px',cursor:'pointer',color:T.w5,fontSize:12,fontFamily:fonts.sans }}>No — on protocol</button>
               </div>
             </>}
             {popupStep === 1 && <>
-              <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:14 }}>Symptoms right now</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:14 }}>Symptoms right now</div>
               {Object.values(SYMPTOM_CATS).map(cat=>(
                 <div key={cat.label} style={{ marginBottom:12 }}>
-                  <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>{cat.label}</div>
+                  <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>{cat.label}</div>
                   <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
                     {cat.items.map(s=>{const sel=popupSymptoms.includes(s);return(
                       <button key={s} onClick={()=>setPopupSymptoms(p=>sel?p.filter(x=>x!==s):[...p,s])} style={{ background:sel?T.rgBg:T.w,border:`1px solid ${sel?T.rg:T.w3}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:sel?T.rg2:T.w5 }}>{s}</button>
@@ -1463,7 +1464,7 @@ Lowercase English names. Translate Swedish to English.` }
                   </div>
                 </div>
               ))}
-              <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',margin:'14px 0 10px' }}>Overall severity</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',margin:'14px 0 10px' }}>Overall severity</div>
               <div style={{ display:'flex',gap:7,marginBottom:18 }}>
                 {['mild','moderate','severe'].map(sev=>{const c=sev==='severe'?T.err:sev==='moderate'?T.warn:T.ok;return(
                   <button key={sev} onClick={()=>setPopupSeverity(sev)} style={{ flex:1,background:popupSeverity===sev?c+'18':T.w1,border:`1px solid ${popupSeverity===sev?c:T.w3}`,borderRadius:8,padding:'9px',cursor:'pointer',color:popupSeverity===sev?c:T.w5,fontSize:12,fontFamily:fonts.sans,fontWeight:500,textTransform:'capitalize' }}>{sev}</button>
@@ -1472,7 +1473,7 @@ Lowercase English names. Translate Swedish to English.` }
               <BtnPrimary onClick={logAndDismiss} loading={popupLoading}>Log reaction — get Mario's analysis</BtnPrimary>
             </>}
             {popupStep === 3 && <>
-              <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:'0.20em',textTransform:'uppercase',marginBottom:10 }}>Mario's Analysis</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.20em',textTransform:'uppercase',marginBottom:10 }}>Mario's Analysis</div>
               <div style={{ fontSize:12,color:T.w6,lineHeight:1.8,fontFamily:fonts.sans,fontWeight:300,maxHeight:220,overflowY:'auto',marginBottom:16 }}>
                 {popupAnalysis.split('\n').map((l,i)=>l.trim()?<div key={i} style={{ marginBottom:6 }}>{l}</div>:null)}
               </div>
@@ -1516,7 +1517,7 @@ Lowercase English names. Translate Swedish to English.` }
               </div>
               {monFoods.length > 0 && (
                 <div style={{ background:`${T.ok}0F`,border:`1px solid ${T.ok}30`,borderRadius:7,padding:'8px 10px',marginBottom:8 }}>
-                  <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.ok,letterSpacing:'0.14em',marginBottom:5 }}>YOUR MEAL ({monFoods.length})</div>
+                  <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.ok,letterSpacing:'0.14em',marginBottom:5 }}>YOUR MEAL ({monFoods.length})</div>
                   <div style={{ display:'flex',flexWrap:'wrap',gap:4 }}>
                     {monFoods.map((f,i)=>{const fu=f.toUpperCase(),isS=(P.severe||[]).some(s=>fu.includes(s)||s.includes(fu.split(' ')[0])),isM=(P.moderate||[]).some(s=>fu.includes(s)||s.includes(fu.split(' ')[0])),col=isS?T.err:isM?T.warn:T.ok;return(
                       <span key={i} onClick={()=>setMonFoods(p=>p.filter((_,j)=>j!==i))} style={{ background:col+'18',border:`1px solid ${col}50`,borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:fonts.sans,color:col,cursor:'pointer' }}>{f} ×</span>
@@ -1530,7 +1531,7 @@ Lowercase English names. Translate Swedish to English.` }
                   const items = (ROT[rotDay][cat]||[]).filter(f=>!monFoodInput||f.toLowerCase().includes(monFoodInput.toLowerCase()));
                   if (!items.length) return null;
                   return <div key={cat} style={{ marginBottom:8 }}>
-                    <div style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:4 }}>{cat}</div>
+                    <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:4 }}>{cat}</div>
                     <div style={{ display:'flex',flexWrap:'wrap',gap:3 }}>
                       {items.map(f=>{const fu=f.toUpperCase(),isSev=(P.severe||[]).some(s=>fu===s),isMod=(P.moderate||[]).some(s=>fu===s),added=monFoods.includes(f),col=isSev?T.err:isMod?T.warn:T.ok;return(
                         <button key={f} onClick={()=>setMonFoods(p=>added?p.filter(x=>x!==f):[...p,f])} style={{ background:added?col+'18':T.w,border:`1px solid ${added?col:isSev?T.err+'40':isMod?T.warn+'30':T.w3}`,borderRadius:4,padding:'2px 7px',cursor:'pointer',fontSize:10,fontFamily:fonts.sans,color:added?col:isSev?T.err+'90':isMod?T.warn+'90':T.w5,fontWeight:added?500:400 }}>
@@ -1558,13 +1559,13 @@ Lowercase English names. Translate Swedish to English.` }
                 ].map(d=>(
                   <div key={d.name} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
                     <div style={{ width:28,height:28,borderRadius:6,background:T.w2,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                      <span style={{ fontFamily:fonts.mono,fontSize:8.5,fontWeight:500,color:T.w5 }}>{d.abbr}</span>
+                      <span style={{ fontFamily:fonts.mono,fontSize:11,fontWeight:500,color:T.w5 }}>{d.abbr}</span>
                     </div>
                     <div style={{ flex:1 }}>
                       <div style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,marginBottom:2 }}>{d.name}</div>
                       <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{d.streams}</div>
                     </div>
-                    <span style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:4,padding:'2px 7px' }}>Simulated</span>
+                    <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:4,padding:'2px 7px' }}>Simulated</span>
                   </div>
                 ))}
               </Panel>
@@ -1612,8 +1613,8 @@ Lowercase English names. Translate Swedish to English.` }
                   return (
                     <Panel key={m.key} style={{ marginBottom:0 }}>
                       <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
-                        <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase' }}>{m.label}</div>
-                        <div style={{ fontFamily:fonts.mono,fontSize:16,color:m.color,fontWeight:400 }}>{latest}<span style={{ fontSize:9,color:T.w4,marginLeft:3 }}>{m.unit}</span></div>
+                        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase' }}>{m.label}</div>
+                        <div style={{ fontFamily:fonts.mono,fontSize:16,color:m.color,fontWeight:400 }}>{latest}<span style={{ fontSize:11,color:T.w4,marginLeft:3 }}>{m.unit}</span></div>
                       </div>
                       <svg width={w} height={h} style={{ display:'block' }}>
                         <polyline points={pts} fill="none" stroke={m.color} strokeWidth={1.5} strokeLinejoin="round"/>
@@ -1630,7 +1631,7 @@ Lowercase English names. Translate Swedish to English.` }
                   <div key={i} style={{ display:'flex',alignItems:'center',gap:12,padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
                     <div style={{ width:6,height:6,borderRadius:'50%',background:s.level==='severe'?T.err:T.warn,flexShrink:0 }}/>
                     <div style={{ flex:1,fontSize:12,color:T.w6,fontFamily:fonts.sans }}>{s.label} — {s.val}</div>
-                    <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4 }}>{s.min}min</span>
+                    <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4 }}>{s.min}min</span>
                   </div>
                 ))}
               </Panel>
@@ -1649,7 +1650,7 @@ Lowercase English names. Translate Swedish to English.` }
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28 }}>
             {[['Protocol',P.protocol||'Option A — 21-day detox'],['Phase',`Phase ${P.phase||1}`],['Day',`Day ${P.dayInProtocol||1}`]].map(([l,v])=>(
               <Panel key={l} style={{ marginBottom:0,textAlign:'center' }}>
-                <div style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:6 }}>{l}</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:6 }}>{l}</div>
                 <div style={{ fontFamily:fonts.serif,fontSize:15,color:T.w7,fontWeight:400 }}>{v}</div>
               </Panel>
             ))}
@@ -1674,8 +1675,8 @@ Lowercase English names. Translate Swedish to English.` }
           </Panel>}
           {(P.alsoAvoid?.candida?.length > 0 || P.alsoAvoid?.whey?.length > 0) && <Panel>
             <FieldLabel>Marker-specific avoidances</FieldLabel>
-            {P.alsoAvoid.candida?.length > 0 && <><div style={{ fontFamily:fonts.mono,fontSize:8,color:'#906080',letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>Candida — 90–120 days</div><div style={{ display:'flex',flexWrap:'wrap',gap:5,marginBottom:14 }}>{P.alsoAvoid.candida.map(f=><span key={f} style={{ background:'#90608012',border:'1px solid #90608030',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:'#906080' }}>{f}</span>)}</div></>}
-            {P.alsoAvoid.whey?.length > 0 && <><div style={{ fontFamily:fonts.mono,fontSize:8,color:'#5080A8',letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>Whey/Dairy — 120–180 days</div><div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>{P.alsoAvoid.whey.map(f=><span key={f} style={{ background:'#5080A812',border:'1px solid #5080A830',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:'#5080A8' }}>{f}</span>)}</div></>}
+            {P.alsoAvoid.candida?.length > 0 && <><div style={{ fontFamily:fonts.mono,fontSize:10,color:'#906080',letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>Candida — 90–120 days</div><div style={{ display:'flex',flexWrap:'wrap',gap:5,marginBottom:14 }}>{P.alsoAvoid.candida.map(f=><span key={f} style={{ background:'#90608012',border:'1px solid #90608030',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:'#906080' }}>{f}</span>)}</div></>}
+            {P.alsoAvoid.whey?.length > 0 && <><div style={{ fontFamily:fonts.mono,fontSize:10,color:'#5080A8',letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>Whey/Dairy — 120–180 days</div><div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>{P.alsoAvoid.whey.map(f=><span key={f} style={{ background:'#5080A812',border:'1px solid #5080A830',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:'#5080A8' }}>{f}</span>)}</div></>}
           </Panel>}
           <Panel>
             <FieldLabel>Reintroduction phases</FieldLabel>
@@ -1683,7 +1684,7 @@ Lowercase English names. Translate Swedish to English.` }
               <div key={ph.id} style={{ borderLeft:`2px solid ${ph.color}`,paddingLeft:14,marginBottom:18 }}>
                 <div style={{ display:'flex',justifyContent:'space-between',marginBottom:4 }}>
                   <span style={{ fontSize:13,fontFamily:fonts.sans,fontWeight:500,color:T.w7 }}>Phase {ph.id} — {ph.label}</span>
-                  <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4 }}>{ph.range}</span>
+                  <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4 }}>{ph.range}</span>
                 </div>
                 <div style={{ display:'flex',flexWrap:'wrap',gap:5,marginBottom:6 }}>
                   {ph.rules.map(r=><span key={r} style={{ fontSize:11,fontFamily:fonts.sans,color:T.w5,background:T.w2,borderRadius:4,padding:'2px 8px' }}>{r}</span>)}
@@ -1739,7 +1740,7 @@ Lowercase English names. Translate Swedish to English.` }
               <Panel key={mealKey}>
                 <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:meal.isProtein?12:0 }}>
                   <div>
-                    <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>{mealKey.replace(/(\d)/,' $1').replace('snack','Snack ')}</div>
+                    <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>{mealKey.replace(/(\d)/,' $1').replace('snack','Snack ')}</div>
                     <div style={{ fontSize:14,color:T.w6,fontFamily:fonts.sans }}>{meal.base}</div>
                   </div>
                   {meal.isProtein && (
@@ -1878,7 +1879,7 @@ Lowercase English names. Translate Swedish to English.` }
             <FieldLabel>Your list</FieldLabel>
             <div style={{ fontSize:12.5,color:T.w6,lineHeight:1.9,fontFamily:fonts.sans,fontWeight:300 }}>
               {groceryList.split('\n').map((l,i)=>{
-                if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:'0.18em',textTransform:'uppercase',marginTop:16,marginBottom:6 }}>{l.replace(/\*\*/g,'')}</div>;
+                if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.18em',textTransform:'uppercase',marginTop:16,marginBottom:6 }}>{l.replace(/\*\*/g,'')}</div>;
                 if(l.startsWith('- '))return<div key={i} style={{ display:'flex',gap:8,alignItems:'flex-start',marginBottom:2 }}><span style={{ color:T.rg,flexShrink:0 }}>·</span><span>{l.slice(2)}</span></div>;
                 return l.trim()?<div key={i} style={{ fontSize:11,color:T.w4 }}>{l}</div>:null;
               })}
@@ -1894,7 +1895,7 @@ Lowercase English names. Translate Swedish to English.` }
             {groceryList.split('\n').filter(l=>l.startsWith('- ')).map(l=>l.slice(2).trim().split('(')[0].trim()).filter(Boolean).slice(0,16).map((item,i)=>(
               <a key={i} href={stores[groceryStore].search + encodeURIComponent(item)} target="_blank" rel="noopener noreferrer" style={{ display:'inline-flex',alignItems:'center',gap:6,background:T.w,border:`1px solid ${T.w3}`,borderRadius:6,padding:'5px 12px',margin:'0 6px 6px 0',textDecoration:'none',fontSize:11.5,color:T.w6,fontFamily:fonts.sans,transition:'all .15s' }}>
                 {item}
-                <span style={{ fontSize:9,color:T.rg,fontFamily:fonts.mono }}>search</span>
+                <span style={{ fontSize:11,color:T.rg,fontFamily:fonts.mono }}>search</span>
               </a>
             ))}
           </Panel>
@@ -1949,7 +1950,7 @@ Lowercase English names. Translate Swedish to English.` }
           )}
           {foodQ.length <= 1 && allFoods.length > 0 && (
             <div style={{ marginTop:14 }}>
-              <div style={{ display:'flex',gap:12,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:10 }}>
+              <div style={{ display:'flex',gap:12,fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:10 }}>
                 <span style={{ color:T.err }}>{P.severe?.length||0} severe</span>
                 <span style={{ color:T.warn }}>{P.moderate?.length||0} moderate</span>
                 <span style={{ color:T.w5 }}>{P.mild?.length||0} mild</span>
@@ -2004,7 +2005,7 @@ Lowercase English names. Translate Swedish to English.` }
         <Panel>
           <FieldLabel>{outcomes.baseline ? 'Log check-in' : 'Set baseline'}</FieldLabel>
           <div style={{ marginBottom:16 }}>
-            <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:8 }}>Energy level (1–10)</div>
+            <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:8 }}>Energy level (1–10)</div>
             <div style={{ display:'flex',gap:6 }}>
               {[1,2,3,4,5,6,7,8,9,10].map(n=>(
                 <button key={n} onClick={()=>setOutEnergy(n)} style={{ width:32,height:32,borderRadius:6,border:`1px solid ${outEnergy===n?T.rg:T.w3}`,background:outEnergy===n?T.rg:T.w,cursor:'pointer',fontFamily:fonts.mono,fontSize:11,color:outEnergy===n?'#fff':T.w5 }}>{n}</button>
@@ -2012,7 +2013,7 @@ Lowercase English names. Translate Swedish to English.` }
             </div>
           </div>
           <div style={{ marginBottom:16 }}>
-            <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:8 }}>Active symptoms</div>
+            <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:8 }}>Active symptoms</div>
             <div style={{ display:'flex',flexWrap:'wrap',gap:7 }}>
               {Object.values(SYMPTOM_CATS).flatMap(c=>c.items).map(s=>(
                 <Chip key={s} label={s} on={outSymptoms.includes(s)} onClick={()=>setOutSymptoms(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s])}/>
@@ -2031,10 +2032,10 @@ Lowercase English names. Translate Swedish to English.` }
             <div style={{ display:'flex',gap:24 }}>
               <div style={{ textAlign:'center' }}>
                 <div style={{ fontFamily:fonts.serif,fontSize:32,color:T.rg,fontWeight:400 }}>{outcomes.baseline.energy}</div>
-                <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase' }}>Energy</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase' }}>Energy</div>
               </div>
               <div>
-                <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6 }}>Baseline symptoms</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6 }}>Baseline symptoms</div>
                 <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
                   {outcomes.baseline.symptoms.length > 0 ? outcomes.baseline.symptoms.map(s=><span key={s} style={{ background:`${T.err}10`,border:`1px solid ${T.err}25`,borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:fonts.sans,color:T.err }}>{s}</span>) : <span style={{ fontSize:12,color:T.w4,fontFamily:fonts.sans }}>No symptoms logged</span>}
                 </div>
@@ -2114,7 +2115,7 @@ Lowercase English names. Translate Swedish to English.` }
           <RuledInput value={gutNotes} onChange={e=>setGutNotes(e.target.value)} placeholder="Any relevant notes — pain, urgency, colour, timing…" style={{ marginBottom:16 }}/>
           <BtnPrimary onClick={logGut} disabled={gutType===null && !gutPhotoB64}>{gutAnalysisLoad?'Analysing…':'Log & Analyse'}</BtnPrimary>
           {gutAnalysis && <div style={{ marginTop:16, padding:'14px 16px', background:T.rgBg, borderRadius:8, borderLeft:`3px solid ${T.rg}` }}>
-            <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.rg, letterSpacing:'0.14em', marginBottom:8 }}>MARIO ANALYSIS</div>
+            <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.rg, letterSpacing:'0.14em', marginBottom:8 }}>MARIO ANALYSIS</div>
             <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.7 }}>{gutAnalysis}</div>
           </div>}
         </Panel>
@@ -2166,7 +2167,7 @@ Lowercase English names. Translate Swedish to English.` }
             return <>
               <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:16 }}>
                 <div style={{ width:10,height:10,borderRadius:'50%',background:col }}/>
-                <div style={{ fontFamily:fonts.mono,fontSize:9,color:col,letterSpacing:'0.18em',textTransform:'uppercase' }}>
+                <div style={{ fontFamily:fonts.mono,fontSize:11,color:col,letterSpacing:'0.18em',textTransform:'uppercase' }}>
                   {isPass ? 'Meal clears protocol' : isReview ? 'Review required' : 'Protocol conflict detected'}
                 </div>
               </div>
@@ -2209,7 +2210,7 @@ Lowercase English names. Translate Swedish to English.` }
             {medAnalysis.split('\n').map((l,i)=>l.trim()?<div key={i} style={{ marginBottom:6 }}>{l}</div>:null)}
           </div>
           <div style={{ marginTop:16,padding:'10px 14px',background:`${T.warn}0C`,border:`1px solid ${T.warn}25`,borderRadius:8 }}>
-            <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.warn,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>Clinical advisory</div>
+            <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.warn,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>Clinical advisory</div>
             <div style={{ fontSize:11,color:T.w5,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.6 }}>This analysis is informational. Always review medication adjustments with Dr Mario Anthis before making changes.</div>
           </div>
         </Panel>}
@@ -2224,7 +2225,7 @@ Lowercase English names. Translate Swedish to English.` }
               { hormone:'Thyroid',      methods:['Levothyroxine (T4)','Liothyronine (T3)','Desiccated (T4+T3)','Compounded'] },
             ].map(h=>(
               <div key={h.hormone} style={{ background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'12px' }}>
-                <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:8 }}>{h.hormone}</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:8 }}>{h.hormone}</div>
                 {h.methods.map(m=><div key={m} style={{ fontSize:11.5,color:T.w5,fontFamily:fonts.sans,fontWeight:300,marginBottom:4 }}>· {m}</div>)}
               </div>
             ))}
@@ -2243,7 +2244,7 @@ Lowercase English names. Translate Swedish to English.` }
                   <div style={{ width:6,height:6,borderRadius:'50%',background:api.color }}/>
                   <span style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,fontWeight:500 }}>{api.name}</span>
                 </div>
-                <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:api.color,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4 }}>{api.status}</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:11,color:api.color,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4 }}>{api.status}</div>
                 <div style={{ fontSize:10.5,color:T.w4,fontFamily:fonts.sans,fontWeight:300 }}>{api.note}</div>
               </div>
             ))}
@@ -2265,9 +2266,9 @@ Lowercase English names. Translate Swedish to English.` }
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:8 }}>
               {[['Severe', P.severe, T.err], ['Moderate', P.moderate, T.warn], ['Mild', P.mild, T.w5]].map(([label, items, color]) => (
                 <div key={label}>
-                  <div style={{ fontFamily:fonts.mono, fontSize:8, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:4 }}>{label} · {(items||[]).length}</div>
+                  <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:4 }}>{label} · {(items||[]).length}</div>
                   {(items||[]).slice(0, 6).map(f => <div key={f} style={{ fontSize:11, color:T.w6, fontFamily:fonts.sans, padding:'1px 0' }}>{f}</div>)}
-                  {(items||[]).length > 6 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4 }}>+{items.length - 6} more</div>}
+                  {(items||[]).length > 6 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>+{items.length - 6} more</div>}
                 </div>
               ))}
             </div>
@@ -2287,14 +2288,14 @@ Lowercase English names. Translate Swedish to English.` }
                 <div style={{ display:'flex', gap:8, justifyContent:'center', marginBottom:12 }}>
                   {[0,1,2].map(i => <div key={i} style={{ width:8, height:8, borderRadius:'50%', background:T.rg, animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
                 </div>
-                <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.12em' }}>ANALYSING YOUR RESULTS...</div>
+                <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.12em' }}>ANALYSING YOUR RESULTS...</div>
               </div>
             ) : dashLabSuccess ? (
               <div>
                 <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:8 }}>
                   RESULTS UPDATED — {(P.severe||[]).length + (P.moderate||[]).length + (P.mild||[]).length} items loaded
                 </div>
-                {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4 }}>{fn}</div>)}
+                {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>{fn}</div>)}
               </div>
             ) : (
               <div>
@@ -2304,7 +2305,7 @@ Lowercase English names. Translate Swedish to English.` }
             )}
 
             {dashLabError && (
-              <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, marginTop:8 }}>{typeof dashLabError === 'string' ? dashLabError : 'Could not extract results'}</div>
+              <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.warn, marginTop:8 }}>{typeof dashLabError === 'string' ? dashLabError : 'Could not extract results'}</div>
             )}
 
             <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:12, flexWrap:'wrap' }}>
@@ -2354,7 +2355,7 @@ Lowercase English names. Translate Swedish to English.` }
               { type:'Clinical reports', formats:'.doc, .docx, PDF', desc:'Doctor\'s notes, specialist reports' },
             ].map(ft => (
               <div key={ft.type} style={{ background:T.w, border:`1px solid ${T.w3}`, borderRadius:8, padding:12 }}>
-                <div style={{ fontFamily:fonts.mono, fontSize:8.5, color:T.rg2, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:4 }}>{ft.type}</div>
+                <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg2, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:4 }}>{ft.type}</div>
                 <div style={{ fontSize:11, color:T.w6, fontFamily:fonts.sans, marginBottom:2 }}>{ft.formats}</div>
                 <div style={{ fontSize:10, color:T.w4, fontFamily:fonts.sans, fontWeight:300 }}>{ft.desc}</div>
               </div>
@@ -2371,7 +2372,7 @@ Lowercase English names. Translate Swedish to English.` }
   // Auth check loading
   if (!authChecked) return (
     <div style={{ minHeight:'100vh', background:T.w, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.2em' }}>LOADING...</div>
+      <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.2em' }}>LOADING...</div>
     </div>
   );
 
@@ -2385,7 +2386,7 @@ Lowercase English names. Translate Swedish to English.` }
 
   if (showLanding) return (
     <div style={{ minHeight:'100vh',background:T.w,overflow:'hidden',position:'relative' }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}button:hover{opacity:0.88}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');*{box-sizing:border-box}button:hover{opacity:0.88}`}</style>
       {/* Orbs */}
       {[{s:520,c:`rgba(220,180,168,0.22)`,an:'ob1',t:'8%',l:'58%'},{s:360,c:`rgba(196,136,122,0.14)`,an:'ob2',t:'40%',l:'72%'},{s:440,c:`rgba(240,210,195,0.16)`,an:'ob3',t:'-8%',l:'36%'}].map((o,i)=>(
         <div key={i} style={{ position:'absolute',top:o.t,left:o.l,width:o.s,height:o.s,borderRadius:'50%',background:o.c,filter:'blur(80px)',animation:`${o.an} ${14+i*2.5}s ease-in-out infinite`,pointerEvents:'none' }}/>
@@ -2400,13 +2401,13 @@ Lowercase English names. Translate Swedish to English.` }
           <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
           <span style={{ fontFamily:"'EB Garamond', Georgia, serif",fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
         </div>
-        <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
+        <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
       </div>
       {/* Hero — everything above the fold, no scroll */}
       <div style={{ position:'relative',zIndex:2,padding:'28px 60px 0',maxWidth:860,height:'calc(100vh - 58px)',display:'flex',flexDirection:'column',justifyContent:'center' }}>
         <div style={{ display:'inline-flex',alignItems:'center',gap:12,marginBottom:20 }}>
           <div style={{ width:28,height:1,background:T.rg }}/>
-          <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.24em',textTransform:'uppercase' }}>precision medicine · stockholm</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.24em',textTransform:'uppercase' }}>precision medicine · stockholm</span>
         </div>
         <h1 style={{ fontFamily:fonts.serif,fontSize:54,fontWeight:400,lineHeight:1.0,letterSpacing:'-0.02em',color:T.w7,marginBottom:16 }}>
           Your body has<br/>been speaking.<br/>
@@ -2417,13 +2418,13 @@ Lowercase English names. Translate Swedish to English.` }
           {[['21','Day Protocol'],['10′','Intake Time'],['7','Patent Claims'],['4','Diagnostic Pillars']].map(([n,l],i,arr)=>(
             <div key={l} style={{ padding:'12px 28px 10px 0',marginRight:28,borderRight:i<arr.length-1?`1px solid ${T.w3}`:'none' }}>
               <div style={{ fontFamily:fonts.serif,fontSize:26,fontWeight:400,color:T.w7,letterSpacing:'-0.03em',lineHeight:1,marginBottom:4 }}>{n}</div>
-              <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>{l}</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>{l}</div>
             </div>
           ))}
         </div>
         <div style={{ display:'flex',alignItems:'center',gap:20 }}>
           <BtnPrimary onClick={()=>{setShowLanding(false); if(authUser){setShowOnboarding(true);}else{setShowAuth(true);}}}>Begin Assessment</BtnPrimary>
-          <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.12em' }}>~10 min · GDPR · No card required</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.12em' }}>~10 min · GDPR · No card required</span>
         </div>
       </div>
       <style>{`@keyframes ob1{0%,100%{transform:translate(0,0) scale(1) rotate(0deg)}25%{transform:translate(36px,-30px) scale(1.04) rotate(4deg)}50%{transform:translate(14px,38px) scale(.97) rotate(-3deg)}75%{transform:translate(-24px,12px) scale(1.02) rotate(6deg)}}@keyframes ob2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-28px,22px) scale(.95)}70%{transform:translate(20px,-16px) scale(1.03)}}@keyframes ob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-18px,-24px) scale(1.07)}}@keyframes ca1{0%,100%{opacity:.38;transform:rotate(-6deg) scaleX(1)}50%{opacity:.08;transform:rotate(-3deg) scaleX(1.45)}}@keyframes ca2{0%,100%{opacity:.32;transform:rotate(9deg) scaleX(1)}50%{opacity:.06;transform:rotate(6deg) scaleX(.62)}}@keyframes shimmer{0%{background-position:0% center}100%{background-position:220% center}}`}</style>
@@ -2524,7 +2525,7 @@ Lowercase English names. Translate Swedish to English.` }
     return (
       <div style={{ minHeight:'100vh', background:T.w, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:fonts.sans }}>
         <div style={{ maxWidth:520, width:'100%', padding:'0 24px', textAlign:'center' }}>
-          <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:20 }}>
+          <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:20 }}>
             Biological Entropy Score
           </div>
           {/* SVG Gauge */}
@@ -2543,7 +2544,7 @@ Lowercase English names. Translate Swedish to English.` }
           </h2>
           <p style={{ fontSize:14, color:T.w5, lineHeight:1.7, marginBottom:32 }}>{desc}</p>
           <div style={{ background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:10, padding:'14px 20px', marginBottom:32, textAlign:'left' }}>
-            <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>Protocol assigned</div>
+            <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>Protocol assigned</div>
             <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w7 }}>Option A — 21-Day Universal GCR Detox</div>
             <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5, marginTop:4 }}>The fastest path to immune silence. Saves 3 months vs rotation-only approach.</div>
           </div>
@@ -2610,7 +2611,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
   // ── 21-DAY DIET SCREEN ─────────────────────────────────────────────────────
   if (showDiet) return (
     <div style={{ minHeight:'100vh', background:T.w, fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');*{box-sizing:border-box}`}</style>
       <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
       <div style={{ maxWidth:720, margin:'0 auto', padding:'48px 24px 80px' }}>
         <Eyebrow>Your personalised protocol</Eyebrow>
@@ -2628,7 +2629,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
             <div style={{ display:'flex', gap:8, justifyContent:'center' }}>
               {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
             </div>
-            <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:20, letterSpacing:'0.12em' }}>
+            <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:20, letterSpacing:'0.12em' }}>
               CROSS-REFERENCING ALCAT DATA · CALIBRATING TO ANCESTRAL LIBRARY
             </div>
           </Panel>
@@ -2665,7 +2666,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
   // ── DASHBOARD ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ minHeight:'100vh',background:T.w,color:T.w7,fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:${T.w3};border-radius:2px}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:${T.w3};border-radius:2px}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
       {popup && <SpikePopup/>}
       <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
       {/* Tab bar */}
@@ -2685,7 +2686,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
               const col = isC?'#906080':isW?'#5080A8':T.rg;
               return <div key={m} style={{ background:T.w1,border:`1px solid ${col}30`,borderRadius:4,padding:'3px 9px',display:'flex',gap:5,alignItems:'center' }}>
                 <div style={{ width:4,height:4,borderRadius:'50%',background:col }}/>
-                <span style={{ fontSize:9,fontFamily:fonts.mono,color:col,letterSpacing:'0.1em' }}>{m}</span>
+                <span style={{ fontSize:11,fontFamily:fonts.mono,color:col,letterSpacing:'0.1em' }}>{m}</span>
               </div>;
             })}
           </div>
@@ -2698,7 +2699,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
           <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:32,paddingBottom:20,borderBottom:`1px solid ${T.w2}` }}>
             <div>
               <div style={{ fontFamily:fonts.serif,fontSize:20,color:T.w7,fontWeight:400,marginBottom:2 }}>{patient.name}</div>
-              <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>
                 {patient.hormonalStatus||patient.sex||''}{patient.dayInProtocol?` · Day ${patient.dayInProtocol} of protocol`:''}
               </div>
             </div>
@@ -2706,7 +2707,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
               {[['Severe',(P.severe||[]).length,T.err],['Moderate',(P.moderate||[]).length,T.warn],['Mild',(P.mild||[]).length,T.w5]].filter(([,n])=>n>0).map(([l,n,c])=>(
                 <div key={l} style={{ textAlign:'center',padding:'6px 12px',background:T.w1,border:`1px solid ${T.w3}`,borderRadius:7 }}>
                   <div style={{ fontFamily:fonts.serif,fontSize:18,color:c,fontWeight:400 }}>{n}</div>
-                  <div style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase' }}>{l}</div>
+                  <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase' }}>{l}</div>
                 </div>
               ))}
             </div>
@@ -2719,7 +2720,7 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
         <div style={{ position:'fixed',inset:0,background:'rgba(28,20,16,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:24,backdropFilter:'blur(8px)' }} onClick={()=>setShowDoctorPopup(false)}>
           <div style={{ background:T.w,borderRadius:16,maxWidth:440,width:'100%',boxShadow:'0 24px 64px rgba(28,20,16,0.22)',overflow:'hidden' }} onClick={e=>e.stopPropagation()}>
             <div style={{ padding:'28px 28px 0' }}>
-              <div style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.18em',color:T.rg2,textTransform:'uppercase',marginBottom:10 }}>Doctor consultation</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,letterSpacing:'0.18em',color:T.rg2,textTransform:'uppercase',marginBottom:10 }}>Doctor consultation</div>
               <div style={{ fontFamily:fonts.serif,fontSize:24,color:T.w7,fontWeight:400,lineHeight:1.2,marginBottom:16 }}>Speak with our clinical team</div>
               <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w5,lineHeight:1.6,marginBottom:8 }}>
                 Our team of physicians at MediBalans can review your case, discuss your results, and provide personalised clinical guidance.
@@ -2754,12 +2755,12 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
       </div>
       {/* Footer */}
       <div style={{ borderTop:`1px solid ${T.w3}`,padding:'14px 44px',display:'flex',justifyContent:'space-between',alignItems:'center',background:T.w1 }}>
-        <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.12em' }}>
+        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em' }}>
           <span style={{ color:T.w6,fontWeight:500 }}>meet mario</span> · MediBalans AB · Karlavägen 89, Stockholm
         </div>
         <div style={{ display:'flex',gap:10,alignItems:'center' }}>
-          <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:'2px 8px',letterSpacing:'0.12em',background:T.rgBg }}>PATENT PENDING · SE 2615203-3</span>
-          <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.1em' }}>AI-driven clinical decision support · Global Constraint Rule framework</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:'2px 8px',letterSpacing:'0.12em',background:T.rgBg }}>PATENT PENDING · SE 2615203-3</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.1em' }}>AI-driven clinical decision support · Global Constraint Rule framework</span>
         </div>
       </div>
     </div>
