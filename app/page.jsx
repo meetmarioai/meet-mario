@@ -123,20 +123,10 @@ function detectSpikes(pts) {
 // ── PRIMITIVES ─────────────────────────────────────────────────────────────────
 const Nav = ({ onBabyBalans }) => (
   <div style={{ position:'sticky',top:0,zIndex:200,height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 44px',background:'rgba(247,244,240,0.92)',backdropFilter:'blur(24px) saturate(180%)',WebkitBackdropFilter:'blur(24px) saturate(180%)',borderBottom:`1px solid ${T.w3}` }}>
-    <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
-      <defs>
-        <linearGradient id="rg4s" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#C4887A"/>
-          <stop offset="50%" stopColor="#9A6255"/>
-          <stop offset="100%" stopColor="#C4887A"/>
-        </linearGradient>
-      </defs>
-      <circle cx="3" cy="14" r="2.4" stroke="#C4887A" strokeWidth="0.5" fill="none"/>
-      <circle cx="3" cy="14" r="0.9" fill="#C4887A"/>
-      <text x="9" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">m</text>
-      <path d="M43 14 C43 9.5 36.5 7.5 33 9.5 C29 11.5 29 17.5 33 19.5 C36.5 21.5 43 19.5 43 14 C43 9.5 49.5 7.5 53 9.5 C57 11.5 57 17.5 53 19.5 C49.5 21.5 43 19.5 43 14 Z" fill="none" stroke="url(#rg4s)" strokeWidth="1.5" strokeLinecap="round"/>
-      <text x="57" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">t mario</text>
-    </svg>
+    <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+      <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
+      <span style={{ fontFamily:"'EB Garamond', Georgia, serif",fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
+    </div>
     <div style={{ display:'flex',alignItems:'center',gap:18 }}>
       <button onClick={onBabyBalans} style={{ background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',padding:'4px 10px',borderRadius:4,transition:'all .15s' }}>
         Baby Balans
@@ -223,13 +213,10 @@ function AuthScreen({ onAuthed }) {
 
       {/* Nav */}
       <div style={{ padding:'20px 32px', display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:`1px solid ${T.w2}` }}>
-        <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
-          <defs><linearGradient id="rg4a" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#C4887A"/><stop offset="50%" stopColor="#9A6255"/><stop offset="100%" stopColor="#C4887A"/></linearGradient></defs>
-          <circle cx="3" cy="14" r="2.4" stroke="#C4887A" strokeWidth="0.5" fill="none"/><circle cx="3" cy="14" r="0.9" fill="#C4887A"/>
-          <text x="9" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">m</text>
-          <path d="M43 14 C43 9.5 36.5 7.5 33 9.5 C29 11.5 29 17.5 33 19.5 C36.5 21.5 43 19.5 43 14 C43 9.5 49.5 7.5 53 9.5 C57 11.5 57 17.5 53 19.5 C49.5 21.5 43 19.5 43 14 Z" fill="none" stroke="url(#rg4a)" strokeWidth="1.5" strokeLinecap="round"/>
-          <text x="57" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">t mario</text>
-        </svg>
+        <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+          <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
+          <span style={{ fontFamily:"'EB Garamond', Georgia, serif",fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
+        </div>
         <div style={{ fontFamily:fonts.mono, fontSize:8, color:T.w4, letterSpacing:'0.16em' }}>MEDIBALANS AB · STOCKHOLM</div>
       </div>
 
@@ -2131,13 +2118,10 @@ export default function MeetMario({ patient: patientProp }) {
       ))}
       {/* Nav */}
       <div style={{ position:'relative',zIndex:10,height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 60px',borderBottom:`1px solid ${T.w3}` }}>
-        <svg width="200" height="28" viewBox="0 0 200 28" fill="none">
-          <defs><linearGradient id="rg4l" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stopColor="#C4887A"/><stop offset="50%" stopColor="#9A6255"/><stop offset="100%" stopColor="#C4887A"/></linearGradient></defs>
-          <circle cx="3" cy="14" r="2.4" stroke="#C4887A" strokeWidth="0.5" fill="none"/><circle cx="3" cy="14" r="0.9" fill="#C4887A"/>
-          <text x="9" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">m</text>
-          <path d="M43 14 C43 9.5 36.5 7.5 33 9.5 C29 11.5 29 17.5 33 19.5 C36.5 21.5 43 19.5 43 14 C43 9.5 49.5 7.5 53 9.5 C57 11.5 57 17.5 53 19.5 C49.5 21.5 43 19.5 43 14 Z" fill="none" stroke="url(#rg4l)" strokeWidth="1.5" strokeLinecap="round"/>
-          <text x="57" y="20" fontFamily="'EB Garamond', Georgia, serif" fontSize="22" fontWeight="400" fill="#1C1710">t mario</text>
-        </svg>
+        <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+          <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
+          <span style={{ fontFamily:"'EB Garamond', Georgia, serif",fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
+        </div>
         <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
       </div>
       {/* Hero — everything above the fold, no scroll */}
