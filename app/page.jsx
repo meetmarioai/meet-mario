@@ -1052,40 +1052,99 @@ export default function MeetMario({ patient: patientProp }) {
           r.readAsText(file);
         });
 
-        // Known clinically relevant rsIDs for methylation, detox, inflammation, nutrient metabolism
+        // ── ACTIONABLE SNPs BY CLINICAL DOMAIN ──
+        // Only SNPs where we can intervene via supplementation, diet, training, hormesis, circadian, or lifestyle
         const clinicalRsIds = new Set([
-          'rs1801133','rs1801131', // MTHFR C677T, A1298C
-          'rs1805087', // MTR A2756G
-          'rs1801394', // MTRR A66G
-          'rs4680',    // COMT Val158Met
-          'rs6323',    // MAOA
-          'rs4633','rs4818', // COMT
-          'rs1799945','rs1800562', // HFE (iron)
-          'rs7946',    // PEMT (choline)
-          'rs12325817', // FOLR1
-          'rs602662','rs601338', // FUT2 (B12)
-          'rs234706',  // CBS
-          'rs1695',    // GSTP1 (glutathione)
-          'rs1138272',  // GSTP1
-          'rs4588','rs7041', // GC/VDBP (vitamin D)
-          'rs12934922','rs7501331', // BCMO1 (beta-carotene→vitamin A)
-          'rs174547','rs174546', // FADS1 (omega-3)
-          'rs1799853','rs1057910', // CYP2C9
-          'rs762551',  // CYP1A2 (caffeine)
-          'rs4244285', // CYP2C19
-          'rs1800497', // DRD2/ANKK1 (dopamine)
-          'rs53576',   // OXTR (oxytocin receptor)
-          'rs9939609', // FTO (appetite/obesity)
-          'rs7903146', // TCF7L2 (diabetes risk)
-          'rs429358','rs7412', // APOE (lipid metabolism)
-          'rs4149056', // SLCO1B1 (statin metabolism)
-          'rs1042713', // ADRB2
-          'rs10741657', // CYP2R1 (vitamin D hydroxylation)
-          'rs2228570', // VDR (vitamin D receptor)
-          'rs1544410','rs7975232', // VDR
-          'rs4654748', // NBPF3 (B6)
-          'rs2060793', // CYP2R1
-          'rs11568820', // VDR Cdx2
+          // ── METHYLATION & FOLATE CYCLE ──
+          'rs1801133','rs1801131', // MTHFR C677T, A1298C — folate metabolism
+          'rs1805087',  // MTR A2756G — B12-dependent remethylation
+          'rs1801394',  // MTRR A66G — methionine synthase reductase
+          'rs234706',   // CBS — transsulfuration, sulfur/ammonia balance
+          'rs1979277',  // SHMT1 — serine→glycine, folate pool
+          'rs1006737',  // CACNA1C — calcium channel, mood/methylation link
+          'rs7946',     // PEMT — choline synthesis (phosphatidylcholine, acetylcholine, bile)
+          'rs12325817', // FOLR1 — folate receptor
+          'rs602662','rs601338', // FUT2 — B12 absorption, gut Bifidobacterium
+          'rs1801198',  // TCN2 — transcobalamin, B12 cellular delivery
+          // ── DETOX & GLUTATHIONE ──
+          'rs1695','rs1138272', // GSTP1 — Phase II glutathione conjugation
+          'rs1056806',  // GSTM1 — glutathione S-transferase mu
+          'rs1138272',  // GSTP1 Ile105Val
+          'rs4880',     // SOD2 (MnSOD) — mitochondrial superoxide dismutase
+          'rs1001179',  // CAT — catalase, H2O2 clearance
+          'rs7943316',  // HMOX1 — heme oxygenase, oxidative stress response
+          'rs2066853',  // AHR — aryl hydrocarbon receptor, xenobiotic detox
+          'rs1048943','rs4646903', // CYP1A1 — Phase I detox, polycyclic aromatic hydrocarbons
+          'rs762551',   // CYP1A2 — caffeine metabolism, circadian impact
+          'rs1799853','rs1057910', // CYP2C9 — drug/toxin metabolism
+          'rs4244285',  // CYP2C19 — drug metabolism (PPIs, SSRIs)
+          'rs3892097',  // CYP2D6 — drug metabolism (beta-blockers, antidepressants)
+          'rs4149056',  // SLCO1B1 — hepatic transporter, statin clearance
+          // ── INFLAMMATION & IMMUNITY ──
+          'rs1800795',  // IL6 — interleukin-6 promoter, inflammatory response
+          'rs1800629',  // TNF-α — tumor necrosis factor, systemic inflammation
+          'rs1143634',  // IL1B — interleukin-1β, inflammatory cascade
+          'rs1800896',  // IL10 — anti-inflammatory cytokine capacity
+          'rs20417',    // COX2/PTGS2 — prostaglandin synthesis, pain/inflammation
+          'rs2241880',  // ATG16L1 — autophagy, gut immune homeostasis
+          'rs3135388',  // HLA-DRB1 — adaptive immunity, autoimmune risk
+          'rs2476601',  // PTPN22 — T-cell activation threshold
+          // ── LONGEVITY PATHWAYS (SIRT1, AMPK, mTOR, telomeres) ──
+          'rs7895833','rs7069102','rs2273773', // SIRT1 — silent information regulator, longevity
+          'rs2249105',  // PRKAA2/AMPK — energy sensor, autophagy activation
+          'rs1801282',  // PPARγ — metabolic regulation, insulin sensitivity, fat storage
+          'rs9939609','rs1421085','rs17817449', // FTO — appetite, obesity, exercise epigenetics
+          'rs7903146',  // TCF7L2 — strongest T2D genetic risk, GLP-1 secretion
+          'rs1050450',  // GPX1 — glutathione peroxidase, selenium-dependent antioxidant
+          'rs10936599', // TERC — telomerase RNA component, telomere length
+          'rs2736100',  // TERT — telomerase reverse transcriptase, cellular ageing
+          'rs11568820','rs2228570','rs1544410','rs7975232', // VDR — vitamin D receptor, immune modulation, longevity
+          'rs10741657','rs2060793', // CYP2R1 — vitamin D activation
+          'rs429358','rs7412', // APOE — lipid metabolism, neurodegeneration, longevity
+          'rs1800562','rs1799945', // HFE — iron overload, Fenton reaction damage
+          // ── NUTRIENT METABOLISM ──
+          'rs4588','rs7041', // GC/VDBP — vitamin D binding protein
+          'rs12934922','rs7501331', // BCMO1 — beta-carotene→retinol conversion
+          'rs174547','rs174546','rs174570', // FADS1/2 — omega-3/6 desaturation (ALA→EPA→DHA)
+          'rs4654748',  // NBPF3 — vitamin B6 metabolism
+          'rs1801198',  // TCN2 — B12 transport
+          'rs4680','rs4633','rs4818', // COMT — catecholamine clearance, polyphenol metabolism
+          'rs1799998',  // CYP11B2 — aldosterone, sodium/potassium balance
+          'rs1800588',  // LIPC — hepatic lipase, HDL metabolism
+          'rs328',      // LPL — lipoprotein lipase, triglyceride clearance
+          // ── CIRCADIAN RHYTHM & SLEEP ──
+          'rs57875989', // PER2 — period circadian clock, sleep timing
+          'rs12649507', // CLOCK — circadian locomotor output cycles kaput
+          'rs2287161',  // CRY1 — cryptochrome, delayed sleep phase
+          'rs73598374', // ADA — adenosine deaminase, deep sleep quality
+          'rs5751876',  // ADORA2A — adenosine receptor, caffeine sensitivity + sleep pressure
+          'rs228697',   // PER3 — period 3, morning/evening chronotype
+          // ── SYMPATHETIC / PARASYMPATHETIC / VAGUS / ANS ──
+          'rs6323',     // MAOA — monoamine oxidase A, serotonin/NE/dopamine breakdown
+          'rs1042713','rs1042714', // ADRB2 — beta-2 adrenergic receptor, catecholamine sensitivity
+          'rs1800544',  // ADRA2A — alpha-2 adrenergic, sympathetic regulation
+          'rs53576','rs2254298', // OXTR — oxytocin receptor, social bonding, parasympathetic
+          'rs1800497',  // DRD2/ANKK1 — dopamine D2 receptor density, reward system
+          'rs4570625',  // TPH2 — tryptophan hydroxylase 2, serotonin synthesis in brain
+          'rs6295',     // HTR1A — serotonin 1A receptor, anxiety, vagal tone
+          'rs25531',    // SLC6A4 (5-HTTLPR) — serotonin transporter, stress resilience
+          'rs165599',   // COMT 3'UTR — additional COMT regulation variant
+          // ── EXERCISE & HORMESIS RESPONSE ──
+          'rs1815739',  // ACTN3 — alpha-actinin-3, fast-twitch muscle (power vs endurance)
+          'rs8192678',  // PPARGC1A (PGC-1α) — mitochondrial biogenesis, endurance capacity
+          'rs1042713',  // ADRB2 — exercise heart rate response
+          'rs4253778',  // PPARα — fat oxidation during exercise
+          'rs699',      // AGT — angiotensinogen, blood pressure response to exercise
+          'rs5443',     // GNB3 — G-protein β3, exercise blood pressure response
+          'rs1800169',  // BDNF — brain-derived neurotrophic factor, exercise-brain link
+          'rs6265',     // BDNF Val66Met — neuroplasticity, exercise mental health benefit
+          'rs1800012',  // COL1A1 — collagen type I, tendon/ligament injury risk
+          'rs12722',    // COL5A1 — collagen type V, flexibility and injury risk
+          'rs1799752',  // ACE I/D — angiotensin converting enzyme, endurance vs power
+          // ── SUN / SKIN / UV RESPONSE ──
+          'rs1805007','rs1805008','rs1805009', // MC1R — melanocortin receptor, UV sensitivity, vitamin D synthesis efficiency
+          'rs16891982', // SLC45A2 — skin pigmentation, UV damage susceptibility
+          'rs12913832', // HERC2/OCA2 — eye/skin colour, UV tolerance
         ]);
 
         // Parse VCF: extract header + matching lines
@@ -1132,20 +1191,25 @@ export default function MeetMario({ patient: patientProp }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 4000,
-            system: 'You are a clinical genomics analyst. Extract SNP data from VCF/genetic files and return structured JSON. You MUST return valid JSON even if the file format is unusual. Focus on clinically actionable variants.',
-            messages: [{ role: 'user', content: `This is genetic data (VCF or similar format) with ${snpCount} lines containing clinically relevant SNPs out of ${dataLines.length} total variants.
+            system: 'You are a clinical genomics analyst specialising in actionable SNPs. Extract variants from VCF/genetic files and return structured JSON. ONLY include variants where a specific intervention exists (supplementation, diet, training type, hormesis protocol, circadian adjustment, or lifestyle change). Discard benign/normal variants and anything without a clear clinical action.',
+            messages: [{ role: 'user', content: `This is genetic data (VCF or similar format) with ${snpCount} pre-filtered lines out of ${dataLines.length} total variants.
 
-TASK: For each SNP/variant found, extract:
-- rsid (e.g. rs1801133) — look in ID column or anywhere in the line
-- gene name (e.g. MTHFR) — infer from rsID if not explicit
-- genotype (e.g. CT, TT, CC) — from GT field, ALT/REF columns, or genotype columns
+TASK: For each variant, extract:
+- rsid (e.g. rs1801133) — from ID column or anywhere in the line
+- gene (e.g. MTHFR) — infer from rsID if not in file
+- genotype (e.g. CT, TT, CC) — from GT field, ALT/REF, or genotype columns
 - status: "risk" (homozygous variant), "carrier" (heterozygous), or "normal" (wild type)
-- impact: one sentence clinical relevance
+- domain: one of "methylation", "detox", "inflammation", "longevity", "nutrients", "circadian", "ans" (autonomic nervous system), "exercise", "sun"
+- impact: one sentence — MUST state the specific intervention (e.g. "Supplement methylfolate 400-800mcg, prioritise dark leafy greens" or "Avoid HIIT in Phase 1, zone 2 cardio preferred" or "Hard caffeine cutoff 10:00, melatonin onset delayed")
 
-IMPORTANT: The data may use tabs, spaces, or commas as delimiters. Adapt to whatever format you see.
+RULES:
+- ONLY include variants where genotype differs from wild-type reference OR where even carrier status is clinically relevant
+- Skip variants with status "normal" UNLESS the normal status itself is clinically useful (e.g. fast COMT = can tolerate polyphenols freely)
+- The data may use tabs, spaces, or commas as delimiters
+- If genotype cannot be determined, still include the variant with genotype "unknown" if the rsID is clinically important
 
 Return ONLY this JSON (no markdown, no explanation):
-{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","impact":"Reduced folate metabolism ~35%"}]}
+{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","domain":"methylation","impact":"Folate cycle ~35% reduced. Supplement methylfolate 400mcg, prioritise dark leafy greens, avoid folic acid."}]}
 
 Data:
 ${filteredContent.slice(0, 30000)}` }],
@@ -2780,19 +2844,62 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         </Panel>
 
         {/* Genomic data display */}
-        {P.genomicSnps?.length > 0 && (
-          <Panel>
-            <FieldLabel>Genomic variants (from VCF)</FieldLabel>
-            {P.genomicSnps.map((snp, i) => (
-              <div key={i} style={{ display:'flex', gap:12, padding:'6px 0', borderBottom:`1px solid ${T.w2}`, fontSize:12, fontFamily:fonts.sans }}>
-                <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.rg2, minWidth:80 }}>{snp.rsid}</span>
-                <span style={{ color:T.w5, minWidth:60 }}>{snp.gene}</span>
-                <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w6 }}>{snp.genotype}</span>
-                <span style={{ color:T.w4, fontSize:11, flex:1 }}>{snp.impact}</span>
+        {P.genomicSnps?.length > 0 && (() => {
+          const domainLabels = {
+            methylation: 'Methylation & Folate Cycle',
+            detox: 'Detoxification & Glutathione',
+            inflammation: 'Inflammation & Immunity',
+            longevity: 'Longevity Pathways',
+            nutrients: 'Nutrient Metabolism',
+            circadian: 'Circadian & Sleep',
+            ans: 'Autonomic Nervous System',
+            exercise: 'Exercise & Hormesis',
+            sun: 'Sun & UV Response',
+          };
+          const domainColors = {
+            methylation: '#8B5CF6', detox: '#10B981', inflammation: '#EF4444',
+            longevity: '#F59E0B', nutrients: '#3B82F6', circadian: '#6366F1',
+            ans: '#EC4899', exercise: '#F97316', sun: '#EAB308',
+          };
+          const grouped = {};
+          P.genomicSnps.forEach(snp => {
+            const d = snp.domain || 'other';
+            if (!grouped[d]) grouped[d] = [];
+            grouped[d].push(snp);
+          });
+          const domains = Object.keys(domainLabels).filter(d => grouped[d]?.length);
+          // Also include ungrouped
+          if (grouped['other']?.length) domains.push('other');
+          return (
+            <Panel>
+              <FieldLabel>Actionable genomic variants — {P.genomicSnps.length} SNPs</FieldLabel>
+              <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:16, lineHeight:1.5 }}>
+                Only variants with a specific intervention — supplementation, diet, training, hormesis, circadian, or lifestyle adjustment.
               </div>
-            ))}
-          </Panel>
-        )}
+              {domains.map(domain => (
+                <div key={domain} style={{ marginBottom:16 }}>
+                  <div style={{ fontFamily:fonts.mono, fontSize:10, color:domainColors[domain]||T.w5, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:8, paddingBottom:4, borderBottom:`1px solid ${(domainColors[domain]||T.w5)}25` }}>
+                    {domainLabels[domain] || 'Other'} · {grouped[domain].length}
+                  </div>
+                  {grouped[domain].map((snp, i) => {
+                    const statusCol = snp.status === 'risk' ? T.err : snp.status === 'carrier' ? T.warn : T.ok;
+                    return (
+                      <div key={i} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom:`1px solid ${T.w2}`, fontSize:12, fontFamily:fonts.sans, alignItems:'flex-start' }}>
+                        <div style={{ minWidth:70 }}>
+                          <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.rg2 }}>{snp.rsid}</div>
+                          <div style={{ fontFamily:fonts.mono, fontSize:10, color:statusCol, textTransform:'uppercase' }}>{snp.status}</div>
+                        </div>
+                        <div style={{ minWidth:55, fontFamily:fonts.sans, fontSize:11, color:T.w6, fontWeight:500 }}>{snp.gene}</div>
+                        <div style={{ minWidth:30, fontFamily:fonts.mono, fontSize:11, color:T.w5, textAlign:'center' }}>{snp.genotype}</div>
+                        <div style={{ flex:1, fontSize:11, color:T.w5, lineHeight:1.4 }}>{snp.impact}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </Panel>
+          );
+        })()}
 
         {/* Files on record */}
         {uploadedLabFiles.length > 0 && (
