@@ -828,6 +828,7 @@ export default function MeetMario({ patient: patientProp }) {
   const [popupSeverity, setPopupSeverity] = useState('');
   const [popupLoading, setPopupLoading] = useState(false);
   const [popupAnalysis, setPopupAnalysis] = useState('');
+  const [showDoctorPopup, setShowDoctorPopup] = useState(false);
   const [diary, setDiary] = useState([]);
 
   // Rotation / Meals
@@ -2712,6 +2713,44 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
           </div>
         )}
         {tabContent()}
+      </div>
+      {/* Doctor consultation popup */}
+      {showDoctorPopup && (
+        <div style={{ position:'fixed',inset:0,background:'rgba(28,20,16,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:24,backdropFilter:'blur(8px)' }} onClick={()=>setShowDoctorPopup(false)}>
+          <div style={{ background:T.w,borderRadius:16,maxWidth:440,width:'100%',boxShadow:'0 24px 64px rgba(28,20,16,0.22)',overflow:'hidden' }} onClick={e=>e.stopPropagation()}>
+            <div style={{ padding:'28px 28px 0' }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.18em',color:T.rg2,textTransform:'uppercase',marginBottom:10 }}>Doctor consultation</div>
+              <div style={{ fontFamily:fonts.serif,fontSize:24,color:T.w7,fontWeight:400,lineHeight:1.2,marginBottom:16 }}>Speak with our clinical team</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w5,lineHeight:1.6,marginBottom:8 }}>
+                Our team of physicians at MediBalans can review your case, discuss your results, and provide personalised clinical guidance.
+              </div>
+            </div>
+            <div style={{ margin:'20px 28px',padding:'16px 20px',background:T.rgBg,border:`1px solid ${T.rg}20`,borderRadius:10 }}>
+              <div style={{ display:'flex',alignItems:'baseline',gap:8 }}>
+                <span style={{ fontFamily:fonts.serif,fontSize:28,color:T.rg2,fontWeight:400 }}>2 500 kr</span>
+                <span style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5 }}>/ hour</span>
+              </div>
+              <div style={{ fontFamily:fonts.sans,fontSize:11.5,color:T.w4,marginTop:6,lineHeight:1.5 }}>
+                Video or phone consultation with a MediBalans physician. You will receive a booking confirmation via email.
+              </div>
+            </div>
+            <div style={{ padding:'0 28px 28px',display:'flex',gap:12 }}>
+              <button onClick={()=>setShowDoctorPopup(false)} style={{ flex:1,padding:'13px 20px',borderRadius:10,border:`1px solid ${T.w3}`,background:T.w,cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:T.w5,letterSpacing:'0.04em' }}>Cancel</button>
+              <button onClick={()=>{ window.location.href='mailto:info@medibalans.se?subject=Doctor%20Consultation%20Request&body=I%20would%20like%20to%20book%20a%20consultation%20with%20a%20MediBalans%20physician.'; setShowDoctorPopup(false); }} style={{ flex:1,padding:'13px 20px',borderRadius:10,border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.97)',letterSpacing:'0.04em',boxShadow:`0 4px 16px rgba(154,98,85,0.25)` }}>Request booking</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Floating action buttons — Emergency + Doctor */}
+      <div style={{ position:'fixed',bottom:24,right:24,zIndex:500,display:'flex',flexDirection:'column',gap:10,alignItems:'flex-end' }}>
+        <button onClick={()=>setShowDoctorPopup(true)} style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 22px',borderRadius:50,border:'none',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:T.w7,background:T.w,boxShadow:`0 4px 20px rgba(28,20,16,0.14), 0 1px 3px rgba(28,20,16,0.08)`,letterSpacing:'0.02em',transition:'all .18s' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+          Speak to a doctor
+        </button>
+        <button onClick={()=>window.location.href='tel:112'} style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 22px',borderRadius:50,border:'none',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff',background:T.err,boxShadow:`0 4px 20px rgba(184,80,64,0.30), 0 1px 3px rgba(184,80,64,0.12)`,letterSpacing:'0.02em',transition:'all .18s' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          Emergency — call 112
+        </button>
       </div>
       {/* Footer */}
       <div style={{ borderTop:`1px solid ${T.w3}`,padding:'14px 44px',display:'flex',justifyContent:'space-between',alignItems:'center',background:T.w1 }}>
