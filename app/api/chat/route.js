@@ -30,7 +30,7 @@ export async function POST(req) {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25,prompt-caching-2024-07-31',
+        // PDF support and prompt caching are GA — no beta header needed
       },
       body: JSON.stringify(body),
     })

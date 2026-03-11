@@ -450,8 +450,9 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
       setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
 
       const hasResults = newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0;
+      console.log('[Lab parse] Results:', { severe: newSevere.length, moderate: newModerate.length, mild: newMild.length });
       if (!hasResults) {
-        setLabParseError(true);
+        setLabParseError('API returned OK but 0 foods extracted. Raw: ' + text.slice(0, 150));
       }
 
       // ── Save to Supabase alcat_results ──────────────────────────────────────
@@ -524,7 +525,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
       setLabParsed(true);
     } catch(err) {
       console.error('Lab parse error:', err);
-      setLabParseError(true);
+      setLabParseError(err.message || 'Unknown error');
       setLabParsed(true);
     }
     setLabParsing(false);
@@ -671,6 +672,9 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
                   <div style={{ padding:'12px 16px', background:`${T.warn}15`, border:`1px solid ${T.warn}40`, borderRadius:8, marginBottom:14 }}>
                     <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ REACTIVE FOODS</div>
                     <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5 }}>Mario couldn't extract the food list from this file. Try a clearer photo, or upload the other page of the report. You can also skip and add results manually in the Protocol tab.</div>
+                    {typeof labParseError === 'string' && labParseError !== 'true' && (
+                      <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:6 }}>Debug: {labParseError}</div>
+                    )}
                   </div>
                 ) : (
                   <>
