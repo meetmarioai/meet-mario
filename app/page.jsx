@@ -1682,7 +1682,9 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     const foods = rot.grains ? `Grains: ${rot.grains.join(', ')}\nVeg: ${rot.veg.join(', ')}\nFruit: ${rot.fruit.join(', ')}\nProtein: ${rot.protein.join(', ')}\nMisc: ${rot.misc.join(', ')}` : 'Patient rotation not yet loaded.';
     const pInstr = eatPat === 'standard' ? 'Standard 6 meals every 3h.' : ep?.detail || 'Intermittent fasting protocol.';
     const severe = (patient.severe||[]).join(', ');
-    const prompt = `Generate a ${mealScope === 'full_day' ? 'full day' : mealScope} menu in ${cu} style.\nHARD RULES: Day ${rotDay} foods only. Avoid: ${severe}. No sugars/yeast/vinegar. No seed oils. CPF every main meal. Fruit only with protein/fat in snacks.\nDay ${rotDay}:\n${foods}\n${pInstr}\nFormat: **Dish Name** then one sentence description. End with a clinical Notes paragraph.`;
+    const cmaD = (patient.cmaDeficiencies||[]).join(', ');
+    const snpNotes = (patient.genomicSnps||[]).filter(s=>s.status!=='normal').slice(0,20).map(s=>`${s.gene} ${s.rsid} [${s.status}]: ${s.impact}`).join('; ');
+    const prompt = `Generate a ${mealScope === 'full_day' ? 'full day' : mealScope} menu in ${cu} style.\nHARD RULES: Day ${rotDay} foods only. Avoid: ${severe}. No sugars/yeast/vinegar. No seed oils. CPF every main meal. Fruit only with protein/fat in snacks.\nDay ${rotDay}:\n${foods}\n${pInstr}${cmaD ? `\nCMA deficiencies to correct: ${cmaD}` : ''}${patient.redoxScore!=null ? `\nREDOX: ${patient.redoxScore}/100` : ''}${snpNotes ? `\nKey genetic variants: ${snpNotes}` : ''}\nFormat: **Dish Name** then one sentence description citing which gene/nutrient it targets. End with a Clinical Notes paragraph referencing specific SNPs, CMA values, and ALCAT exclusions that drove the choices.`;
     try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setGenResult(r); } catch { setGenResult('Error. Please try again.'); }
     setGenLoad(false);
   };
@@ -3198,29 +3200,52 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             const origin = pd.geographyOfOrigin || 'not specified';
             const symptoms = (pd.symptoms||[]).join(', ') || 'not specified';
             const cmaD = (pd.cmaDeficiencies||[]).join(', ') || 'not tested';
+            const cmaAll = (pd.cmaNutrients||[]).filter(n=>n.status==='deficient'||n.status==='low').map(n=>`${n.name}: ${n.value}${n.unit?' '+n.unit:''} [${n.status}]`).join(', ') || '';
             const redox = pd.redoxScore != null ? pd.redoxScore : 'not tested';
-            const snps = (pd.genomicSnps||[]).map(s=>`${s.gene} ${s.rsid} [${s.status}]`).join(', ') || 'not tested';
-            const prompt = `Generate a complete 21-day GCR elimination diet plan for this patient.
+            const antioxidants = (pd.cmaAntioxidants||[]).map(a=>`${a.name}: ${a.status}${a.value!=null?' ('+a.value+')':''}`).join(', ') || '';
+            const snpsByDomain = {};
+            (pd.genomicSnps||[]).forEach(s => { const d = s.domain||'other'; if(!snpsByDomain[d]) snpsByDomain[d]=[]; snpsByDomain[d].push(s); });
+            const snpDetail = Object.entries(snpsByDomain).map(([domain, snps]) =>
+              `[${domain.toUpperCase()}] ${snps.map(s=>`${s.gene} ${s.rsid} ${s.genotype} [${s.status}]: ${s.impact}`).join(' | ')}`
+            ).join('\n') || 'not tested';
+            const prompt = `Generate a complete 21-day GCR elimination diet plan for this patient. EVERY food choice must be justified by specific data — cite the gene, the CMA value, or the ALCAT exclusion that drives it.
 
-PATIENT PROFILE:
-- Foods to AVOID (severe reactors): ${severe}
-- Foods to AVOID (mild reactors): ${mild}
+═══ LAYER 1: IMMUNE REACTIVITY (ALCAT) ═══
+- Foods to EXCLUDE (severe — 9 months): ${severe}
+- Foods to EXCLUDE (mild — 3 months): ${mild}
+
+═══ LAYER 2: INTRACELLULAR MICRONUTRIENTS (CMA) ═══
+- Deficiencies to correct via diet: ${cmaD}
+${cmaAll ? `- Full deficient/low panel: ${cmaAll}` : ''}
+${antioxidants ? `- Antioxidant status: ${antioxidants}` : ''}
+- REDOX score: ${redox}/100
+
+═══ LAYER 3: GENETIC ARCHITECTURE (VCF — ${(pd.genomicSnps||[]).length} actionable SNPs) ═══
+${snpDetail}
+
+═══ LAYER 4: PATIENT CONTEXT ═══
 - Ancestral origin: ${origin}
 - Chief symptoms: ${symptoms}
-- CMA deficiencies to correct via diet: ${cmaD}
-- REDOX score: ${redox}
-- Genetic variants: ${snps}
 - Protocol: Option A — 21-day universal GCR detox
 
-INTEGRATION RULES:
-- Every meal must respect ALCAT exclusions (immune layer)
-- Prioritise foods that correct CMA deficiencies (cellular layer)
-- If REDOX is <75, front-load antioxidant-dense foods at every meal
-- Cross-reference genetic variants: slow COMT = moderate polyphenols, MTHFR = methylfolate greens, GSTP1 = glutathione precursors, FADS1 = direct EPA/DHA sources, FTO = strict meal timing
-- Note which genetic/nutrient considerations apply to specific meal choices
+═══ INTEGRATION RULES — NON-NEGOTIABLE ═══
+1. Every meal must respect ALCAT exclusions (immune silence)
+2. Every meal must include foods that correct specific CMA deficiencies — cite which nutrient each food targets
+3. If REDOX < 75, front-load antioxidant-dense foods; if specific antioxidants are low, name the food → nutrient → gene pathway
+4. Cross-reference genetic variants for EVERY recommendation:
+   - MTHFR carrier/risk → methylfolate greens in every meal, avoid folic acid
+   - GSTP1 variant → glutathione precursors (cruciferous) mandatory
+   - COMT slow → moderate polyphenol dose, no megadosing
+   - FADS1 variant → direct EPA/DHA (fish 4x/week minimum), plant omega-3 insufficient
+   - FTO risk → strict 3-hour meal timing non-negotiable
+   - SOD2 variant → manganese-rich foods (leafy greens, nuts)
+   - VDR/CYP2R1 variant → vitamin D foods daily (fatty fish, egg yolks)
+   - ACTN3 → note exercise type recommendation alongside meals
+   - Circadian SNPs → note caffeine/timing rules
+5. For each day, add a brief CLINICAL NOTE explaining which data layers drove the meal choices
 
-UNIVERSAL RULES (apply regardless of ALCAT):
-- No seed oils (use olive oil, coconut oil, tallow only)
+═══ UNIVERSAL RULES ═══
+- No seed oils (olive oil, coconut oil, tallow only)
 - No dairy (21 days minimum)
 - No yeast, fermented foods, vinegar, mushrooms
 - No sugar (Manuka UMF 10+ 1 tsp morning only)
@@ -3230,18 +3255,14 @@ UNIVERSAL RULES (apply regardless of ALCAT):
 - Meals every 3 hours — CPF balance
 - High fresh whole fruit (from green list) — microbiome restoration
 
-MEAL TIMING:
-06:00-07:00 Breakfast: fruit + crispbread + Manuka + nut butter
-09:30 Mid-morning: fruit or veg snack
-12:30 Lunch: veg + salad + weekly protein rotation
-15:30 Snack: veg or fruit
-19:00 Dinner: mirror lunch structure
+═══ MEAL TIMING ═══
+06:00-07:00 Breakfast | 09:30 Mid-morning | 12:30 Lunch | 15:30 Snack | 19:00 Dinner
 
-WEEKLY ROTATION:
+═══ WEEKLY ROTATION ═══
 Mon: grains/starch | Tue: soup | Wed: legumes | Thu: white protein | Fri: vegetarian | Sat: fish | Sun: red meat
 
-Generate each of the 21 days with: breakfast, mid-morning, lunch, snack, dinner.
-Keep dishes simple and clinical. No emojis. Format clearly by day.
+Generate each of the 21 days with: breakfast, mid-morning, lunch, snack, dinner + clinical note per day.
+Keep dishes simple. No emojis. Format clearly by day. Cite specific genes and CMA values in the clinical notes.
 Tailor to the patient's ancestral origin where possible in the post-detox rebuild notes.`;
             try {
               const res = await fetch('/api/chat', {
