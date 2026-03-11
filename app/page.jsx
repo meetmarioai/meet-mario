@@ -341,62 +341,88 @@ function Onboarding({ onComplete }) {
     alcat_severe:[], alcat_moderate:[], alcat_mild:[], alcat_raw:'',
   });
   const [labFile, setLabFile] = useState(null);
+  const [labFileName, setLabFileName] = useState('');
+  const [labFiles, setLabFiles] = useState([]); // track multiple uploads
   const [labParsing, setLabParsing] = useState(false);
   const [labParsed, setLabParsed] = useState(false);
+  const [labParseError, setLabParseError] = useState(false);
 
-  const parseLabFile = async (file) => {
+  const parseLabFile = async (file, isAdditional = false) => {
     if (!file) return;
-    setLabParsing(true); setLabParsed(false);
+    setLabParsing(true); setLabParsed(false); setLabParseError(false);
+    setLabFileName(file.name);
     const reader = new FileReader();
     reader.onload = async (e) => {
       const base64 = e.target.result.split(',')[1];
-      const mediaType = file.type || 'image/jpeg';
+      const mediaType = file.type.startsWith('image/') ? file.type : 'image/jpeg';
       const isImage = file.type.startsWith('image/');
-      const isPDF = file.type === 'application/pdf';
       try {
         const content = isImage
           ? [{ type:'image', source:{ type:'base64', media_type:mediaType, data:base64 }},
-             { type:'text', text:'This is a patient ALCAT immune reactivity test result. Extract ALL foods/substances listed. Categorise them STRICTLY as severe, moderate, or mild reactors. Return ONLY valid JSON in this exact format: {"severe":["food1","food2"],"moderate":["food1"],"mild":["food1"]} — food names in lowercase. No explanation, no markdown, no code fences.' }]
-          : [{ type:'text', text:'This is text from an ALCAT test result PDF. Extract ALL foods/substances listed. Categorise as severe, moderate, or mild reactors. Return ONLY valid JSON: {"severe":[],"moderate":[],"mild":[]}' }];
+             { type:'text', text:`This is a medical lab test result image — likely an ALCAT food intolerance / immune reactivity report, or a CMA intracellular analysis, or blood work.
+
+TASK: Scan the entire image carefully. Find ALL food names, substances, or analytes that have a reactivity class or level assigned to them.
+
+ALCAT reports use colour bands or class labels:
+- Red / Class 3-4 / SEVERE = goes in "severe" array
+- Orange / Class 2 / MODERATE = goes in "moderate" array  
+- Yellow / Class 1 / MILD = goes in "mild" array
+- Green / Class 0 / ACCEPTABLE = ignore
+
+CMA reports list nutrients with levels — put any "deficient" or "low" items in "mild".
+
+Return ONLY this JSON, no other text, no markdown:
+{"severe":["food name","food name"],"moderate":["food name"],"mild":["food name"]}
+
+Food names should be lowercase English. If the report is in Swedish, translate to English.
+If you cannot find any reactive foods, return: {"severe":[],"moderate":[],"mild":[]}` }]
+          : [{ type:'text', text:'Extract all reactive foods from this ALCAT/CMA lab result text. Return ONLY JSON: {"severe":[],"moderate":[],"mild":[]}' }];
+
         const res = await fetch('/api/chat', {
           method:'POST',
           headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:2000, system:'You extract structured data from medical lab results. Return only valid JSON.', messages:[{ role:'user', content }] }),
+          body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:3000, system:'You are a medical data extraction assistant. You read lab results and extract structured data. Always return valid JSON only — no markdown, no explanation.', messages:[{ role:'user', content }] }),
         });
         const d = await res.json();
         const text = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-        // Robust JSON extraction — find the JSON object anywhere in the response
+
+        // Robust JSON extraction
         let json = { severe:[], moderate:[], mild:[] };
         try {
-          // Try clean parse first
-          const cleaned = text.replace(/```json|```/g,'').trim();
-          json = JSON.parse(cleaned);
+          json = JSON.parse(text.replace(/```json|```/g,'').trim());
         } catch {
-          // Try to extract JSON object from within the text
-          const match = text.match(/\{[\s\S]*"severe"[\s\S]*\}/);
-          if (match) {
-            try { json = JSON.parse(match[0]); } catch {}
-          }
+          const match = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/);
+          if (match) { try { json = JSON.parse(match[0]); } catch {} }
         }
-        // Normalise — ensure arrays, lowercase
+
         const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
-        u('alcat_severe', norm(json.severe));
-        u('alcat_moderate', norm(json.moderate));
-        u('alcat_mild', norm(json.mild));
-        u('alcat_raw', text);
-        // Even if parsing was partial, show results if we got anything
-        if (norm(json.severe).length > 0 || norm(json.moderate).length > 0 || norm(json.mild).length > 0) {
-          setLabParsed(true);
+        const newSevere = norm(json.severe);
+        const newModerate = norm(json.moderate);
+        const newMild = norm(json.mild);
+
+        if (isAdditional) {
+          // Merge with existing results (for second file upload e.g. CMA after ALCAT)
+          u('alcat_severe', [...new Set([...(data.alcat_severe||[]), ...newSevere])]);
+          u('alcat_moderate', [...new Set([...(data.alcat_moderate||[]), ...newModerate])]);
+          u('alcat_mild', [...new Set([...(data.alcat_mild||[]), ...newMild])]);
         } else {
-          // Claude saw the image but found no ALCAT data — still let user continue
-          setLabParsed(true);
-          u('alcat_raw', 'No structured ALCAT data detected. You can add results manually later.');
+          u('alcat_severe', newSevere);
+          u('alcat_moderate', newModerate);
+          u('alcat_mild', newMild);
         }
-      } catch(err) {
-        // Network or API error — let user skip gracefully
-        console.error('Lab parse error:', err);
+        u('alcat_raw', text);
+
+        // Track uploaded files
+        setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+
+        if (newSevere.length === 0 && newModerate.length === 0 && newMild.length === 0) {
+          setLabParseError(true);
+        }
         setLabParsed(true);
-        u('alcat_raw', 'Upload error. Results can be added later in the Protocol tab.');
+      } catch(err) {
+        console.error('Lab parse error:', err);
+        setLabParseError(true);
+        setLabParsed(true);
       }
       setLabParsing(false);
     };
@@ -527,23 +553,54 @@ function Onboarding({ onComplete }) {
             )}
             {labParsed && (
               <div>
-                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:16 }}>RESULTS PARSED</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, textAlign:'left' }}>
-                  {[['Severe',data.alcat_severe,T.err],['Moderate',data.alcat_moderate,T.warn],['Mild',data.alcat_mild,T.w5]].map(([label,items,color])=>(
-                    <div key={label} style={{ background:'#fff', borderRadius:8, padding:'12px 14px', border:`1px solid ${color}30` }}>
-                      <div style={{ fontFamily:fonts.mono, fontSize:8, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>{label} · {items.length}</div>
-                      {items.slice(0,8).map(f=>(
-                        <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
-                      ))}
-                      {items.length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>+{items.length-8} more</div>}
+                {/* Uploaded files list */}
+                {labFiles.length > 0 && (
+                  <div style={{ marginBottom:14 }}>
+                    {labFiles.map(fn => (
+                      <div key={fn} style={{ display:'inline-flex', alignItems:'center', gap:6, background:T.w2, borderRadius:6, padding:'4px 10px', marginRight:6, marginBottom:6 }}>
+                        <span style={{ fontFamily:fonts.mono, fontSize:8, color:T.ok }}>✓</span>
+                        <span style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{fn}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {labParseError ? (
+                  <div style={{ padding:'12px 16px', background:`${T.warn}15`, border:`1px solid ${T.warn}40`, borderRadius:8, marginBottom:14 }}>
+                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ REACTIVE FOODS</div>
+                    <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5 }}>Mario couldn't extract the food list from this file. Try a clearer photo, or upload the other page of the report. You can also skip and add results manually in the Protocol tab.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
+                      EXTRACTED — {(data.alcat_severe||[]).length + (data.alcat_moderate||[]).length + (data.alcat_mild||[]).length} reactive foods found
                     </div>
-                  ))}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
+                      {[['Severe',data.alcat_severe,T.err],['Moderate',data.alcat_moderate,T.warn],['Mild',data.alcat_mild,T.w5]].map(([label,items,color])=>(
+                        <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
+                          <div style={{ fontFamily:fonts.mono, fontSize:8, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {items.length}</div>
+                          {items.slice(0,8).map(f=>(
+                            <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
+                          ))}
+                          {items.length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>+{items.length-8} more</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                  <label style={{ cursor:'pointer' }}>
+                    <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                      onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f, true); } }}/>
+                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>+ Add another file (CMA / page 2)</div>
+                  </label>
+                  <label style={{ cursor:'pointer' }}>
+                    <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                      onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); setLabFiles([]); setLabParsed(false); parseLabFile(f, false); } }}/>
+                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>Replace with different file</div>
+                  </label>
                 </div>
-                <label style={{ cursor:'pointer', display:'inline-block', marginTop:16 }}>
-                  <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
-                    onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); setLabParsed(false); parseLabFile(f); } }}/>
-                  <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>Upload different file</div>
-                </label>
               </div>
             )}
           </div>
