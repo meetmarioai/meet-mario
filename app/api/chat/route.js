@@ -11,12 +11,14 @@ export async function POST(req) {
         'Content-Type': 'application/json',
         'x-api-key': process.env.ANTHROPIC_API_KEY,
         'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
+        'anthropic-beta': 'pdfs-2024-09-25,prompt-caching-2024-07-31',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens,
-        system: system || 'You are Meet Mario, a clinical AI assistant for MediBalans AB.',
+        system: Array.isArray(system)
+          ? system
+          : [{ type: 'text', text: system || 'You are Meet Mario, a clinical AI assistant for MediBalans AB.', cache_control: { type: 'ephemeral' } }],
         messages,
       }),
     })
