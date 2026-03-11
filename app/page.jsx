@@ -84,6 +84,19 @@ const PHASES = [
 ];
 
 // ── API UTILITIES ──────────────────────────────────────────────────────────────
+// Android-safe file → base64. FileReader fails on content:// URIs returned by Android file picker.
+// arrayBuffer() resolves the URI properly before reading.
+async function fileToBase64(file) {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  const chunk = 8192;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunk, bytes.length)));
+  }
+  return btoa(binary);
+}
+
 async function callClaude(messages, system, extra = {}) {
   const res = await fetch('/api/chat', {
     method: 'POST',
@@ -369,13 +382,7 @@ function Onboarding({ onComplete }) {
     console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| size:', (file.size/1024).toFixed(0)+'KB');
 
     try {
-      // Read file as base64
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = e => res(e.target.result.split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      const base64 = await fileToBase64(file);
 
       // Build content — PDFs use document type (native Anthropic support), images use image type
       const fileBlock = isPDF
@@ -821,8 +828,79 @@ export default function MeetMario({ patient: patientProp }) {
   const [showDiet, setShowDiet] = useState(false);
   const [dietPlan, setDietPlan] = useState('');
   const [dietLoading, setDietLoading] = useState(false);
-  const [tab, setTab] = useState('monitor');
+
+  // Reusable diet generator — can be called from BES screen, dashboard, or after lab upload
+  const generateDiet = async (pd) => {
+    if (!pd) pd = patient;
+    setDietLoading(true); setDietPlan('');
+    const severe = (pd.severe||[]).join(', ') || 'none uploaded yet';
+    const mild = (pd.mild||[]).join(', ') || 'none';
+    const origin = pd.geographyOfOrigin || 'not specified';
+    const symptoms = (pd.symptoms||[]).join(', ') || 'not specified';
+    const cmaD = (pd.cmaDeficiencies||[]).join(', ') || 'not tested';
+    const cmaAll = (pd.cmaNutrients||[]).filter(n=>n.status==='deficient'||n.status==='low').map(n=>`${n.name}: ${n.value}${n.unit?' '+n.unit:''} [${n.status}]`).join(', ') || '';
+    const redox = pd.redoxScore != null ? pd.redoxScore : 'not tested';
+    const antioxidants = (pd.cmaAntioxidants||[]).map(a=>`${a.name}: ${a.status}${a.value!=null?' ('+a.value+')':''}`).join(', ') || '';
+    const snpsByDomain = {};
+    (pd.genomicSnps||[]).forEach(s => { const d = s.domain||'other'; if(!snpsByDomain[d]) snpsByDomain[d]=[]; snpsByDomain[d].push(s); });
+    const snpDetail = Object.entries(snpsByDomain).map(([domain, snps]) =>
+      `[${domain.toUpperCase()}] ${snps.map(s=>`${s.gene} ${s.rsid} ${s.genotype} [${s.status}]: ${s.impact}`).join(' | ')}`
+    ).join('\n') || 'not tested';
+    const prompt = `Generate a complete 21-day GCR elimination diet plan. This must read like a real human meal plan — food people actually enjoy cooking and eating. Not theoretical. Not a nutrient list. Real dishes, real flavours, real life.
+
+═══ THE PATIENT ═══
+- Name: ${pd.name || 'Patient'}
+- Ancestral origin: ${origin}
+- Symptoms: ${symptoms}
+- Day ${pd.dayInProtocol || 1} of protocol
+
+═══ LAYER 1: IMMUNE REACTIVITY (ALCAT) ═══
+- EXCLUDE (severe — 9 months): ${severe}
+- EXCLUDE (mild — 3 months): ${mild}
+
+═══ LAYER 2: INTRACELLULAR MICRONUTRIENTS (CMA) ═══
+- Deficiencies to correct: ${cmaD}
+${cmaAll ? `- Values: ${cmaAll}` : ''}
+${antioxidants ? `- Antioxidants: ${antioxidants}` : ''}
+- REDOX: ${redox}/100
+
+═══ LAYER 3: GENETICS (${(pd.genomicSnps||[]).length} actionable SNPs) ═══
+${snpDetail}
+
+═══ DESIGN RULES ═══
+1. REAL FOOD: Write dishes a normal person would enjoy. "Pan-seared salmon with roasted sweet potato and wilted spinach in garlic olive oil" — not "omega-3 fatty acid source with complex carbohydrate and methylfolate provider."
+2. VARIETY: No two days should feel the same. Different proteins, different vegetables, different preparations. Rotate cooking methods — grilled, baked, pan-seared, steamed, raw salads, soups.
+3. FLAVOUR: Use herbs, spices, lemon, garlic, ginger liberally. This diet should taste good.
+4. CITE THE DATA: After each day's meals, add a brief CLINICAL NOTE (2-3 sentences) explaining which specific genes (cite rsID), CMA values, or ALCAT exclusions drove the food choices that day. This is how the patient learns their own biology.
+5. RESPECT ALL LAYERS: Every meal must avoid ALCAT reactors, target CMA deficiencies, and account for genetic variants.
+6. PRACTICAL: Include prep tips. "Batch-cook the lamb on Sunday." "Keep frozen berries for quick breakfasts."
+
+═══ UNIVERSAL RULES ═══
+No seed oils (olive oil, coconut oil, ghee, tallow only) · No dairy · No yeast/fermented/vinegar · No sugar (Manuka UMF 10+ 1 tsp morning only) · No oats · No legumes during detox · No grapes · Wild-caught fish only · CPF every meal · Fresh whole fruit daily
+
+═══ MEAL TIMING ═══
+06:30 Breakfast | 09:30 Mid-morning | 12:30 Lunch | 15:30 Snack | 19:00 Dinner
+Meals every 3 hours. Nothing after 21:30.
+
+═══ WEEKLY ROTATION ═══
+Mon: grains/starch | Tue: soup | Wed: legumes (day 22+, skip during detox) | Thu: white protein | Fri: vegetarian | Sat: fish | Sun: red meat
+
+Generate all 21 days. Format: Day number, then each meal as **Meal Name** followed by a one-line description. End each day with a Clinical Note citing specific patient data. Keep it warm and human — this is their roadmap to feeling like themselves again.`;
+    try {
+      const res = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:4000, system:buildMarioSystemPrompt(pd), messages:[{role:'user',content:prompt}] })
+      });
+      const d = await res.json();
+      setDietPlan((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
+    } catch { setDietPlan('Generation failed. Use the Generate tab to create your meal plan.'); }
+    setDietLoading(false);
+  };
+  const [tab, setTab] = useState('today');
   const [country, setCountry] = useState('SE');
+  const [sheet, setSheet] = useState(null); // 'reactive'|'cma'|'wgs'|'meal'|'supplements'
+  const [protocolSub, setProtocolSub] = useState('protocol'); // 'protocol'|'rotation'|'meals'|'generate'|'grocery'
+  const [logSub, setLogSub] = useState('plate'); // 'plate'|'gut'|'outcomes'|'lookup'
 
   // Monitor state
   const [monActive, setMonActive] = useState(false);
@@ -876,6 +954,11 @@ export default function MeetMario({ patient: patientProp }) {
   const [chatIn, setChatIn] = useState('');
   const [chatLoad, setChatLoad] = useState(false);
   const chatEndRef = useRef(null);
+  const labFileRef = useRef(null);
+  const labFileAddRef = useRef(null);
+  const plateFileRef = useRef(null);
+  const gutFileRef = useRef(null);
+  const suppLabelRef = useRef(null);
 
   // Outcomes
   const [outcomes, setOutcomes] = useState({ baseline:null, checkins:[] });
@@ -902,6 +985,7 @@ export default function MeetMario({ patient: patientProp }) {
   // Medications
   const [medRx, setMedRx] = useState(patient?.medications || '');
   const [medSupp, setMedSupp] = useState(patient?.supplements || '');
+  const [suppScanLoad, setSuppScanLoad] = useState(false);
   const [medNotes, setMedNotes] = useState('');
   const [medAnalysis, setMedAnalysis] = useState('');
   const [medLoad, setMedLoad] = useState(false);
@@ -965,13 +1049,20 @@ export default function MeetMario({ patient: patientProp }) {
     if (!file) return;
     setDashLabParsing(true); setDashLabError(false); setDashLabSuccess(false);
 
-    const ext = (file.name || '').split('.').pop().toLowerCase();
-    const isPDF = file.type === 'application/pdf' || ext === 'pdf';
-    const isImage = file.type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'].includes(ext);
+    // Android can return file.type = "" for camera photos and some file picker sources.
+    // Always fall back to extension-based detection.
+    const rawName = file.name || '';
+    const ext = rawName.includes('.') ? rawName.split('.').pop().toLowerCase() : '';
+    const mimeType = file.type || '';
+    const isPDF = mimeType === 'application/pdf' || ext === 'pdf';
+    const imageExts = ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'];
+    const isImage = mimeType.startsWith('image/') || imageExts.includes(ext)
+      // Android camera fallback: empty MIME, no known non-image extension → treat as image
+      || (mimeType === '' && !['pdf','vcf','txt','doc','docx','zip','csv','tsv'].includes(ext) && file.size > 1024);
     const isVCF = ext === 'vcf' || ext === 'txt';
     const isWord = ext === 'doc' || ext === 'docx';
-    const isZip = ext === 'zip' || file.type === 'application/zip' || file.type === 'application/x-zip-compressed';
-    const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+    const isZip = ext === 'zip' || mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed';
+    const imageMediaType = mimeType.startsWith('image/') ? mimeType : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
     try {
       // ZIP files — extract and process each file inside
@@ -1043,16 +1134,9 @@ export default function MeetMario({ patient: patientProp }) {
         return;
       }
 
-      // VCF genetic files — pre-filter clinically relevant SNPs before sending to Claude
+      // VCF genetic files — stream line-by-line to avoid OOM on large files (23andMe = 25MB, Dante = 400MB)
       if (isVCF) {
-        const textContent = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = e => res(e.target.result);
-          r.onerror = rej;
-          r.readAsText(file);
-        });
-
-        // ── ACTIONABLE SNPs BY CLINICAL DOMAIN ──
+        // ── STREAMING VCF READER — never loads full file into memory ──
         // Only SNPs where we can intervene via supplementation, diet, training, hormesis, circadian, or lifestyle
         const clinicalRsIds = new Set([
           // ── METHYLATION & FOLATE CYCLE ──
@@ -1147,40 +1231,74 @@ export default function MeetMario({ patient: patientProp }) {
           'rs12913832', // HERC2/OCA2 — eye/skin colour, UV tolerance
         ]);
 
-        // Parse VCF: extract header + matching lines
-        const lines = textContent.split('\n');
-        const headerLines = lines.filter(l => l.startsWith('#')).slice(-1); // just the column header
-        const dataLines = lines.filter(l => !l.startsWith('#') && l.trim());
+        // ── STREAM the file line-by-line — never loads full VCF into RAM ──
+        const relevantLines = [];
+        let lastHeaderLine = '';
+        let totalDataLines = 0;
+        let done = false;
 
-        // Detect delimiter — VCFs use tabs, but some exports use spaces or commas
-        const sampleLine = dataLines[0] || '';
-        const delim = sampleLine.includes('\t') ? '\t' : sampleLine.includes(',') ? ',' : /\s+/;
+        try {
+          const streamReader = file.stream().getReader();
+          const decoder = new TextDecoder();
+          let lineBuffer = '';
 
-        // Filter to clinically relevant SNPs — also search entire line for rsID patterns
-        let relevantLines = dataLines.filter(l => {
-          const cols = l.split(delim);
-          const id = cols[2]?.trim();
-          if (id && clinicalRsIds.has(id)) return true;
-          // Some VCFs put rsID in INFO field or other columns — scan whole line
-          const rsMatch = l.match(/rs\d+/g);
-          if (rsMatch) return rsMatch.some(rs => clinicalRsIds.has(rs));
-          return false;
-        });
-
-        // If no rsID matches, look for ANY rs-prefixed IDs and take those
-        if (relevantLines.length === 0) {
-          relevantLines = dataLines.filter(l => /rs\d+/.test(l)).slice(0, 300);
+          while (!done) {
+            const { value, done: streamDone } = await streamReader.read();
+            done = streamDone;
+            lineBuffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+            // Process all complete lines in buffer
+            let nlIdx;
+            while ((nlIdx = lineBuffer.indexOf('\n')) >= 0) {
+              const line = lineBuffer.slice(0, nlIdx).trimEnd();
+              lineBuffer = lineBuffer.slice(nlIdx + 1);
+              if (!line) continue;
+              if (line.startsWith('#')) { lastHeaderLine = line; continue; }
+              totalDataLines++;
+              const rsMatch = line.match(/rs\d+/g);
+              if (rsMatch && rsMatch.some(rs => clinicalRsIds.has(rs))) {
+                relevantLines.push(line);
+                if (relevantLines.length >= 500) { done = true; streamReader.cancel(); break; }
+              }
+            }
+          }
+          // Process any remaining buffered text
+          if (lineBuffer.trim() && !lineBuffer.startsWith('#')) {
+            totalDataLines++;
+            const rsMatch = lineBuffer.match(/rs\d+/g);
+            if (rsMatch && rsMatch.some(rs => clinicalRsIds.has(rs))) relevantLines.push(lineBuffer.trim());
+          }
+        } catch (streamErr) {
+          // Fallback for browsers without stream() — read whole file (may be slow on large files)
+          console.warn('[VCF] stream() unavailable, falling back to file.text():', streamErr.message);
+          const textContent = await file.text();
+          const allLines = textContent.split('\n');
+          for (const line of allLines) {
+            if (!line.trim()) continue;
+            if (line.startsWith('#')) { lastHeaderLine = line; continue; }
+            totalDataLines++;
+            const rsMatch = line.match(/rs\d+/g);
+            if (rsMatch && rsMatch.some(rs => clinicalRsIds.has(rs))) {
+              relevantLines.push(line);
+              if (relevantLines.length >= 500) break;
+            }
+          }
         }
 
-        // Final fallback — take first 200 data lines regardless
-        if (relevantLines.length === 0) {
-          relevantLines = dataLines.slice(0, 200);
+        // Fallback: if no clinical matches, grab first 300 lines with any rsID
+        if (relevantLines.length === 0 && totalDataLines > 0) {
+          try {
+            const slice = await file.slice(0, 500000).text();
+            for (const line of slice.split('\n')) {
+              if (!line.trim() || line.startsWith('#')) continue;
+              if (/rs\d+/.test(line)) { relevantLines.push(line); if (relevantLines.length >= 300) break; }
+            }
+          } catch {}
         }
 
-        const filteredContent = [...headerLines, ...relevantLines].join('\n');
+        const filteredContent = [lastHeaderLine, ...relevantLines].filter(Boolean).join('\n');
         const snpCount = relevantLines.length;
 
-        if (snpCount === 0 && dataLines.length === 0) {
+        if (snpCount === 0 && totalDataLines === 0) {
           setDashLabError('No genetic data found in this file. Is it a valid VCF?');
           setDashLabParsing(false);
           return;
@@ -1192,7 +1310,7 @@ export default function MeetMario({ patient: patientProp }) {
           body: JSON.stringify({
             max_tokens: 4000,
             system: 'You are a clinical genomics analyst specialising in actionable SNPs. Extract variants from VCF/genetic files and return structured JSON. ONLY include variants where a specific intervention exists (supplementation, diet, training type, hormesis protocol, circadian adjustment, or lifestyle change). Discard benign/normal variants and anything without a clear clinical action.',
-            messages: [{ role: 'user', content: `This is genetic data (VCF or similar format) with ${snpCount} pre-filtered lines out of ${dataLines.length} total variants.
+            messages: [{ role: 'user', content: `This is genetic data (VCF or similar format) with ${snpCount} pre-filtered lines out of ${totalDataLines} total variants.
 
 TASK: For each variant, extract:
 - rsid (e.g. rs1801133) — from ID column or anywhere in the line
@@ -1255,14 +1373,9 @@ ${filteredContent.slice(0, 30000)}` }],
         return;
       }
 
-      // Word / text files — read as text
+      // Word / text files — file.text() handles Android content:// URIs; FileReader does not
       if (isWord) {
-        const textContent = await new Promise((res, rej) => {
-          const r = new FileReader();
-          r.onload = e => res(e.target.result);
-          r.onerror = rej;
-          r.readAsText(file);
-        });
+        const textContent = await file.text();
         const res = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1298,13 +1411,8 @@ ${filteredContent.slice(0, 30000)}` }],
         return;
       }
 
-      // PDF / Image — read as base64, then use document or image block
-      const base64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onload = e => res(e.target.result.split(',')[1]);
-        r.onerror = rej;
-        r.readAsDataURL(file);
-      });
+      // PDF / Image — arrayBuffer() handles Android content:// URIs; FileReader does not
+      const base64 = await fileToBase64(file);
       const fileBlock = isPDF
         ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
         : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
@@ -1465,6 +1573,12 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         const pd = typeof data.patient_data === 'string'
           ? JSON.parse(data.patient_data)
           : data.patient_data;
+        // Accept profile if it has either a name inside patient_data OR a full_name in the profiles row
+        if (!pd?.name && data?.full_name) {
+          // patient_data exists but name field is missing — patch it from full_name
+          if (pd) pd.name = data.full_name;
+          else { return { name: data.full_name }; }
+        }
         if (pd?.name) {
           console.log('[profile] from profiles.patient_data');
           // Also load ALCAT results if not already in patient_data
@@ -1587,9 +1701,27 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           setShowOnboarding(false);
           setShowAuth(false);
         } else {
-          // New user — go to onboarding
-          setShowLanding(false);
-          setShowOnboarding(true);
+          // Profile not found — could be a page reload after camera/app switch on Android.
+          // A signed-in user has ALREADY completed onboarding at some point.
+          // Don't force them back — retry once after a short delay.
+          setTimeout(async () => {
+            const retryProfile = await loadProfile(user);
+            if (retryProfile?.name) {
+              setPatient(p => ({ ...p, ...retryProfile, profileComplete: true }));
+              if (retryProfile.uploadedLabFiles?.length) {
+                setUploadedLabFiles(retryProfile.uploadedLabFiles);
+                setDashLabFiles(retryProfile.uploadedLabFiles.map(f => f.name));
+                setDashLabSuccess(true);
+              }
+              setShowLanding(false);
+              setShowOnboarding(false);
+              setShowAuth(false);
+            } else {
+              // Still no profile — show landing so they can start fresh, but don't force onboarding
+              setShowLanding(true);
+              setShowOnboarding(false);
+            }
+          }, 1500);
         }
       }
       clearTimeout(authTimeout);
@@ -1617,8 +1749,10 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           setShowLanding(false);
           setShowOnboarding(false);
         } else {
-          setShowLanding(false);
-          setShowOnboarding(true);
+          // Signed-in user with no profile found — could be a transient load failure.
+          // Don't force onboarding: stay on landing so they can choose.
+          setShowLanding(true);
+          setShowOnboarding(false);
         }
       }
       if (event === 'SIGNED_OUT') {
@@ -1709,14 +1843,44 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     setGroceryLoad(false);
   };
 
+  // Build compact patient data context for chat messages
+  const buildPatientContext = () => {
+    const p = patient;
+    const parts = [];
+    if (p.severe?.length) parts.push(`ALCAT severe (avoid): ${p.severe.join(', ')}`);
+    if (p.moderate?.length) parts.push(`ALCAT moderate: ${p.moderate.join(', ')}`);
+    if (p.cmaDeficiencies?.length) parts.push(`CMA deficiencies: ${p.cmaDeficiencies.join(', ')}`);
+    if (p.cmaNutrients?.length) {
+      const low = p.cmaNutrients.filter(n=>n.status==='deficient'||n.status==='low');
+      if (low.length) parts.push(`CMA low values: ${low.map(n=>`${n.name}: ${n.value}${n.unit?' '+n.unit:''} [${n.status}]`).join(', ')}`);
+    }
+    if (p.redoxScore!=null) parts.push(`REDOX: ${p.redoxScore}/100`);
+    if (p.cmaAntioxidants?.length) parts.push(`Antioxidants: ${p.cmaAntioxidants.map(a=>`${a.name}: ${a.status}${a.value!=null?' ('+a.value+')':''}`).join(', ')}`);
+    if (p.genomicSnps?.length) {
+      const risk = p.genomicSnps.filter(s=>s.status==='risk'||s.status==='carrier');
+      if (risk.length) parts.push(`Key genetic variants (${risk.length}):\n${risk.map(s=>`  ${s.gene} ${s.rsid} ${s.genotype} [${s.status}]: ${s.impact}`).join('\n')}`);
+    }
+    if (p.dayInProtocol) parts.push(`Day ${p.dayInProtocol} of protocol`);
+    return parts.length ? `\n\n[PATIENT DATA — cite specific values in your response]\n${parts.join('\n')}` : '';
+  };
+
   const sendChat = async () => {
     if (!chatIn.trim() || chatLoad) return;
-    const msgs = [...chatMsgs, { role:'user',content:chatIn.trim() }];
+    const userMsg = chatIn.trim();
+    const msgs = [...chatMsgs, { role:'user', content: userMsg }];
     setChatMsgs(msgs); setChatIn(''); setChatLoad(true);
     try {
-      const r = await callClaude(msgs, buildMarioSystemPrompt(patient));
-      setChatMsgs([...msgs, { role:'assistant',content:r }]);
-    } catch { setChatMsgs(m => [...m, { role:'assistant',content:'Connection error. Please try again.' }]); }
+      // Inject patient data context into the first user message so Claude always has it
+      const contextNote = buildPatientContext();
+      const apiMsgs = msgs.map((m, i) => {
+        if (i === msgs.length - 1 && m.role === 'user' && contextNote) {
+          return { ...m, content: m.content + contextNote };
+        }
+        return m;
+      });
+      const r = await callClaude(apiMsgs, buildMarioSystemPrompt(patient), { max_tokens: 2000 });
+      setChatMsgs([...msgs, { role:'assistant', content:r }]);
+    } catch { setChatMsgs(m => [...m, { role:'assistant', content:'Connection error. Please try again.' }]); }
     setChatLoad(false);
   };
 
@@ -1744,6 +1908,30 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       setPlateResult((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
     } catch { setPlateResult('Error. Please try again.'); }
     setPlateLoad(false);
+  };
+
+  const scanSuppLabel = async (file) => {
+    if (!file) return;
+    setSuppScanLoad(true);
+    try {
+      const base64 = await fileToBase64(file);
+      const mtype = file.type.startsWith('image/') ? file.type : 'image/jpeg';
+      const d = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          max_tokens: 600,
+          system: 'Extract supplement information from product label photos. Return a clean plain-text list only.',
+          messages: [{ role:'user', content: [
+            { type:'image', source:{ type:'base64', media_type: mtype, data: base64 }},
+            { type:'text', text: 'Read this supplement label. Extract: product name, active ingredients with doses, and serving instructions. Return as a plain text list — one supplement per line in the format: "Name Dose – Frequency". No markdown, no bullet points, no preamble.' },
+          ]}],
+        }),
+      }).then(r => r.json());
+      const extracted = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+      if (extracted) setMedSupp(prev => prev ? prev + '\n' + extracted : extracted);
+    } catch (e) { console.error('[suppScan]', e); }
+    setSuppScanLoad(false);
   };
 
   const analyzeInteractions = async () => {
@@ -1803,27 +1991,16 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
   const getP = (d,k) => proteins[`${d}-${k}`] || (patient.meals?.[d]?.[k]?.defaultP) || '';
   const setP = (d,k,p) => { setProteins(prev=>({...prev,[`${d}-${k}`]:p})); setPicker(null); };
 
-  const stores = STORES[country] || STORES.SE;
-
-  const TABS = [
-    { id:'monitor',  label:'Monitor' },
-    { id:'protocol', label:'Protocol' },
-    { id:'rotation', label:'Rotation' },
-    { id:'meals',    label:'Meals' },
-    { id:'generate', label:'Generate' },
-    { id:'grocery',  label:'Grocery' },
-    { id:'lookup',   label:'Food Check' },
-    { id:'chat',     label:'Ask Mario' },
-    { id:'outcomes', label:'Outcomes' },
-    { id:'gut',      label:'GutCheck' },
-    { id:'plate',    label:'PlateCheck' },
-    { id:'meds',     label:'Medications' },
-    { id:'labs',     label:'Lab Results' },
+  const BOTTOM_TABS = [
+    { id:'today', label:'Today', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> },
+    { id:'mario', label:'Mario', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
+    { id:'me',    label:'Me',    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
   ];
 
   const P = patient;
   const ROT = patient.rotation || {};
   const MEALS_DATA = patient.meals || {};
+  const stores = STORES[country] || STORES.SE;
 
   // ── SPIKE POPUP ──────────────────────────────────────────────────────────────
   const SpikePopup = () => {
@@ -1946,28 +2123,6 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
               </div>
             </Panel>
             <div>
-              <Panel>
-                <FieldLabel>Data Sources</FieldLabel>
-                {[
-                  { name:'Apple Watch',       abbr:'AW', streams:'HR · HRV · SpO2' },
-                  { name:'Oura Ring',          abbr:'OR', streams:'HRV · Temp · SpO2 · Readiness' },
-                  { name:'Garmin',             abbr:'GR', streams:'HR · HRV · Sleep · Stress' },
-                  { name:'Samsung Galaxy Watch',abbr:'SG', streams:'HR · HRV (IBI) · SpO2 · Skin temp' },
-                  { name:'Dexcom G7/G6',       abbr:'DX', streams:'Glucose · 5min intervals' },
-                  { name:'Libre 2 / 3',        abbr:'LB', streams:'Glucose · 1min intervals' },
-                ].map(d=>(
-                  <div key={d.name} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
-                    <div style={{ width:28,height:28,borderRadius:6,background:T.w2,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
-                      <span style={{ fontFamily:fonts.mono,fontSize:11,fontWeight:500,color:T.w5 }}>{d.abbr}</span>
-                    </div>
-                    <div style={{ flex:1 }}>
-                      <div style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,marginBottom:2 }}>{d.name}</div>
-                      <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{d.streams}</div>
-                    </div>
-                    <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:4,padding:'2px 7px' }}>Simulated</span>
-                  </div>
-                ))}
-              </Panel>
               {diary.length > 0 && <Panel>
                 <FieldLabel>Recent Reactions</FieldLabel>
                 {diary.slice(0,3).map(e=>(
@@ -2361,15 +2516,23 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       </div>
     );
 
-    // ── ASK MARIO ──
-    if (tab === 'chat') return (
-      <div>
-        <Eyebrow>Clinical AI companion</Eyebrow>
-        <SectionTitle>Ask<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Mario</em></SectionTitle>
+    // ── MARIO (full-screen AI companion) ──
+    if (tab === 'mario') return (
+      <div style={{ display:'flex',flexDirection:'column',height:'100%',minHeight:'calc(100dvh - 164px)' }}>
+        <div style={{ flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'20px 20px 16px' }}>
         {chatMsgs.length === 0 && (
-          <Panel>
+          <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'20px 18px',marginBottom:16 }}>
+            <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:12 }}>
+              <div style={{ width:34,height:34,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg})`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              </div>
+              <div>
+                <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w7,fontWeight:500 }}>Mario</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.12em' }}>BIOLOGICAL AI COMPANION</div>
+              </div>
+            </div>
             <div style={{ fontSize:13,color:T.w5,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.8,marginBottom:16 }}>
-              {P.name ? `Hello${P.name?' — this is your personalised clinical AI built on your ALCAT data and the full MediBalans protocol.':'.'}` : 'Introduce yourself and I will personalise my responses to your protocol.'}
+              {P.name ? `Hello ${P.name.split(' ')[0]} — I'm your personalised clinical AI, built on your lab data and the full MediBalans protocol.` : "Hello — I'm Mario, your clinical AI. Introduce yourself and I'll personalise my responses to your biology."}
             </div>
             <div style={{ display:'flex',flexWrap:'wrap',gap:7 }}>
               {(() => {
@@ -2430,22 +2593,25 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 <button key={q} onClick={()=>setChatIn(q)} style={{ background:T.rgBg,border:`1px solid ${T.rg}25`,borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:11.5,fontFamily:fonts.sans,color:T.rg2 }}>{q}</button>
               ))}
             </div>
-          </Panel>
+          </div>
         )}
-        <div style={{ display:'flex',flexDirection:'column',gap:12,marginBottom:20,maxHeight:440,overflowY:'auto' }}>
-          {chatMsgs.map((m,i)=>(
-            <div key={i} style={{ display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start' }}>
-              <div style={{ maxWidth:'76%',background:m.role==='user'?T.rg:T.w1,border:`1px solid ${m.role==='user'?T.rg:T.w3}`,borderRadius:m.role==='user'?'12px 12px 3px 12px':'12px 12px 12px 3px',padding:'12px 16px',fontSize:13,color:m.role==='user'?'#fff':T.w6,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>
-                {m.content.split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
-              </div>
+        {chatMsgs.map((m,i)=>(
+          <div key={i} style={{ display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start',marginBottom:10 }}>
+            <div style={{ maxWidth:'82%',background:m.role==='user'?T.rg:T.w1,border:`1px solid ${m.role==='user'?T.rg:T.w3}`,borderRadius:m.role==='user'?'16px 16px 4px 16px':'16px 16px 16px 4px',padding:'12px 16px',fontSize:13,color:m.role==='user'?'#fff':T.w6,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>
+              {m.content.split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
             </div>
-          ))}
-          {chatLoad && <div style={{ display:'flex',justifyContent:'flex-start' }}><div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:'12px 12px 12px 3px',padding:'12px 16px',fontSize:13,color:T.w4,fontFamily:fonts.mono }}>…</div></div>}
-          <div ref={chatEndRef}/>
+          </div>
+        ))}
+        {chatLoad && <div style={{ display:'flex',justifyContent:'flex-start',marginBottom:10 }}><div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:'16px 16px 16px 4px',padding:'12px 16px',fontSize:13,color:T.w4,fontFamily:fonts.mono }}>…</div></div>}
+        <div ref={chatEndRef}/>
         </div>
-        <div style={{ display:'flex',gap:10,position:'sticky',bottom:0,background:T.w,paddingTop:10 }}>
-          <RuledInput value={chatIn} onChange={e=>setChatIn(e.target.value)} placeholder="Ask Mario anything about your protocol…" style={{ flex:1 }}/>
-          <BtnPrimary onClick={sendChat} disabled={!chatIn.trim()} loading={chatLoad} small>Send</BtnPrimary>
+        <div style={{ padding:'12px 20px 20px',background:T.w,borderTop:`1px solid ${T.w2}`,flexShrink:0 }}>
+          <div style={{ display:'flex',gap:8,alignItems:'center' }}>
+            <input value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}}} placeholder="Ask Mario anything…" style={{ flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:22,padding:'11px 18px',fontSize:13,fontFamily:fonts.sans,color:T.w7,outline:'none' }}/>
+            <button onClick={sendChat} disabled={!chatIn.trim()||chatLoad} style={{ width:42,height:42,borderRadius:'50%',border:'none',background:chatIn.trim()?T.rg:T.w3,cursor:chatIn.trim()?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'background .15s' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -2555,14 +2721,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           {/* Photo upload */}
           <div style={{ marginBottom:16 }}>
             <FieldLabel>Photo (optional — Mario reads it automatically)</FieldLabel>
-            <label style={{ display:'block', border:`2px dashed ${gutPhoto?T.rg:T.w3}`, borderRadius:10, padding:'16px', textAlign:'center', cursor:'pointer', background:gutPhoto?T.rgBg:T.w1, transition:'all 0.2s' }}>
-              <input type="file" accept="image/*" capture="environment" style={{ display:'none' }}
-                onChange={e=>{ const f=e.target.files[0]; if(f){ setGutPhoto(URL.createObjectURL(f)); const r=new FileReader(); r.onload=ev=>setGutPhotoB64(ev.target.result.split(',')[1]); r.readAsDataURL(f); }}}/>
+            <input ref={gutFileRef} type="file" accept="image/*" style={{ display:'none' }}
+              onChange={e=>{ const f=e.target.files[0]; if(f){ setGutPhoto(URL.createObjectURL(f)); fileToBase64(f).then(b64=>setGutPhotoB64(b64)); } e.target.value=''; }}/>
+            <div onClick={() => gutFileRef.current?.click()} style={{ border:`2px dashed ${gutPhoto?T.rg:T.w3}`, borderRadius:10, padding:'16px', textAlign:'center', cursor:'pointer', background:gutPhoto?T.rgBg:T.w1, transition:'all 0.2s' }}>
               {gutPhoto
                 ? <img src={gutPhoto} alt="stool sample" style={{ maxHeight:120, borderRadius:8, display:'block', margin:'0 auto' }}/>
                 : <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4 }}>Tap to take photo or upload · Mario analyses Bristol type automatically</div>
               }
-            </label>
+            </div>
           </div>
           <FieldLabel>Notes</FieldLabel>
           <RuledInput value={gutNotes} onChange={e=>setGutNotes(e.target.value)} placeholder="Any relevant notes — pain, urgency, colour, timing…" style={{ marginBottom:16 }}/>
@@ -2599,14 +2765,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           {/* Photo */}
           <div style={{ marginBottom:20 }}>
             <FieldLabel>Photo your plate</FieldLabel>
-            <label style={{ display:'block', border:`2px dashed ${platePhoto?T.rg:T.w3}`, borderRadius:10, padding:'20px', textAlign:'center', cursor:'pointer', background:platePhoto?T.rgBg:T.w1, transition:'all 0.2s' }}>
-              <input type="file" accept="image/*" capture="environment" style={{ display:'none' }}
-                onChange={e=>{ const f=e.target.files[0]; if(f){ setPlatePhoto(URL.createObjectURL(f)); const r=new FileReader(); r.onload=ev=>setPlatePhotoB64(ev.target.result.split(',')[1]); r.readAsDataURL(f); }}}/>
+            <input ref={plateFileRef} type="file" accept="image/*" style={{ display:'none' }}
+              onChange={e=>{ const f=e.target.files[0]; if(f){ setPlatePhoto(URL.createObjectURL(f)); fileToBase64(f).then(b64=>setPlatePhotoB64(b64)); } e.target.value=''; }}/>
+            <div onClick={() => plateFileRef.current?.click()} style={{ border:`2px dashed ${platePhoto?T.rg:T.w3}`, borderRadius:10, padding:'20px', textAlign:'center', cursor:'pointer', background:platePhoto?T.rgBg:T.w1, transition:'all 0.2s' }}>
               {platePhoto
                 ? <img src={platePhoto} alt="meal" style={{ maxHeight:180, borderRadius:8, display:'block', margin:'0 auto' }}/>
                 : <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w4 }}>Tap to take a photo of your plate — Mario identifies every ingredient</div>
               }
-            </label>
+            </div>
           </div>
           <FieldLabel>Or describe your meal</FieldLabel>
           <RuledInput multiline rows={2} value={plateDesc} onChange={e=>setPlateDesc(e.target.value)} placeholder="e.g. Grilled salmon with roasted broccoli, olive oil, and quinoa. Side salad with lemon dressing." style={{ marginBottom:20 }}/>
@@ -2648,7 +2814,17 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             <RuledInput multiline rows={4} value={medRx} onChange={e=>setMedRx(e.target.value)} placeholder="List all pharmaceutical medications — name, dose, frequency&#10;e.g. Levothyroxine 50mcg once daily&#10;     Estradiol transdermal patch 50mcg/24h&#10;     Metformin 500mg twice daily"/>
           </div>
           <div style={{ marginBottom:22 }}>
-            <FieldLabel>Supplements & nutraceuticals</FieldLabel>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <FieldLabel style={{ marginBottom:0 }}>Supplements & nutraceuticals</FieldLabel>
+              <input ref={suppLabelRef} type="file" accept="image/*" style={{ display:'none' }}
+                onChange={e => { const f = e.target.files[0]; if (f) scanSuppLabel(f); e.target.value = ''; }}/>
+              <button onClick={() => suppLabelRef.current?.click()} disabled={suppScanLoad} style={{ display:'flex', alignItems:'center', gap:6, background: suppScanLoad ? T.w1 : T.rgBg, border:`1px solid ${T.rg}`, borderRadius:7, padding:'5px 12px', fontFamily:fonts.sans, fontSize:11, fontWeight:600, color: suppScanLoad ? T.w4 : T.rg2, cursor: suppScanLoad ? 'default' : 'pointer' }}>
+                {suppScanLoad
+                  ? <><span style={{ width:8, height:8, borderRadius:'50%', background:T.rg, display:'inline-block', animation:'pulse 1.2s infinite' }}/> Reading label…</>
+                  : <><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg> Scan label</>
+                }
+              </button>
+            </div>
             <RuledInput multiline rows={4} value={medSupp} onChange={e=>setMedSupp(e.target.value)} placeholder="List all supplements — name, dose, frequency&#10;e.g. Magnesium glycinate 400mg at bedtime&#10;     Vitamin D3 5000 IU with K2-MK7 200mcg&#10;     Omega-3 EPA/DHA 2g daily"/>
           </div>
           <div style={{ marginBottom:22 }}>
@@ -2878,24 +3054,34 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
               <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.warn, marginTop:8 }}>{typeof dashLabError === 'string' ? dashLabError : 'Could not extract results'}</div>
             )}
 
+            {/* Hidden inputs — triggered via ref.click() for Android reliability */}
+            <input ref={labFileRef} type="file" accept="*/*" style={{ display:'none' }}
+              onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, false); } e.target.value = ''; }}/>
+            <input ref={labFileAddRef} type="file" accept="*/*" style={{ display:'none' }}
+              onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, true); } e.target.value = ''; }}/>
             <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:12, flexWrap:'wrap' }}>
-              <label style={{ cursor:'pointer' }}>
-                <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx,.zip" style={{ display:'none' }}
-                  onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, false); } }}/>
-                <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600 }}>
-                  {dashLabSuccess ? 'Replace results' : 'Choose file'}
-                </div>
-              </label>
+              <button onClick={() => labFileRef.current?.click()} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                {dashLabSuccess ? 'Replace results' : 'Choose file'}
+              </button>
               {dashLabSuccess && (
-                <label style={{ cursor:'pointer' }}>
-                  <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx,.zip" style={{ display:'none' }}
-                    onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, true); } }}/>
-                  <div style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg, borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600 }}>
-                    + Add another file
-                  </div>
-                </label>
+                <button onClick={() => labFileAddRef.current?.click()} style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg, borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                  + Add another file
+                </button>
               )}
             </div>
+            {dashLabSuccess && (
+              <div style={{ marginTop:14, padding:'12px 16px', background:`${T.rg}0A`, border:`1px solid ${T.rg3}`, borderRadius:8, display:'flex', alignItems:'center', justifyContent:'space-between', gap:12 }}>
+                <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w6, lineHeight:1.5 }}>
+                  New data available — {dietPlan ? 'update your diet to reflect the latest results.' : 'generate your personalised protocol now.'}
+                </div>
+                <button onClick={()=>{ setShowDiet(true); generateDiet(patient); }} style={{
+                  background:T.rg, color:'#fff', border:'none', borderRadius:7, padding:'8px 20px', whiteSpace:'nowrap',
+                  fontFamily:fonts.sans, fontSize:12, fontWeight:700, cursor:'pointer', flexShrink:0,
+                }}>
+                  {dietPlan ? 'Update diet plan' : 'Generate diet plan'}
+                </button>
+              </div>
+            )}
           </div>
         </Panel>
 
@@ -3004,6 +3190,219 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         </Panel>
       </div>
     );
+
+    // ── TODAY ──
+    if (tab === 'today') {
+      const now = new Date();
+      const hour = now.getHours();
+      const greeting = hour < 5 ? 'Good night' : hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+      const protocolDay = P.dayInProtocol || 1;
+      const phaseObj = PHASES.find(ph => {
+        if (ph.id === 1) return protocolDay <= 21;
+        if (ph.id === 2) return protocolDay <= 90;
+        if (ph.id === 3) return protocolDay <= 120;
+        if (ph.id === 4) return protocolDay <= 180;
+        return true;
+      }) || PHASES[0];
+      const hasAlcat = (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0;
+      const hasCMA = (P.cmaDeficiencies?.length||0) > 0;
+      const todayRotDay = protocolDay > 0 ? ((protocolDay % 4) || 4) : rotDay;
+      const todayFoods = ROT[todayRotDay] || null;
+      const bindingConstraint = (P.severe?.length||0) > 3 ? {
+        label: 'Immune load', sub: `${P.severe.length} severe reactive foods — immune silence protocol required`, sys: 'Immune', color: T.err,
+      } : hasCMA ? {
+        label: 'Cellular micronutrient gap', sub: `${P.cmaDeficiencies.length} intracellular deficiencies limiting cell function`, sys: 'Micronutrient', color: T.warn,
+      } : P.redoxScore != null && P.redoxScore < 75 ? {
+        label: 'Redox depletion', sub: `Antioxidant score ${P.redoxScore}/100 — oxidative stress active`, sys: 'Redox', color: T.warn,
+      } : hasAlcat ? {
+        label: 'Reactive food protocol active', sub: `${(P.severe?.length||0)+(P.moderate?.length||0)} foods restricted — stay on rotation`, sys: 'Immune', color: T.ok,
+      } : null;
+
+      return (
+        <div>
+          <div style={{ marginBottom:24 }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:10 }}>
+              {greeting}{P.name ? `, ${P.name.split(' ')[0]}` : ''}
+            </div>
+            <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap' }}>
+              <div style={{ display:'inline-flex',alignItems:'center',gap:6,background:`${phaseObj.color}15`,border:`1px solid ${phaseObj.color}40`,borderRadius:20,padding:'5px 14px' }}>
+                <div style={{ width:5,height:5,borderRadius:'50%',background:phaseObj.color,flexShrink:0 }}/>
+                <span style={{ fontFamily:fonts.mono,fontSize:10,color:phaseObj.color,letterSpacing:'0.12em' }}>{phaseObj.label.toUpperCase()} · DAY {protocolDay}</span>
+              </div>
+              {monActive && (
+                <div style={{ display:'inline-flex',alignItems:'center',gap:6,background:`${T.err}12`,border:`1px solid ${T.err}40`,borderRadius:20,padding:'5px 14px' }}>
+                  <div style={{ width:5,height:5,borderRadius:'50%',background:T.err,animation:'pulse 1.2s infinite',flexShrink:0 }}/>
+                  <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.err,letterSpacing:'0.12em' }}>MONITORING ACTIVE</span>
+                </div>
+              )}
+            </div>
+            <div style={{ fontFamily:fonts.serif,fontSize:26,color:T.w7,lineHeight:1.2,fontWeight:400 }}>
+              {!hasAlcat ? <>Start your<br/>biological reset.</> : <>Your protocol<br/>is active.</>}
+            </div>
+          </div>
+
+          {!hasAlcat && (
+            <div style={{ background:T.rgBg,border:`1px solid ${T.rg}30`,borderRadius:16,padding:'20px 18px',marginBottom:14 }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:8 }}>NEXT STEP</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:14,color:T.w7,fontWeight:500,marginBottom:6 }}>Upload your ALCAT results</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5,lineHeight:1.6,marginBottom:14 }}>Mario builds your reactive food profile and personalised 21-day immune reset protocol from your lab data.</div>
+              <button onClick={()=>setTab('me')} style={{ background:T.rg,border:'none',borderRadius:9,padding:'10px 22px',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff' }}>Go to My Labs</button>
+            </div>
+          )}
+
+          {bindingConstraint && (
+            <div style={{ background:`${bindingConstraint.color}10`,border:`1px solid ${bindingConstraint.color}35`,borderRadius:14,padding:'16px 18px',marginBottom:14 }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:bindingConstraint.color,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>BINDING CONSTRAINT · {bindingConstraint.sys.toUpperCase()}</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:14,color:T.w7,fontWeight:500,marginBottom:3 }}>{bindingConstraint.label}</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5,lineHeight:1.5 }}>{bindingConstraint.sub}</div>
+            </div>
+          )}
+
+          {hasAlcat && (
+            <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,overflow:'hidden',marginBottom:14 }}>
+              <div style={{ padding:'12px 16px 10px',borderBottom:`1px solid ${T.w2}` }}>
+                <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase' }}>TODAY'S MEALS · ROTATION DAY {todayRotDay}</div>
+              </div>
+              {[{meal:'Breakfast',mhour:7,emoji:'☀️',cat:'protein'},{meal:'Lunch',mhour:13,emoji:'🌤️',cat:'veg'},{meal:'Dinner',mhour:19,emoji:'🌙',cat:'grains'}].map(({meal,mhour,emoji,cat},i)=>{
+                const isPast = hour > mhour + 2;
+                const isCurrent = hour >= mhour - 1 && hour <= mhour + 2;
+                const foods = todayFoods?.[cat] || [];
+                return (
+                  <div key={meal} style={{ display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:i<2?`1px solid ${T.w2}`:'none',opacity:isPast?0.5:1 }}>
+                    <div style={{ width:34,height:34,borderRadius:10,background:isCurrent?T.rg:T.w2,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:16 }}>{emoji}</div>
+                    <div style={{ flex:1,minWidth:0 }}>
+                      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                        <span style={{ fontFamily:fonts.sans,fontSize:13,color:T.w7,fontWeight:isCurrent?500:400 }}>{meal}</span>
+                        <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4 }}>{mhour}:00</span>
+                      </div>
+                      <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w4,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>
+                        {foods.slice(0,3).join(' · ') || (isCurrent?'Tap LOG to record this meal':'See rotation plan')}
+                      </div>
+                    </div>
+                    {isCurrent && <button onClick={()=>setTab('monitor')} style={{ background:T.rg,border:'none',borderRadius:8,padding:'6px 12px',cursor:'pointer',fontFamily:fonts.mono,fontSize:10,color:'#fff',letterSpacing:'0.08em',flexShrink:0 }}>LOG</button>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14 }}>
+            <button onClick={()=>setTab('plate')} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'14px 16px',cursor:'pointer',textAlign:'left' }}>
+              <div style={{ marginBottom:6 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.14em',marginBottom:3 }}>PLATE CHECK</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w5 }}>Scan meal for reactions</div>
+            </button>
+            <button onClick={()=>setTab('gut')} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'14px 16px',cursor:'pointer',textAlign:'left' }}>
+              <div style={{ marginBottom:6 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v11m0 0H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2h-4m-6 0h6"/></svg></div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.14em',marginBottom:3 }}>GUT CHECK</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w5 }}>Log symptoms now</div>
+            </button>
+            <button onClick={()=>setTab('monitor')} style={{ background:T.w1,border:`1px solid ${monActive?T.err:T.w3}`,borderRadius:14,padding:'14px 16px',cursor:'pointer',textAlign:'left' }}>
+              <div style={{ marginBottom:6 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={monActive?T.err:T.rg2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:monActive?T.err:T.rg2,letterSpacing:'0.14em',marginBottom:3 }}>{monActive?'MONITORING ON':'MONITOR'}</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w5 }}>Post-meal biometrics</div>
+            </button>
+            <button onClick={()=>setShowDoctorPopup(true)} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'14px 16px',cursor:'pointer',textAlign:'left' }}>
+              <div style={{ marginBottom:6 }}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg></div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.14em',marginBottom:3 }}>DOCTOR</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w5 }}>Speak to a clinician</div>
+            </button>
+          </div>
+
+          <button onClick={()=>setTab('mario')} style={{ width:'100%',background:`linear-gradient(140deg,${T.rg3} 0%,${T.rg} 40%,${T.rg2} 100%)`,border:'none',borderRadius:14,padding:'18px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+            <div style={{ textAlign:'left' }}>
+              <div style={{ fontFamily:fonts.sans,fontSize:14,color:'rgba(255,255,255,0.92)',fontWeight:500,marginBottom:2 }}>Ask Mario anything</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:'rgba(255,255,255,0.55)',letterSpacing:'0.14em' }}>YOUR BIOLOGICAL AI</div>
+            </div>
+            <div style={{ width:38,height:38,borderRadius:'50%',background:'rgba(255,255,255,0.14)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </div>
+          </button>
+        </div>
+      );
+    }
+
+    // ── ME ──
+    if (tab === 'me') {
+      const protocolDay = P.dayInProtocol || 1;
+      const phaseObj = PHASES.find(ph => {
+        if (ph.id === 1) return protocolDay <= 21;
+        if (ph.id === 2) return protocolDay <= 90;
+        if (ph.id === 3) return protocolDay <= 120;
+        if (ph.id === 4) return protocolDay <= 180;
+        return true;
+      }) || PHASES[0];
+      const subsystems = [
+        { label:'Immune',       color:(P.severe?.length||0)>0?T.err:T.ok,              detail:`${(P.severe?.length||0)+(P.moderate?.length||0)} reactive foods` },
+        { label:'Redox',        color:P.redoxScore!=null?(P.redoxScore<50?T.err:P.redoxScore<75?T.warn:T.ok):T.w4, detail:P.redoxScore!=null?`Score ${P.redoxScore}/100`:'Not tested' },
+        { label:'Micronutrient',color:(P.cmaDeficiencies?.length||0)>0?T.warn:(P.cmaAdequate?.length||0)>0?T.ok:T.w4, detail:(P.cmaDeficiencies?.length||0)>0?`${P.cmaDeficiencies.length} deficient`:(P.cmaAdequate?.length||0)>0?'Adequate':'Not tested' },
+        { label:'Methylation',  color:(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length>0?T.warn:T.w4, detail:(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length>0?`${(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length} variants`:'Not tested' },
+        { label:'Mitochondrial',color:T.w4, detail:'Not tested' },
+        { label:'Circadian',    color:T.ok, detail:'Protocol active' },
+      ];
+      const archiveRows = [
+        { label:'Labs & Reactivity',         detail:'ALCAT · CMA · Blood work',             goTab:'labs',     count:(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)>0?`${(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)} items`:'Upload' },
+        { label:'Genomics',                  detail:'VCF · SNPs · Pathways',                goTab:'labs',     count:(P.genomicSnps?.length||0)>0?`${P.genomicSnps.length} SNPs`:'Upload' },
+        { label:'Rotation & Meals',          detail:'4-day rotation · Meal plan · Grocery', goTab:'rotation', count:ROT[1]?'Active':'Set up' },
+        { label:'Supplements & Medications', detail:'Current formulation · Interactions',   goTab:'meds',     count:(medSupp||medRx)?'On file':'Add' },
+        { label:'Outcomes & Progress',       detail:'Symptoms · Energy · Measurements',     goTab:'outcomes', count:(outcomes.checkins?.length||0)>0?`${outcomes.checkins.length} check-ins`:'Start' },
+        { label:'Generate Protocol',         detail:'Meal plan · Rotation · Grocery list',  goTab:'generate', count:'Generate' },
+      ];
+      return (
+        <div>
+          <div style={{ display:'flex',alignItems:'center',gap:16,marginBottom:16 }}>
+            <div style={{ width:52,height:52,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg})`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <span style={{ fontFamily:fonts.serif,fontSize:22,color:'#fff',fontWeight:400 }}>{P.name?P.name.charAt(0).toUpperCase():'M'}</span>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontFamily:fonts.serif,fontSize:20,color:T.w7,fontWeight:400 }}>{P.name||'Your profile'}</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginTop:2 }}>
+                {P.hormonalStatus||P.sex||''}{P.dayInProtocol?` · Day ${P.dayInProtocol}`:''}
+              </div>
+            </div>
+            <button onClick={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }} style={{ background:'none',border:`1px solid ${T.w3}`,borderRadius:8,padding:'7px 14px',cursor:'pointer',fontFamily:fonts.mono,fontSize:10,color:T.w5,letterSpacing:'0.1em',flexShrink:0 }}>SIGN OUT</button>
+          </div>
+          <div style={{ display:'inline-flex',alignItems:'center',gap:6,background:`${phaseObj.color}15`,border:`1px solid ${phaseObj.color}40`,borderRadius:20,padding:'5px 14px',marginBottom:20 }}>
+            <div style={{ width:5,height:5,borderRadius:'50%',background:phaseObj.color,flexShrink:0 }}/>
+            <span style={{ fontFamily:fonts.mono,fontSize:10,color:phaseObj.color,letterSpacing:'0.12em' }}>{phaseObj.label.toUpperCase()} · DAY {protocolDay} · {phaseObj.range.toUpperCase()}</span>
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:10 }}>BIOLOGICAL SUBSYSTEMS</div>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8 }}>
+              {subsystems.map(sys=>(
+                <div key={sys.label} style={{ background:`${sys.color}10`,border:`1px solid ${sys.color}30`,borderRadius:10,padding:'10px 12px' }}>
+                  <div style={{ width:6,height:6,borderRadius:'50%',background:sys.color,marginBottom:6 }}/>
+                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:sys.color,letterSpacing:'0.1em',textTransform:'uppercase',marginBottom:2 }}>{sys.label}</div>
+                  <div style={{ fontFamily:fonts.sans,fontSize:10,color:T.w5 }}>{sys.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,overflow:'hidden',marginBottom:20 }}>
+            {archiveRows.map((row,i)=>(
+              <button key={row.label} onClick={()=>setTab(row.goTab)} style={{ width:'100%',display:'flex',alignItems:'center',gap:14,padding:'14px 16px',background:'none',border:'none',borderBottom:i<archiveRows.length-1?`1px solid ${T.w2}`:'none',cursor:'pointer',textAlign:'left' }}>
+                <div style={{ flex:1,minWidth:0 }}>
+                  <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w7,fontWeight:500,marginBottom:1 }}>{row.label}</div>
+                  <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w4 }}>{row.detail}</div>
+                </div>
+                <div style={{ display:'flex',alignItems:'center',gap:6,flexShrink:0 }}>
+                  <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2 }}>{row.count}</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.w4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+              </button>
+            ))}
+          </div>
+          <div style={{ textAlign:'center',padding:'4px 0 8px' }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.1em',marginBottom:6 }}>MediBalans AB · Karlavägen 89, Stockholm</div>
+            <div style={{ display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:8 }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill={T.rg} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w5 }}>4.87 Reco · #1 health clinic in Sweden</span>
+            </div>
+            <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:'2px 8px',letterSpacing:'0.12em',background:T.rgBg }}>PATENT PENDING · SE 2615203-3</span>
+          </div>
+        </div>
+      );
+    }
 
     return null;
   };
@@ -3245,92 +3644,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                   The more data layers available, the more precise your protocol. You can always upload additional tests later — Mario will recalibrate automatically.
                 </div>
                 <div style={{ display:'flex', gap:12 }}>
-                  <button onClick={async()=>{
+                  <button onClick={()=>{
                     setShowDietBasis(false);
-                    setShowBES(false); setShowDiet(true); setDietLoading(true); setDietPlan('');
-                    const pd = patient;
-            const severe = (pd.severe||[]).join(', ') || 'none uploaded yet';
-            const mild = (pd.mild||[]).join(', ') || 'none';
-            const origin = pd.geographyOfOrigin || 'not specified';
-            const symptoms = (pd.symptoms||[]).join(', ') || 'not specified';
-            const cmaD = (pd.cmaDeficiencies||[]).join(', ') || 'not tested';
-            const cmaAll = (pd.cmaNutrients||[]).filter(n=>n.status==='deficient'||n.status==='low').map(n=>`${n.name}: ${n.value}${n.unit?' '+n.unit:''} [${n.status}]`).join(', ') || '';
-            const redox = pd.redoxScore != null ? pd.redoxScore : 'not tested';
-            const antioxidants = (pd.cmaAntioxidants||[]).map(a=>`${a.name}: ${a.status}${a.value!=null?' ('+a.value+')':''}`).join(', ') || '';
-            const snpsByDomain = {};
-            (pd.genomicSnps||[]).forEach(s => { const d = s.domain||'other'; if(!snpsByDomain[d]) snpsByDomain[d]=[]; snpsByDomain[d].push(s); });
-            const snpDetail = Object.entries(snpsByDomain).map(([domain, snps]) =>
-              `[${domain.toUpperCase()}] ${snps.map(s=>`${s.gene} ${s.rsid} ${s.genotype} [${s.status}]: ${s.impact}`).join(' | ')}`
-            ).join('\n') || 'not tested';
-            const prompt = `Generate a complete 21-day GCR elimination diet plan for this patient. EVERY food choice must be justified by specific data — cite the gene, the CMA value, or the ALCAT exclusion that drives it.
-
-═══ LAYER 1: IMMUNE REACTIVITY (ALCAT) ═══
-- Foods to EXCLUDE (severe — 9 months): ${severe}
-- Foods to EXCLUDE (mild — 3 months): ${mild}
-
-═══ LAYER 2: INTRACELLULAR MICRONUTRIENTS (CMA) ═══
-- Deficiencies to correct via diet: ${cmaD}
-${cmaAll ? `- Full deficient/low panel: ${cmaAll}` : ''}
-${antioxidants ? `- Antioxidant status: ${antioxidants}` : ''}
-- REDOX score: ${redox}/100
-
-═══ LAYER 3: GENETIC ARCHITECTURE (VCF — ${(pd.genomicSnps||[]).length} actionable SNPs) ═══
-${snpDetail}
-
-═══ LAYER 4: PATIENT CONTEXT ═══
-- Ancestral origin: ${origin}
-- Chief symptoms: ${symptoms}
-- Protocol: Option A — 21-day universal GCR detox
-
-═══ INTEGRATION RULES — NON-NEGOTIABLE ═══
-1. Every meal must respect ALCAT exclusions (immune silence)
-2. Every meal must include foods that correct specific CMA deficiencies — cite which nutrient each food targets
-3. If REDOX < 75, front-load antioxidant-dense foods; if specific antioxidants are low, name the food → nutrient → gene pathway
-4. Cross-reference genetic variants for EVERY recommendation:
-   - MTHFR carrier/risk → methylfolate greens in every meal, avoid folic acid
-   - GSTP1 variant → glutathione precursors (cruciferous) mandatory
-   - COMT slow → moderate polyphenol dose, no megadosing
-   - FADS1 variant → direct EPA/DHA (fish 4x/week minimum), plant omega-3 insufficient
-   - FTO risk → strict 3-hour meal timing non-negotiable
-   - SOD2 variant → manganese-rich foods (leafy greens, nuts)
-   - VDR/CYP2R1 variant → vitamin D foods daily (fatty fish, egg yolks)
-   - ACTN3 → note exercise type recommendation alongside meals
-   - Circadian SNPs → note caffeine/timing rules
-5. For each day, add a brief CLINICAL NOTE explaining which data layers drove the meal choices
-
-═══ UNIVERSAL RULES ═══
-- No seed oils (olive oil, coconut oil, tallow only)
-- No dairy (21 days minimum)
-- No yeast, fermented foods, vinegar, mushrooms
-- No sugar (Manuka UMF 10+ 1 tsp morning only)
-- No oats, no legumes during detox
-- No grapes or grape products
-- Wild-caught fish only
-- Meals every 3 hours — CPF balance
-- High fresh whole fruit (from green list) — microbiome restoration
-
-═══ MEAL TIMING ═══
-06:00-07:00 Breakfast | 09:30 Mid-morning | 12:30 Lunch | 15:30 Snack | 19:00 Dinner
-
-═══ WEEKLY ROTATION ═══
-Mon: grains/starch | Tue: soup | Wed: legumes | Thu: white protein | Fri: vegetarian | Sat: fish | Sun: red meat
-
-Generate each of the 21 days with: breakfast, mid-morning, lunch, snack, dinner + clinical note per day.
-Keep dishes simple. No emojis. Format clearly by day. Cite specific genes and CMA values in the clinical notes.
-Tailor to the patient's ancestral origin where possible in the post-detox rebuild notes.`;
-            try {
-              const res = await fetch('/api/chat', {
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:4000, system:buildMarioSystemPrompt(pd), messages:[{role:'user',content:prompt}] })
-              });
-              const d = await res.json();
-              setDietPlan((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
-            } catch { setDietPlan('Generation failed. Your dashboard is ready — use the Generate tab to create your meal plan.'); }
-            setDietLoading(false);
-          }} style={{
-            background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 32px',
-            fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer',
-          }}>
+                    setShowBES(false); setShowDiet(true);
+                    generateDiet(patient);
+                  }} style={{
+                    background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 32px',
+                    fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer',
+                  }}>
                     Generate my protocol
                   </button>
                   <button onClick={()=>setShowDietBasis(false)} style={{
@@ -3397,118 +3718,87 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
             }}>
               Download Plan
             </button>
+            <button onClick={()=>generateDiet(patient)} style={{
+              background:'transparent', color:T.w5, border:`1px solid ${T.w3}`, borderRadius:9, padding:'13px 28px',
+              fontFamily:fonts.sans, fontSize:13, fontWeight:600, cursor:'pointer',
+            }}>
+              Regenerate with latest data
+            </button>
           </div>
         )}
       </div>
     </div>
   );
 
-  // ── DASHBOARD ─────────────────────────────────────────────────────────────────
+  // ── DASHBOARD — Mobile-first OS layout ────────────────────────────────────────
   return (
-    <div style={{ minHeight:'100vh',background:T.w,color:T.w7,fontFamily:fonts.sans }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:${T.w3};border-radius:2px}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
+    <div style={{ height:'100dvh',minHeight:'-webkit-fill-available',background:T.w,color:T.w7,fontFamily:fonts.sans,display:'flex',flexDirection:'column',maxWidth:430,margin:'0 auto',overflow:'hidden',position:'relative' }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:0;height:0}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
       {popup && <SpikePopup/>}
-      <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')} onSignOut={async()=>{ await supabase.auth.signOut(); setAuthUser(null); setPatient({}); setShowAuth(true); setShowLanding(false); setShowOnboarding(false); }}/>
-      {/* Tab bar */}
-      <div style={{ background:T.w,borderBottom:`1px solid ${T.w3}`,padding:'0 44px',display:'flex',gap:0,position:'sticky',top:58,zIndex:99,overflowX:'auto' }}>
-        {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{ background:'none',border:'none',cursor:'pointer',padding:'14px 14px',fontSize:11,fontFamily:fonts.sans,color:tab===t.id?T.rg2:T.w4,borderBottom:`2px solid ${tab===t.id?T.rg:'transparent'}`,fontWeight:tab===t.id?500:400,whiteSpace:'nowrap',transition:'all .15s',letterSpacing:'-0.01em' }}>
-            {t.id==='monitor' && monActive && <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:T.err,marginRight:6,verticalAlign:'middle',boxShadow:`0 0 6px ${T.err}`,animation:'pulse 1.2s infinite' }}/>}
-            {t.label}
-          </button>
-        ))}
-        {/* Patient markers */}
-        {(patient.markers||[]).length > 0 && (
-          <div style={{ marginLeft:'auto',display:'flex',alignItems:'center',gap:8,paddingRight:8,flexShrink:0 }}>
-            {(patient.markers||[]).map(m=>{
-              const parts = m.toLowerCase().split(' ');
-              const isC = parts.includes('candida'), isW = parts.includes('whey');
-              const col = isC?'#906080':isW?'#5080A8':T.rg;
-              return <div key={m} style={{ background:T.w1,border:`1px solid ${col}30`,borderRadius:4,padding:'3px 9px',display:'flex',gap:5,alignItems:'center' }}>
-                <div style={{ width:4,height:4,borderRadius:'50%',background:col }}/>
-                <span style={{ fontSize:11,fontFamily:fonts.mono,color:col,letterSpacing:'0.1em' }}>{m}</span>
-              </div>;
-            })}
-          </div>
-        )}
-      </div>
-      {/* Content */}
-      <div style={{ maxWidth:900,margin:'0 auto',padding:'44px 44px 80px' }} onClick={()=>picker&&setPicker(null)}>
-        {/* Patient header — minimal */}
-        {patient.name && (
-          <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:32,paddingBottom:20,borderBottom:`1px solid ${T.w2}` }}>
-            <div>
-              <div style={{ fontFamily:fonts.serif,fontSize:20,color:T.w7,fontWeight:400,marginBottom:2 }}>{patient.name}</div>
-              <div style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>
-                {patient.hormonalStatus||patient.sex||''}{patient.dayInProtocol?` · Day ${patient.dayInProtocol} of protocol`:''}
-              </div>
-            </div>
-            <div style={{ display:'flex',gap:8 }}>
-              {[['Severe',(P.severe||[]).length,T.err],['Moderate',(P.moderate||[]).length,T.warn],['Mild',(P.mild||[]).length,T.w5]].filter(([,n])=>n>0).map(([l,n,c])=>(
-                <div key={l} style={{ textAlign:'center',padding:'6px 12px',background:T.w1,border:`1px solid ${T.w3}`,borderRadius:7 }}>
-                  <div style={{ fontFamily:fonts.serif,fontSize:18,color:c,fontWeight:400 }}>{n}</div>
-                  <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase' }}>{l}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {tabContent()}
-      </div>
-      {/* Doctor consultation popup */}
       {showDoctorPopup && (
-        <div style={{ position:'fixed',inset:0,background:'rgba(28,20,16,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:24,backdropFilter:'blur(8px)' }} onClick={()=>setShowDoctorPopup(false)}>
-          <div style={{ background:T.w,borderRadius:16,maxWidth:440,width:'100%',boxShadow:'0 24px 64px rgba(28,20,16,0.22)',overflow:'hidden' }} onClick={e=>e.stopPropagation()}>
-            <div style={{ padding:'28px 28px 0' }}>
-              <div style={{ fontFamily:fonts.mono,fontSize:11,letterSpacing:'0.18em',color:T.rg2,textTransform:'uppercase',marginBottom:10 }}>Doctor consultation</div>
-              <div style={{ fontFamily:fonts.serif,fontSize:24,color:T.w7,fontWeight:400,lineHeight:1.2,marginBottom:16 }}>Speak with our clinical team</div>
-              <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w5,lineHeight:1.6,marginBottom:8 }}>
-                Our team of physicians at MediBalans can review your case, discuss your results, and provide personalised clinical guidance.
-              </div>
+        <div style={{ position:'fixed',inset:0,background:'rgba(28,20,16,0.5)',zIndex:2000,display:'flex',alignItems:'flex-end',justifyContent:'center',backdropFilter:'blur(8px)' }} onClick={()=>setShowDoctorPopup(false)}>
+          <div style={{ background:T.w,borderRadius:'20px 20px 0 0',width:'100%',maxWidth:430,boxShadow:'0 -8px 40px rgba(28,20,16,0.22)',overflow:'hidden',paddingBottom:'env(safe-area-inset-bottom,0px)' }} onClick={e=>e.stopPropagation()}>
+            <div style={{ width:36,height:4,borderRadius:2,background:T.w3,margin:'12px auto 0' }}/>
+            <div style={{ padding:'20px 24px 0' }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:11,letterSpacing:'0.18em',color:T.rg2,textTransform:'uppercase',marginBottom:8 }}>Doctor consultation</div>
+              <div style={{ fontFamily:fonts.serif,fontSize:22,color:T.w7,fontWeight:400,lineHeight:1.2,marginBottom:12 }}>Speak with our clinical team</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w5,lineHeight:1.6,marginBottom:8 }}>Our team of physicians at MediBalans can review your case and provide personalised clinical guidance.</div>
             </div>
-            <div style={{ margin:'20px 28px',padding:'16px 20px',background:T.rgBg,border:`1px solid ${T.rg}20`,borderRadius:10 }}>
-              <div style={{ display:'flex',alignItems:'baseline',gap:8 }}>
-                <span style={{ fontFamily:fonts.serif,fontSize:28,color:T.rg2,fontWeight:400 }}>2 500 kr</span>
-                <span style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5 }}>/ hour</span>
-              </div>
-              <div style={{ fontFamily:fonts.sans,fontSize:11.5,color:T.w4,marginTop:6,lineHeight:1.5 }}>
-                Video or phone consultation with a MediBalans physician. You will receive a booking confirmation via email.
-              </div>
+            <div style={{ margin:'16px 24px',padding:'14px 18px',background:T.rgBg,border:`1px solid ${T.rg}20`,borderRadius:10 }}>
+              <div style={{ display:'flex',alignItems:'baseline',gap:8 }}><span style={{ fontFamily:fonts.serif,fontSize:26,color:T.rg2,fontWeight:400 }}>2 500 kr</span><span style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5 }}>/ hour</span></div>
+              <div style={{ fontFamily:fonts.sans,fontSize:11.5,color:T.w4,marginTop:4,lineHeight:1.5 }}>Video or phone consultation. Booking confirmation via email.</div>
             </div>
-            <div style={{ padding:'0 28px 28px',display:'flex',gap:12 }}>
-              <button onClick={()=>setShowDoctorPopup(false)} style={{ flex:1,padding:'13px 20px',borderRadius:10,border:`1px solid ${T.w3}`,background:T.w,cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:T.w5,letterSpacing:'0.04em' }}>Cancel</button>
-              <button onClick={()=>{ window.location.href='mailto:info@medibalans.se?subject=Doctor%20Consultation%20Request&body=I%20would%20like%20to%20book%20a%20consultation%20with%20a%20MediBalans%20physician.'; setShowDoctorPopup(false); }} style={{ flex:1,padding:'13px 20px',borderRadius:10,border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:'rgba(255,255,255,0.97)',letterSpacing:'0.04em',boxShadow:`0 4px 16px rgba(154,98,85,0.25)` }}>Request booking</button>
+            <div style={{ padding:'0 24px 24px',display:'flex',gap:10 }}>
+              <button onClick={()=>setShowDoctorPopup(false)} style={{ flex:1,padding:'13px',borderRadius:12,border:`1px solid ${T.w3}`,background:T.w,cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:500,color:T.w5 }}>Cancel</button>
+              <button onClick={()=>{ window.location.href='mailto:info@medibalans.se?subject=Doctor%20Consultation%20Request&body=I%20would%20like%20to%20book%20a%20consultation.'; setShowDoctorPopup(false); }} style={{ flex:1,padding:'13px',borderRadius:12,border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600,color:'rgba(255,255,255,0.97)' }}>Request booking</button>
             </div>
           </div>
         </div>
       )}
-      {/* Floating action buttons — Emergency + Doctor */}
-      <div style={{ position:'fixed',bottom:24,right:24,zIndex:500,display:'flex',flexDirection:'column',gap:10,alignItems:'flex-end' }}>
-        <button onClick={()=>setShowDoctorPopup(true)} style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 22px',borderRadius:50,border:'none',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:500,color:T.w7,background:T.w,boxShadow:`0 4px 20px rgba(28,20,16,0.14), 0 1px 3px rgba(28,20,16,0.08)`,letterSpacing:'0.02em',transition:'all .18s' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          Speak to a doctor
-        </button>
-        <button onClick={()=>{const nums={US:'911',GB:'999',DE:'112',SE:'112'};window.location.href='tel:'+(nums[country]||'112');}} style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 22px',borderRadius:50,border:'none',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff',background:T.err,boxShadow:`0 4px 20px rgba(184,80,64,0.30), 0 1px 3px rgba(184,80,64,0.12)`,letterSpacing:'0.02em',transition:'all .18s' }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Emergency — call {({US:'911',GB:'999',DE:'112',SE:'112'})[country]||'112'}
-        </button>
-      </div>
-      {/* Footer */}
-      <div style={{ borderTop:`1px solid ${T.w3}`,padding:'14px 44px',display:'flex',justifyContent:'space-between',alignItems:'center',background:T.w1,flexWrap:'wrap',gap:10 }}>
-        <div style={{ display:'flex',alignItems:'center',gap:12 }}>
-          <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em' }}>
-            <span style={{ color:T.w6,fontWeight:500 }}>meet mario</span> · MediBalans AB · Karlavägen 89, Stockholm
+
+      {/* Mobile header */}
+      <div style={{ paddingTop:'env(safe-area-inset-top,0px)',background:'rgba(247,244,240,0.96)',backdropFilter:'blur(20px)',WebkitBackdropFilter:'blur(20px)',borderBottom:`1px solid ${T.w2}`,zIndex:100,flexShrink:0 }}>
+        <div style={{ height:50,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 20px' }}>
+          <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+            <div style={{ width:8,height:8,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
+            <span style={{ fontFamily:fonts.serif,fontSize:17,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
           </div>
-          <div style={{ width:1,height:12,background:T.w3 }}/>
-          <div style={{ display:'flex',alignItems:'center',gap:4 }}>
-            <svg width="11" height="11" viewBox="0 0 24 24" fill={T.rg} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w5,letterSpacing:'0.06em' }}>4.87 Reco · #1 health clinic in Sweden</span>
+          <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+            {monActive && (
+              <button onClick={()=>setTab('monitor')} style={{ display:'flex',alignItems:'center',gap:5,background:`${T.err}12`,border:`1px solid ${T.err}30`,borderRadius:12,padding:'3px 10px',cursor:'pointer' }}>
+                <div style={{ width:5,height:5,borderRadius:'50%',background:T.err,animation:'pulse 1.2s infinite' }}/>
+                <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.err,letterSpacing:'0.12em' }}>LIVE</span>
+              </button>
+            )}
+            {patient.dayInProtocol ? <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase' }}>DAY {patient.dayInProtocol}</div> : null}
           </div>
-          <div style={{ width:1,height:12,background:T.w3 }}/>
-          <a href="https://medibalans.com" target="_blank" rel="noopener noreferrer" style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,textDecoration:'none',letterSpacing:'0.08em' }}>medibalans.com</a>
         </div>
-        <div style={{ display:'flex',gap:10,alignItems:'center' }}>
-          <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:'2px 8px',letterSpacing:'0.12em',background:T.rgBg }}>PATENT PENDING · SE 2615203-3</span>
+      </div>
+
+      {/* Scrollable content */}
+      <div style={{ flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:tab==='mario'?'0':'20px 20px 24px' }} onClick={()=>picker&&setPicker(null)}>
+        {tabContent()}
+      </div>
+
+      {/* Emergency strip — only outside mario tab */}
+      {tab !== 'mario' && (
+        <div style={{ padding:'6px 20px',background:`${T.err}08`,borderTop:`1px solid ${T.err}15`,display:'flex',justifyContent:'center',flexShrink:0 }}>
+          <button onClick={()=>{const nums={US:'911',GB:'999',DE:'112',SE:'112'};window.location.href='tel:'+(nums[country]||'112');}} style={{ display:'flex',alignItems:'center',gap:6,background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:10,color:T.err,letterSpacing:'0.1em' }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            EMERGENCY · {({US:'911',GB:'999',DE:'112',SE:'112'})[country]||'112'}
+          </button>
+        </div>
+      )}
+
+      {/* Bottom navigation */}
+      <div style={{ paddingBottom:'env(safe-area-inset-bottom,0px)',background:'rgba(247,244,240,0.96)',backdropFilter:'blur(24px)',WebkitBackdropFilter:'blur(24px)',borderTop:`1px solid ${T.w2}`,zIndex:100,flexShrink:0 }}>
+        <div style={{ height:58,display:'flex',alignItems:'center',justifyContent:'space-around' }}>
+          {BOTTOM_TABS.map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:tab===t.id?T.rg2:T.w4,transition:'color .15s',WebkitTapHighlightColor:'transparent' }}>
+              {t.icon}
+              <span style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:tab===t.id?600:400 }}>{t.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
