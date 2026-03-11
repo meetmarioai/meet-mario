@@ -325,8 +325,14 @@ function AuthScreen({ onAuthed }) {
 
       {/* Footer */}
       <div style={{ padding:'16px 32px', borderTop:`1px solid ${T.w2}`, textAlign:'center' }}>
-        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.1em' }}>
+        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.1em', marginBottom:6 }}>
           MediBalans AB · Karlavägen 89, Stockholm · Patent Pending SE 2615203-3
+        </div>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill={T.rg} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, letterSpacing:'0.06em' }}>4.87 on Reco · #1 rated health clinic in Sweden</span>
+          <span style={{ color:T.w3 }}>·</span>
+          <a href="https://medibalans.com" target="_blank" rel="noopener noreferrer" style={{ fontFamily:fonts.mono, fontSize:10, color:T.rg2, textDecoration:'none' }}>medibalans.com</a>
         </div>
       </div>
     </div>
@@ -2422,9 +2428,25 @@ Lowercase English names. Translate Swedish to English.` }
             </div>
           ))}
         </div>
-        <div style={{ display:'flex',alignItems:'center',gap:20 }}>
+        <div style={{ display:'flex',alignItems:'center',gap:20,marginBottom:32 }}>
           <BtnPrimary onClick={()=>{setShowLanding(false); if(authUser){setShowOnboarding(true);}else{setShowAuth(true);}}}>Begin Assessment</BtnPrimary>
           <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.w4,letterSpacing:'0.12em' }}>~10 min · GDPR · No card required</span>
+        </div>
+        {/* Trust bar */}
+        <div style={{ display:'flex',alignItems:'center',gap:24,flexWrap:'wrap' }}>
+          <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+            <div style={{ display:'flex',gap:2 }}>
+              {[1,2,3,4,5].map(i=>(
+                <svg key={i} width="14" height="14" viewBox="0 0 24 24" fill={i<=4?T.rg:T.rg+'60'} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+              ))}
+            </div>
+            <span style={{ fontFamily:fonts.sans,fontSize:13,fontWeight:600,color:T.w7 }}>4.87</span>
+            <span style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5 }}>on Reco</span>
+          </div>
+          <div style={{ width:1,height:16,background:T.w3 }}/>
+          <span style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5 }}>#1 rated health clinic in Sweden</span>
+          <div style={{ width:1,height:16,background:T.w3 }}/>
+          <a href="https://medibalans.com" target="_blank" rel="noopener noreferrer" style={{ fontFamily:fonts.sans,fontSize:12,color:T.rg2,textDecoration:'none',borderBottom:`1px solid ${T.rg}30` }}>medibalans.com</a>
         </div>
       </div>
       <style>{`@keyframes ob1{0%,100%{transform:translate(0,0) scale(1) rotate(0deg)}25%{transform:translate(36px,-30px) scale(1.04) rotate(4deg)}50%{transform:translate(14px,38px) scale(.97) rotate(-3deg)}75%{transform:translate(-24px,12px) scale(1.02) rotate(6deg)}}@keyframes ob2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-28px,22px) scale(.95)}70%{transform:translate(20px,-16px) scale(1.03)}}@keyframes ob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-18px,-24px) scale(1.07)}}@keyframes ca1{0%,100%{opacity:.38;transform:rotate(-6deg) scaleX(1)}50%{opacity:.08;transform:rotate(-3deg) scaleX(1.45)}}@keyframes ca2{0%,100%{opacity:.32;transform:rotate(9deg) scaleX(1)}50%{opacity:.06;transform:rotate(6deg) scaleX(.62)}}@keyframes shimmer{0%{background-position:0% center}100%{background-position:220% center}}`}</style>
@@ -2748,19 +2770,27 @@ Tailor to the patient's ancestral origin where possible in the post-detox rebuil
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
           Speak to a doctor
         </button>
-        <button onClick={()=>window.location.href='tel:112'} style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 22px',borderRadius:50,border:'none',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff',background:T.err,boxShadow:`0 4px 20px rgba(184,80,64,0.30), 0 1px 3px rgba(184,80,64,0.12)`,letterSpacing:'0.02em',transition:'all .18s' }}>
+        <button onClick={()=>{const nums={US:'911',GB:'999',DE:'112',SE:'112'};window.location.href='tel:'+(nums[country]||'112');}} style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 22px',borderRadius:50,border:'none',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff',background:T.err,boxShadow:`0 4px 20px rgba(184,80,64,0.30), 0 1px 3px rgba(184,80,64,0.12)`,letterSpacing:'0.02em',transition:'all .18s' }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-          Emergency — call 112
+          Emergency — call {({US:'911',GB:'999',DE:'112',SE:'112'})[country]||'112'}
         </button>
       </div>
       {/* Footer */}
-      <div style={{ borderTop:`1px solid ${T.w3}`,padding:'14px 44px',display:'flex',justifyContent:'space-between',alignItems:'center',background:T.w1 }}>
-        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em' }}>
-          <span style={{ color:T.w6,fontWeight:500 }}>meet mario</span> · MediBalans AB · Karlavägen 89, Stockholm
+      <div style={{ borderTop:`1px solid ${T.w3}`,padding:'14px 44px',display:'flex',justifyContent:'space-between',alignItems:'center',background:T.w1,flexWrap:'wrap',gap:10 }}>
+        <div style={{ display:'flex',alignItems:'center',gap:12 }}>
+          <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em' }}>
+            <span style={{ color:T.w6,fontWeight:500 }}>meet mario</span> · MediBalans AB · Karlavägen 89, Stockholm
+          </div>
+          <div style={{ width:1,height:12,background:T.w3 }}/>
+          <div style={{ display:'flex',alignItems:'center',gap:4 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill={T.rg} stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w5,letterSpacing:'0.06em' }}>4.87 Reco · #1 health clinic in Sweden</span>
+          </div>
+          <div style={{ width:1,height:12,background:T.w3 }}/>
+          <a href="https://medibalans.com" target="_blank" rel="noopener noreferrer" style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,textDecoration:'none',letterSpacing:'0.08em' }}>medibalans.com</a>
         </div>
         <div style={{ display:'flex',gap:10,alignItems:'center' }}>
           <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:'2px 8px',letterSpacing:'0.12em',background:T.rgBg }}>PATENT PENDING · SE 2615203-3</span>
-          <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.1em' }}>AI-driven clinical decision support · Global Constraint Rule framework</span>
         </div>
       </div>
     </div>
