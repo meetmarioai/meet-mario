@@ -1074,18 +1074,26 @@ Extract every food/substance with a reactivity level.
 - Green / Class 0 / ACCEPTABLE → omit
 
 REPORT TYPE 2 — CMA / CNA (Cell Science Systems intracellular micronutrient analysis):
-This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested.
-- Any nutrient marked DEFICIENT, VERY LOW, or critically below range → "severe" (these need urgent supplementation)
-- Any nutrient marked LOW, BORDERLINE, or below optimal → "moderate" (these need correction)
-- Any nutrient in ADEQUATE / NORMAL / within range → "mild" (for tracking — include ALL of them)
-- Also extract: {"cma_deficiencies":["nutrient1","nutrient2"]} for all below-range nutrients
-- Also extract: {"cma_adequate":["nutrient1","nutrient2"]} for all in-range nutrients
+This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested with its actual value.
+
+For the summary arrays:
+- Any nutrient marked DEFICIENT, VERY LOW, or critically below range → "severe"
+- Any nutrient marked LOW, BORDERLINE, or below optimal → "moderate"
+- Any nutrient in ADEQUATE / NORMAL / within range → "mild"
+
+Also extract the FULL detailed data:
+- "cma_deficiencies": array of below-range nutrient names
+- "cma_adequate": array of in-range nutrient names
+- "cma_nutrients": array of objects for EVERY nutrient: [{"name":"vitamin d","value":32,"unit":"ng/mL","range_low":30,"range_high":100,"status":"adequate|low|deficient"}]
+- "redox_score": the REDOX / Spectrox / Total Antioxidant Function score if present (numeric)
+- "cma_antioxidants": array of antioxidant nutrients specifically: [{"name":"glutathione","value":...,"status":"adequate|low|deficient"}]
+- "cma_categories": group nutrients by category if visible: {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
 
 REPORT TYPE 3 — Blood work / other:
 Extract any out-of-range markers into "moderate", normal into "mild".
 
 Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}
+{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{}}
 Lowercase English names. Translate Swedish to English. Include EVERY nutrient found — do not skip any.` }
           ] }],
         }),
@@ -1105,14 +1113,22 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const isCMA = json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0;
       const cmaDef = norm(json.cma_deficiencies);
       const cmaAdeq = norm(json.cma_adequate);
+      const cmaNutrients = Array.isArray(json.cma_nutrients) ? json.cma_nutrients : [];
+      const redoxScore = json.redox_score != null ? Number(json.redox_score) : null;
+      const cmaAntioxidants = Array.isArray(json.cma_antioxidants) ? json.cma_antioxidants : [];
+      const cmaCategories = json.cma_categories && typeof json.cma_categories === 'object' ? json.cma_categories : {};
 
       if (isCMA) {
-        // CMA/CNA report — store nutrient data separately, don't overwrite ALCAT food reactivity
+        // CMA/CNA report — store full nutrient data separately, don't overwrite ALCAT food reactivity
         setPatient(p => ({
           ...p,
           cmaDeficiencies: [...new Set([...(p.cmaDeficiencies||[]), ...cmaDef, ...newS, ...newM])],
           cmaAdequate: [...new Set([...(p.cmaAdequate||[]), ...cmaAdeq, ...newMi])],
           cmaAllNutrients: [...new Set([...(p.cmaAllNutrients||[]), ...cmaDef, ...cmaAdeq, ...newS, ...newM, ...newMi])],
+          cmaNutrients: [...(p.cmaNutrients||[]).filter(n => !cmaNutrients.find(cn => cn.name === n.name)), ...cmaNutrients],
+          redoxScore: redoxScore ?? p.redoxScore,
+          cmaAntioxidants: [...(p.cmaAntioxidants||[]).filter(n => !cmaAntioxidants.find(cn => cn.name === n.name)), ...cmaAntioxidants],
+          cmaCategories: { ...(p.cmaCategories||{}), ...cmaCategories },
         }));
       } else if (isAdditional) {
         setPatient(p => ({
@@ -2404,6 +2420,55 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 </div>
               </div>
             </div>
+          </Panel>
+        )}
+
+        {/* Redox score + Antioxidant panel */}
+        {P.redoxScore != null && (
+          <Panel>
+            <FieldLabel>REDOX / Spectrox — Total antioxidant function</FieldLabel>
+            <div style={{ display:'flex', alignItems:'center', gap:24, marginBottom:16 }}>
+              <div style={{ position:'relative', width:100, height:100 }}>
+                <svg width="100" height="100" viewBox="0 0 100 100">
+                  <circle cx="50" cy="50" r="42" fill="none" stroke={T.w2} strokeWidth="8"/>
+                  <circle cx="50" cy="50" r="42" fill="none" stroke={P.redoxScore < 50 ? T.err : P.redoxScore < 75 ? T.warn : T.ok} strokeWidth="8" strokeLinecap="round"
+                    strokeDasharray={`${(P.redoxScore / 100) * 264} 264`} transform="rotate(-90 50 50)" style={{ transition:'stroke-dasharray 0.8s ease' }}/>
+                  <text x="50" y="48" textAnchor="middle" fontFamily={fonts.sans} fontSize="24" fontWeight="400" fill={T.w7}>{P.redoxScore}</text>
+                  <text x="50" y="62" textAnchor="middle" fontFamily={fonts.mono} fontSize="9" fill={T.w4}>/ 100</text>
+                </svg>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontFamily:fonts.mono, fontSize:11, color:P.redoxScore < 50 ? T.err : P.redoxScore < 75 ? T.warn : T.ok, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:6 }}>
+                  {P.redoxScore < 50 ? 'Severely depleted' : P.redoxScore < 75 ? 'Compromised' : 'Adequate'}
+                </div>
+                <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.6 }}>
+                  {P.redoxScore < 50
+                    ? 'Your antioxidant defense is critically low. Your diet must maximise redox-supportive foods at every meal. Flagged for clinician review before aggressive detox.'
+                    : P.redoxScore < 75
+                    ? 'Your antioxidant reserve is below optimal. Mario will prioritise redox-supportive foods — sulfur-rich vegetables, dark berries, and polyphenol sources — in every meal suggestion.'
+                    : 'Your antioxidant defense is functioning well. Standard protocol applies with maintained antioxidant intake through diverse whole foods.'}
+                </div>
+              </div>
+            </div>
+            {(P.cmaAntioxidants||[]).length > 0 && (
+              <div>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:8 }}>Antioxidant panel</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px, 1fr))', gap:8 }}>
+                  {(P.cmaAntioxidants||[]).map(a => {
+                    const col = a.status === 'deficient' ? T.err : a.status === 'low' ? T.warn : T.ok;
+                    return (
+                      <div key={a.name} style={{ background:col+'08', border:`1px solid ${col}25`, borderRadius:8, padding:'8px 10px' }}>
+                        <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w7, fontWeight:500, marginBottom:2 }}>{a.name}</div>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline' }}>
+                          {a.value != null && <span style={{ fontFamily:fonts.mono, fontSize:13, color:col, fontWeight:500 }}>{a.value}</span>}
+                          <span style={{ fontFamily:fonts.mono, fontSize:10, color:col, letterSpacing:'0.1em', textTransform:'uppercase' }}>{a.status}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Panel>
         )}
 
