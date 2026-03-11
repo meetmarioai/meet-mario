@@ -673,7 +673,7 @@ If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
                     <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ REACTIVE FOODS</div>
                     <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5 }}>Mario couldn't extract the food list from this file. Try a clearer photo, or upload the other page of the report. You can also skip and add results manually in the Protocol tab.</div>
                     {typeof labParseError === 'string' && labParseError !== 'true' && (
-                      <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:6 }}>Debug: {labParseError}</div>
+                      <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:6 }}>{labParseError}</div>
                     )}
                   </div>
                 ) : (
