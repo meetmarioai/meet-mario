@@ -386,23 +386,28 @@ function Onboarding({ onComplete }) {
 
       const content = [
         fileBlock,
-        { type: 'text', text: `This is a medical lab test result — an ALCAT food immune reactivity report, CMA/CNA intracellular analysis, or blood work panel.
+        { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
 
-TASK: Find every food, substance, or analyte with a reactivity level assigned.
-
-ALCAT classification:
+REPORT TYPE 1 — ALCAT (food immune reactivity):
+Extract every food/substance with a reactivity level.
 - Red / Class 3-4 / SEVERE → "severe" array
 - Orange / Class 2 / MODERATE → "moderate" array
 - Yellow / Class 1 / MILD → "mild" array
-- Green / Class 0 / ACCEPTABLE → omit entirely
+- Green / Class 0 / ACCEPTABLE → omit
 
-CMA/CNA reports list intracellular nutrient levels. Put any nutrient marked "low", "deficient", or below reference range into the "mild" array.
+REPORT TYPE 2 — CMA / CNA (Cell Science Systems intracellular micronutrient analysis):
+This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested.
+- Any nutrient marked DEFICIENT, VERY LOW, or critically below range → "severe"
+- Any nutrient marked LOW, BORDERLINE, or below optimal → "moderate"
+- Any nutrient in ADEQUATE / NORMAL / within range → "mild"
+- Also extract: "cma_deficiencies" for all below-range nutrients, "cma_adequate" for all in-range
 
-Return ONLY this JSON (no text before/after, no markdown):
-{"severe":["item1","item2"],"moderate":["item1"],"mild":["item1"]}
+REPORT TYPE 3 — Blood work / other:
+Extract any out-of-range markers into "moderate", normal into "mild".
 
-Lowercase English names. Translate Swedish to English.
-If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
+Return ONLY this JSON (no markdown):
+{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}
+Lowercase English names. Translate Swedish to English. Include EVERY nutrient found.` }
       ];
 
       const res = await fetch('/api/chat', {
@@ -1059,20 +1064,29 @@ export default function MeetMario({ patient: patientProp }) {
           system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else.',
           messages: [{ role: 'user', content: [
             fileBlock,
-            { type: 'text', text: `This is a medical lab test result — an ALCAT food immune reactivity report, CMA/CNA intracellular analysis, or blood work panel.
+            { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
 
-TASK: Find every food, substance, or analyte with a reactivity level assigned.
-
-ALCAT classification:
+REPORT TYPE 1 — ALCAT (food immune reactivity):
+Extract every food/substance with a reactivity level.
 - Red / Class 3-4 / SEVERE → "severe" array
 - Orange / Class 2 / MODERATE → "moderate" array
 - Yellow / Class 1 / MILD → "mild" array
-- Green / Class 0 / ACCEPTABLE → omit entirely
+- Green / Class 0 / ACCEPTABLE → omit
 
-CMA/CNA reports: any nutrient marked "low", "deficient", or below reference range → "mild" array.
+REPORT TYPE 2 — CMA / CNA (Cell Science Systems intracellular micronutrient analysis):
+This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested.
+- Any nutrient marked DEFICIENT, VERY LOW, or critically below range → "severe" (these need urgent supplementation)
+- Any nutrient marked LOW, BORDERLINE, or below optimal → "moderate" (these need correction)
+- Any nutrient in ADEQUATE / NORMAL / within range → "mild" (for tracking — include ALL of them)
+- Also extract: {"cma_deficiencies":["nutrient1","nutrient2"]} for all below-range nutrients
+- Also extract: {"cma_adequate":["nutrient1","nutrient2"]} for all in-range nutrients
 
-Return ONLY this JSON (no markdown): {"severe":[],"moderate":[],"mild":[]}
-Lowercase English names. Translate Swedish to English.` }
+REPORT TYPE 3 — Blood work / other:
+Extract any out-of-range markers into "moderate", normal into "mild".
+
+Return ONLY this JSON (no markdown):
+{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}
+Lowercase English names. Translate Swedish to English. Include EVERY nutrient found — do not skip any.` }
           ] }],
         }),
       });
@@ -1088,8 +1102,19 @@ Lowercase English names. Translate Swedish to English.` }
 
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
+      const isCMA = json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0;
+      const cmaDef = norm(json.cma_deficiencies);
+      const cmaAdeq = norm(json.cma_adequate);
 
-      if (isAdditional) {
+      if (isCMA) {
+        // CMA/CNA report — store nutrient data separately, don't overwrite ALCAT food reactivity
+        setPatient(p => ({
+          ...p,
+          cmaDeficiencies: [...new Set([...(p.cmaDeficiencies||[]), ...cmaDef, ...newS, ...newM])],
+          cmaAdequate: [...new Set([...(p.cmaAdequate||[]), ...cmaAdeq, ...newMi])],
+          cmaAllNutrients: [...new Set([...(p.cmaAllNutrients||[]), ...cmaDef, ...cmaAdeq, ...newS, ...newM, ...newMi])],
+        }));
+      } else if (isAdditional) {
         setPatient(p => ({
           ...p,
           severe: [...new Set([...(p.severe||[]), ...newS])],
@@ -1108,8 +1133,9 @@ Lowercase English names. Translate Swedish to English.` }
       }
 
       setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-      const hasResults = newS.length > 0 || newM.length > 0 || newMi.length > 0;
-      if (!hasResults) { setDashLabError('0 foods extracted — try a clearer file or different page'); }
+      const totalItems = newS.length + newM.length + newMi.length + cmaDef.length + cmaAdeq.length;
+      const hasResults = totalItems > 0;
+      if (!hasResults) { setDashLabError('0 items extracted — try a clearer file or different page'); }
       else {
         setDashLabSuccess(true);
         // Save to Supabase
@@ -2339,10 +2365,10 @@ Lowercase English names. Translate Swedish to English.` }
         <Eyebrow>Upload & manage lab data</Eyebrow>
         <SectionTitle>Lab<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Results</em></SectionTitle>
 
-        {/* Current results summary */}
+        {/* Current ALCAT results summary */}
         {(P.severe?.length > 0 || P.moderate?.length > 0 || P.mild?.length > 0) && (
           <Panel>
-            <FieldLabel>Current ALCAT results loaded</FieldLabel>
+            <FieldLabel>ALCAT — Reactive foods</FieldLabel>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:8 }}>
               {[['Severe', P.severe, T.err], ['Moderate', P.moderate, T.warn], ['Mild', P.mild, T.w5]].map(([label, items, color]) => (
                 <div key={label}>
@@ -2351,6 +2377,32 @@ Lowercase English names. Translate Swedish to English.` }
                   {(items||[]).length > 6 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>+{items.length - 6} more</div>}
                 </div>
               ))}
+            </div>
+          </Panel>
+        )}
+
+        {/* CMA/CNA micronutrient results */}
+        {(P.cmaDeficiencies?.length > 0 || P.cmaAdequate?.length > 0) && (
+          <Panel>
+            <FieldLabel>CMA/CNA — Intracellular micronutrients ({(P.cmaAllNutrients||[]).length} tested)</FieldLabel>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:8 }}>
+              <div>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.err, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>Deficient / Low · {(P.cmaDeficiencies||[]).length}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                  {(P.cmaDeficiencies||[]).map(n => (
+                    <span key={n} style={{ background:`${T.err}12`, border:`1px solid ${T.err}35`, borderRadius:4, padding:'3px 9px', fontSize:11, fontFamily:fonts.sans, color:T.err }}>{n}</span>
+                  ))}
+                </div>
+                {(P.cmaDeficiencies||[]).length === 0 && <div style={{ fontSize:11, color:T.w4, fontFamily:fonts.sans }}>None detected</div>}
+              </div>
+              <div>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>Adequate · {(P.cmaAdequate||[]).length}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                  {(P.cmaAdequate||[]).map(n => (
+                    <span key={n} style={{ background:`${T.ok}10`, border:`1px solid ${T.ok}25`, borderRadius:4, padding:'3px 9px', fontSize:11, fontFamily:fonts.sans, color:T.ok }}>{n}</span>
+                  ))}
+                </div>
+              </div>
             </div>
           </Panel>
         )}
@@ -2373,7 +2425,7 @@ Lowercase English names. Translate Swedish to English.` }
             ) : dashLabSuccess ? (
               <div>
                 <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:8 }}>
-                  RESULTS UPDATED — {(P.severe||[]).length + (P.moderate||[]).length + (P.mild||[]).length} items loaded
+                  RESULTS UPDATED — {(P.severe||[]).length + (P.moderate||[]).length + (P.mild||[]).length + (P.cmaDeficiencies||[]).length + (P.cmaAdequate||[]).length} items loaded
                 </div>
                 {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>{fn}</div>)}
               </div>
