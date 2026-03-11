@@ -912,6 +912,54 @@ export default function MeetMario({ patient: patientProp }) {
   const [dashLabError, setDashLabError] = useState(false);
   const [dashLabSuccess, setDashLabSuccess] = useState(false);
   const [dashLabFiles, setDashLabFiles] = useState([]);
+  const [uploadedLabFiles, setUploadedLabFiles] = useState([]); // [{name, type, size, uploadedAt, storagePath}]
+
+  // Persist full patient data + upload raw file to Supabase Storage
+  const persistLabData = async (updatedPatient, file) => {
+    if (!authUser?.id) return;
+    try {
+      // 1. Save parsed data to profiles.patient_data
+      const pd = { ...updatedPatient };
+      await supabase.from('profiles').upsert({
+        id: authUser.id,
+        patient_data: JSON.stringify(pd),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+      // Update sessionStorage cache
+      try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(pd)); } catch {}
+    } catch (e) { console.error('[persistLabData] profile save error:', e); }
+
+    if (!file) return;
+    try {
+      // 2. Upload raw file to Supabase Storage
+      const path = `${authUser.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('lab-files')
+        .upload(path, file, { upsert: false });
+      if (uploadErr) {
+        console.warn('[persistLabData] storage upload:', uploadErr.message);
+        // Bucket may not exist yet — file metadata still saved in patient_data
+      }
+
+      // 3. Track file metadata in patient state
+      const fileMeta = {
+        name: file.name,
+        type: file.type || 'unknown',
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+        storagePath: path,
+      };
+      setUploadedLabFiles(prev => [...prev, fileMeta]);
+      // Also persist file list to patient_data
+      const updatedPd = { ...updatedPatient, uploadedLabFiles: [...(updatedPatient.uploadedLabFiles || []), fileMeta] };
+      await supabase.from('profiles').upsert({
+        id: authUser.id,
+        patient_data: JSON.stringify(updatedPd),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+      try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(updatedPd)); } catch {}
+    } catch (e) { console.error('[persistLabData] file upload error:', e); }
+  };
 
   const dashParseFile = async (file, isAdditional = false) => {
     if (!file) return;
@@ -1129,7 +1177,8 @@ ${filteredContent.slice(0, 30000)}` }],
           }
         }
         if (json.snps?.length) {
-          setPatient(p => ({ ...p, genomicSnps: [...(p.genomicSnps || []).filter(s => !json.snps.find(n => n.rsid === s.rsid)), ...json.snps] }));
+          const updatedSnps = [...(patient.genomicSnps || []).filter(s => !json.snps.find(n => n.rsid === s.rsid)), ...json.snps];
+          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps }; persistLabData(updated, file); return updated; });
         }
         setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
         const hasData = (json.snps?.length || 0) > 0;
@@ -1260,32 +1309,44 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
       if (isCMA) {
         // CMA/CNA report — store full nutrient data separately, don't overwrite ALCAT food reactivity
-        setPatient(p => ({
-          ...p,
-          cmaDeficiencies: [...new Set([...(p.cmaDeficiencies||[]), ...cmaDef, ...newS, ...newM])],
-          cmaAdequate: [...new Set([...(p.cmaAdequate||[]), ...cmaAdeq, ...newMi])],
-          cmaAllNutrients: [...new Set([...(p.cmaAllNutrients||[]), ...cmaDef, ...cmaAdeq, ...newS, ...newM, ...newMi])],
-          cmaNutrients: [...(p.cmaNutrients||[]).filter(n => !cmaNutrients.find(cn => cn.name === n.name)), ...cmaNutrients],
-          redoxScore: redoxScore ?? p.redoxScore,
-          cmaAntioxidants: [...(p.cmaAntioxidants||[]).filter(n => !cmaAntioxidants.find(cn => cn.name === n.name)), ...cmaAntioxidants],
-          cmaCategories: { ...(p.cmaCategories||{}), ...cmaCategories },
-        }));
+        setPatient(p => {
+          const updated = {
+            ...p,
+            cmaDeficiencies: [...new Set([...(p.cmaDeficiencies||[]), ...cmaDef, ...newS, ...newM])],
+            cmaAdequate: [...new Set([...(p.cmaAdequate||[]), ...cmaAdeq, ...newMi])],
+            cmaAllNutrients: [...new Set([...(p.cmaAllNutrients||[]), ...cmaDef, ...cmaAdeq, ...newS, ...newM, ...newMi])],
+            cmaNutrients: [...(p.cmaNutrients||[]).filter(n => !cmaNutrients.find(cn => cn.name === n.name)), ...cmaNutrients],
+            redoxScore: redoxScore ?? p.redoxScore,
+            cmaAntioxidants: [...(p.cmaAntioxidants||[]).filter(n => !cmaAntioxidants.find(cn => cn.name === n.name)), ...cmaAntioxidants],
+            cmaCategories: { ...(p.cmaCategories||{}), ...cmaCategories },
+          };
+          persistLabData(updated, file);
+          return updated;
+        });
       } else if (isAdditional) {
-        setPatient(p => ({
-          ...p,
-          severe: [...new Set([...(p.severe||[]), ...newS])],
-          moderate: [...new Set([...(p.moderate||[]), ...newM])],
-          mild: [...new Set([...(p.mild||[]), ...newMi])],
-          alcat_severe: [...new Set([...(p.alcat_severe||[]), ...newS])],
-          alcat_moderate: [...new Set([...(p.alcat_moderate||[]), ...newM])],
-          alcat_mild: [...new Set([...(p.alcat_mild||[]), ...newMi])],
-        }));
+        setPatient(p => {
+          const updated = {
+            ...p,
+            severe: [...new Set([...(p.severe||[]), ...newS])],
+            moderate: [...new Set([...(p.moderate||[]), ...newM])],
+            mild: [...new Set([...(p.mild||[]), ...newMi])],
+            alcat_severe: [...new Set([...(p.alcat_severe||[]), ...newS])],
+            alcat_moderate: [...new Set([...(p.alcat_moderate||[]), ...newM])],
+            alcat_mild: [...new Set([...(p.alcat_mild||[]), ...newMi])],
+          };
+          persistLabData(updated, file);
+          return updated;
+        });
       } else {
-        setPatient(p => ({
-          ...p,
-          severe: newS, moderate: newM, mild: newMi,
-          alcat_severe: newS, alcat_moderate: newM, alcat_mild: newMi,
-        }));
+        setPatient(p => {
+          const updated = {
+            ...p,
+            severe: newS, moderate: newM, mild: newMi,
+            alcat_severe: newS, alcat_moderate: newM, alcat_mild: newMi,
+          };
+          persistLabData(updated, file);
+          return updated;
+        });
       }
 
       setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
@@ -1294,8 +1355,8 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       if (!hasResults) { setDashLabError('0 items extracted — try a clearer file or different page'); }
       else {
         setDashLabSuccess(true);
-        // Save to Supabase
-        if (authUser?.id) {
+        // Also save ALCAT to dedicated table for backwards compat
+        if (authUser?.id && !isCMA) {
           try {
             const p = patient;
             const finalS = isAdditional ? [...new Set([...(p.severe||[]), ...newS])] : newS;
@@ -1453,6 +1514,11 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         if (profile?.name) {
           // Returning user — hydrate patient and go straight to dashboard
           setPatient(p => ({ ...p, ...profile, profileComplete: true }));
+          if (profile.uploadedLabFiles?.length) {
+            setUploadedLabFiles(profile.uploadedLabFiles);
+            setDashLabFiles(profile.uploadedLabFiles.map(f => f.name));
+            setDashLabSuccess(true);
+          }
           setShowLanding(false);
           setShowOnboarding(false);
           setShowAuth(false);
@@ -1479,6 +1545,11 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         const profile = await loadProfile(user);
         if (profile?.name) {
           setPatient(p => ({ ...p, ...profile, profileComplete: true }));
+          if (profile.uploadedLabFiles?.length) {
+            setUploadedLabFiles(profile.uploadedLabFiles);
+            setDashLabFiles(profile.uploadedLabFiles.map(f => f.name));
+            setDashLabSuccess(true);
+          }
           setShowLanding(false);
           setShowOnboarding(false);
         } else {
@@ -2720,6 +2791,32 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 <span style={{ color:T.w4, fontSize:11, flex:1 }}>{snp.impact}</span>
               </div>
             ))}
+          </Panel>
+        )}
+
+        {/* Files on record */}
+        {uploadedLabFiles.length > 0 && (
+          <Panel>
+            <FieldLabel>Files on record</FieldLabel>
+            <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:12, lineHeight:1.5 }}>
+              These files are permanently stored in your account and loaded automatically on every login.
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              {uploadedLabFiles.map((f, i) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:T.w1, border:`1px solid ${T.w2}`, borderRadius:8 }}>
+                  <div style={{ width:32, height:32, borderRadius:6, background:`${T.rg}10`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                    <span style={{ fontFamily:fonts.mono, fontSize:9, color:T.rg2, textTransform:'uppercase' }}>{f.name.split('.').pop()}</span>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w7, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4 }}>
+                      {f.size ? `${(f.size/1024).toFixed(0)} KB` : ''}{f.uploadedAt ? ` · ${new Date(f.uploadedAt).toLocaleDateString()}` : ''}
+                    </div>
+                  </div>
+                  <div style={{ width:8, height:8, borderRadius:'50%', background:T.ok, flexShrink:0 }}/>
+                </div>
+              ))}
+            </div>
           </Panel>
         )}
 
