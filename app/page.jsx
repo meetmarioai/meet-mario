@@ -379,7 +379,47 @@ function Onboarding({ onComplete }) {
     const isImage = file.type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'].includes(ext);
     const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
-    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| size:', (file.size/1024).toFixed(0)+'KB');
+    const isVCF = ext === 'vcf';
+    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| size:', (file.size/1024).toFixed(0)+'KB');
+
+    // ── VCF (Variant Call Format) — plain text, send as text block ────────────
+    if (isVCF) {
+      try {
+        const rawText = await file.text();
+        const truncated = rawText.length > 120000 ? rawText.slice(0, 120000) + '\n...[truncated]' : rawText;
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_tokens: 4000,
+            system: 'You extract structured data from genomic VCF files. Return only valid JSON, nothing else.',
+            messages: [{ role: 'user', content: [
+              { type: 'text', text: `This is a genomic VCF (Variant Call Format) file.\n\nFile contents:\n\`\`\`\n${truncated}\n\`\`\`\n\nReturn ONLY this JSON (no markdown):\n{"report_type":"VCF","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}\n\nPathogenic/likely pathogenic → "severe", variant of uncertain significance → "moderate", benign/likely benign → "mild". Use gene+variant notation. Lowercase.` }
+            ]}],
+          }),
+        });
+        if (!res.ok) { const t = await res.text(); throw new Error('API returned ' + res.status + ': ' + t.slice(0,200)); }
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        const text = (Array.isArray(d.content) ? d.content : []).filter(b=>b.type==='text').map(b=>b.text).join('');
+        let json = { severe:[], moderate:[], mild:[] };
+        try { json = JSON.parse(text.replace(/```json|```/g,'').trim()); } catch { const m = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/); if(m) try { json=JSON.parse(m[0]); } catch {} }
+        const norm = arr => (Array.isArray(arr)?arr:[]).map(f=>String(f).toLowerCase().trim()).filter(Boolean);
+        u('alcat_severe', norm(json.severe));
+        u('alcat_moderate', norm(json.moderate));
+        u('alcat_mild', norm(json.mild));
+        u('alcat_raw', text);
+        setLabFiles(prev => [...prev.filter(f=>f!==file.name), file.name]);
+        setLabParsed(true);
+      } catch(err) {
+        console.error('[Lab parse VCF]', err.message);
+        setLabParseError(err.message);
+      } finally {
+        setLabParsing(false);
+      }
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     try {
       const base64 = await fileToBase64(file);
