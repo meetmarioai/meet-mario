@@ -1,5 +1,1506 @@
-import { redirect } from 'next/navigation'
+import { useState, useRef, useEffect, useCallback } from "react";
+import { buildMarioSystemPrompt } from "../lib/marioSystemPrompt";
 
-export default function Home() {
-  redirect('/auth/login')
+// ── DESIGN SYSTEM ─────────────────────────────────────────────────────────────
+const T = {
+  w:    "#F7F4F0", w1: "#F1EDE7", w2: "#E8E2DA", w3: "#D8D0C4",
+  w4:   "#B8ACA0", w5: "#8A7E72", w6: "#4A4038", w7: "#1C1510",
+  rg:   "#C4887A", rg2: "#9A6255", rg3: "#DEB0A4", rgBg: "#F8F0EE",
+  err:  "#B85040", ok: "#6A9060", warn: "#B88040",
+  dark: "#18120E", dark2: "#221A14",
+};
+const fonts = {
+  serif: "'Playfair Display', Georgia, 'Times New Roman', serif",
+  sans:  "'Lato', -apple-system, 'Helvetica Neue', Arial, sans-serif",
+  mono:  "'IBM Plex Mono', 'SF Mono', 'Fira Mono', 'Courier New', monospace",
+};
+
+// ── GEO-ADAPTIVE STORES ────────────────────────────────────────────────────────
+const STORES = {
+  SE: [
+    { name:"ICA",             url:"https://www.ica.se/handla",       search:"https://www.ica.se/handla/search?q=" },
+    { name:"Matsmart",        url:"https://www.matsmart.se",          search:"https://www.matsmart.se/search?q=" },
+    { name:"Willys",          url:"https://www.willys.se",            search:"https://www.willys.se/search?q=" },
+    { name:"Coop",            url:"https://www.coop.se/handla",       search:"https://www.coop.se/handla/sok?q=" },
+    { name:"Nordic Superfood",url:"https://nordicsuperfood.se",       search:"https://nordicsuperfood.se/?s=" },
+  ],
+  US: [
+    { name:"Whole Foods",     url:"https://www.wholefoodsmarket.com", search:"https://www.wholefoodsmarket.com/search?text=" },
+    { name:"Thrive Market",   url:"https://thrivemarket.com",         search:"https://thrivemarket.com/search?keywords=" },
+    { name:"Amazon Fresh",    url:"https://www.amazon.com/fmc/m/30000649", search:"https://www.amazon.com/s?k=" },
+    { name:"Instacart",       url:"https://www.instacart.com",        search:"https://www.instacart.com/products/search?q=" },
+  ],
+  GB: [
+    { name:"Ocado",           url:"https://www.ocado.com",            search:"https://www.ocado.com/search?entry=" },
+    { name:"Waitrose",        url:"https://www.waitrose.com",         search:"https://www.waitrose.com/ecom/products/search?searchTerm=" },
+    { name:"Holland & Barrett",url:"https://www.hollandandbarrett.com",search:"https://www.hollandandbarrett.com/shop/search?q=" },
+  ],
+  DE: [
+    { name:"Rohkost.de",      url:"https://www.rohkost.de",           search:"https://www.rohkost.de/search?q=" },
+    { name:"Rewe",            url:"https://www.rewe.de",              search:"https://www.rewe.de/suche/?search=" },
+    { name:"Amazon.de",       url:"https://www.amazon.de",            search:"https://www.amazon.de/s?k=" },
+  ],
+};
+
+// ── CLINICAL DATA ──────────────────────────────────────────────────────────────
+const SYMPTOM_CATS = {
+  digestive: { label:"Digestive",   items:["Bloating","Cramping","Nausea","Gas","Reflux","Loose stools","Stomach pain"] },
+  skin:      { label:"Skin",        items:["Flushing","Itching","Rash","Hives","Puffiness","Swelling"] },
+  neuro:     { label:"Neurological",items:["Brain fog","Headache","Dizziness","Fatigue spike","Mood drop","Anxiety"] },
+  joints:    { label:"Joints/Muscles",items:["Joint stiffness","Muscle aches","Back pain","Neck tension","Swollen fingers"] },
+  cardiac:   { label:"Cardiac/Resp",items:["Heart racing","Shortness of breath","Chest tightness","Sinus congestion","Runny nose"] },
+};
+
+const CUISINES = [
+  { id:"mediterranean", label:"Mediterranean", desc:"Olive oil · herbs · fish" },
+  { id:"french",        label:"French",        desc:"Bistro — duck, lentils" },
+  { id:"swedish",       label:"Swedish",       desc:"Nordic fish, root veg" },
+  { id:"japanese",      label:"Japanese",      desc:"Clean minimal, fish" },
+  { id:"middle_eastern",label:"Middle Eastern",desc:"Spiced meats, herbs" },
+  { id:"scandinavian",  label:"Scandinavian",  desc:"Cured fish, forest" },
+];
+
+const EAT_PATS = [
+  { id:"standard",label:"Standard",   desc:"6 meals every 3h",         fasting:false },
+  { id:"if16_8",  label:"IF 16:8",    desc:"16h fast · 8h window",     fasting:true, detail:"Window 12:00–20:00" },
+  { id:"if18_6",  label:"IF 18:6",    desc:"18h fast · 6h window",     fasting:true, detail:"Window 13:00–19:00" },
+  { id:"if5_2",   label:"5:2",        desc:"5 normal · 2 low-cal days", fasting:true, detail:"~500 kcal fasting days" },
+];
+
+const PHASES = [
+  { id:1, label:"21-Day Detox",            range:"Days 1–21",  color:T.rg,   rules:["Green list only","6 meals every 3h","No sugars/yeast","No dairy"],       note:"Any deviation resets the inflammatory clock." },
+  { id:2, label:"Green Phase",             range:"Months 1–3", color:T.ok,   rules:["Strict 4-day rotation","One legume day/week","Candida rules continue"],   note:"Rotation prevents new sensitivities forming." },
+  { id:3, label:"Mild Reintroduction",     range:"Month 3–4",  color:T.warn, rules:["Up to 3 mild foods/day","Repeat only after 4 days","Watch for reactions"],note:"React — delay 1 month." },
+  { id:4, label:"Moderate Reintroduction", range:"Month 6",    color:"#C87030", rules:["Same as mild method","Whey restriction ends"],                          note:"Most patients see largest improvements here." },
+  { id:5, label:"Maintenance",             range:"Month 9+",   color:"#6A9E8E", rules:["Full rotation","One free day/week"],                                    note:"52 free days per year without affecting outcomes." },
+];
+
+// ── API UTILITIES ──────────────────────────────────────────────────────────────
+async function callClaude(messages, system, extra = {}) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system, messages, ...extra }),
+  });
+  const d = await res.json();
+  return (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+}
+
+// Dante Labs stub
+const danteStub = { projectId: 'prjWem9WBYg200IIAG', ready: false };
+// VitaminLab stub
+const vitaminLabStub = { ready: false };
+
+function simulateTimeline(hadReactive) {
+  const pts = [];
+  for (let m = 0; m <= 120; m += 3) {
+    const t = m / 120, curve = t < 0.3 ? t / 0.3 : t < 0.6 ? 1 : Math.max(0, (1 - t) / 0.4);
+    const rx = hadReactive ? 2.2 + Math.random() * 0.6 : 1, n = () => (Math.random() - 0.5) * 2;
+    pts.push({ min:m, hr:Math.round(68+14*rx*curve+n()), hrv:Math.round(55-(hadReactive?22:6)*curve+n()), temp:+((36.5+(hadReactive?0.6:0.08)*curve+n()*0.015)).toFixed(2), glucose:Math.round(82+(hadReactive?58:22)*curve+n()), spo2:+((98-(hadReactive?1.8:0.2)*curve+n()*0.05)).toFixed(1) });
+  }
+  return pts;
+}
+function detectSpikes(pts) {
+  if (!pts || pts.length < 4) return [];
+  const b = pts[0], spikes = [];
+  pts.forEach((p, i) => {
+    if (i < 3) return;
+    if (p.hr - b.hr >= 22 && !spikes.find(s => s.m === 'hr')) spikes.push({ min:p.min, m:'hr', label:'Heart Rate spike', val:`+${p.hr - b.hr} bpm`, level:p.hr-b.hr>=32?'severe':'moderate' });
+    if (b.hrv - p.hrv >= 18 && !spikes.find(s => s.m === 'hrv')) spikes.push({ min:p.min, m:'hrv', label:'HRV drop', val:`-${b.hrv - p.hrv} ms`, level:b.hrv-p.hrv>=28?'severe':'moderate' });
+    if (p.temp - b.temp >= 0.45 && !spikes.find(s => s.m === 'temp')) spikes.push({ min:p.min, m:'temp', label:'Temperature rise', val:`+${(p.temp-b.temp).toFixed(2)}°C`, level:p.temp-b.temp>=0.65?'severe':'moderate' });
+    if (p.glucose - b.glucose >= 38 && !spikes.find(s => s.m === 'glucose')) spikes.push({ min:p.min, m:'glucose', label:'Glucose spike', val:`+${p.glucose - b.glucose} mg/dL`, level:p.glucose-b.glucose>=55?'severe':'moderate' });
+  });
+  return spikes;
+}
+
+// ── PRIMITIVES ─────────────────────────────────────────────────────────────────
+const Nav = ({ onBabyBalans }) => (
+  <div style={{ position:'sticky',top:0,zIndex:200,height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 44px',background:'rgba(247,244,240,0.92)',backdropFilter:'blur(24px) saturate(180%)',WebkitBackdropFilter:'blur(24px) saturate(180%)',borderBottom:`1px solid ${T.w3}` }}>
+    <div style={{ display:'flex',alignItems:'center',gap:12 }}>
+      <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)`,flexShrink:0 }}/>
+      <span style={{ fontFamily:fonts.serif,fontSize:18,fontWeight:400,color:T.w7,letterSpacing:'0.01em' }}>meet mario</span>
+    </div>
+    <div style={{ display:'flex',alignItems:'center',gap:18 }}>
+      <button onClick={onBabyBalans} style={{ background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',padding:'4px 10px',borderRadius:4,transition:'all .15s' }}>
+        Baby Balans
+      </button>
+      <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
+    </div>
+  </div>
+);
+
+const Panel = ({ children, style }) => (
+  <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:12,padding:'24px 26px',marginBottom:28,boxShadow:`inset 0 1px 3px rgba(100,80,60,0.06), 0 1px 0 rgba(255,255,255,0.88)`,...style }}>
+    {children}
+  </div>
+);
+
+const Chip = ({ label, on, onClick }) => (
+  <button onClick={onClick} style={{ padding:'7px 16px',borderRadius:50,fontSize:12.5,fontFamily:fonts.sans,fontWeight:on?500:400,border:`1px solid ${on?T.rg:T.w3}`,background:on?T.rgBg:T.w,color:on?T.rg2:T.w5,cursor:'pointer',userSelect:'none',letterSpacing:'-0.01em',transition:'all .18s',boxShadow:on?`0 2px 10px rgba(160,104,88,0.12),inset 0 1px 0 rgba(255,255,255,0.95)`:`0 1px 3px rgba(100,80,60,0.06)` }}>{label}</button>
+);
+
+const BtnPrimary = ({ children, onClick, disabled, loading, small }) => (
+  <button onClick={onClick} disabled={disabled||loading} style={{ display:'inline-flex',alignItems:'center',gap:10,padding:small?'10px 28px':'15px 44px',borderRadius:12,border:'none',cursor:disabled?'not-allowed':'pointer',fontFamily:fonts.sans,fontSize:small?11.5:13,fontWeight:500,letterSpacing:'0.08em',textTransform:'uppercase',position:'relative',overflow:'hidden',background:disabled?T.w2:`linear-gradient(140deg,${T.rg3} 0%,${T.rg} 22%,${T.rg2} 52%,#B88070 72%,${T.rg3} 92%,${T.rg} 100%)`,backgroundSize:'200% auto',color:disabled?T.w4:'rgba(255,255,255,0.97)',boxShadow:disabled?'none':`0 4px 20px rgba(154,98,85,0.28),inset 0 1px 0 rgba(255,255,255,0.24)`,transition:'all .2s',opacity:loading?0.7:1 }}>
+    <div style={{ position:'absolute',top:0,left:'8%',right:'8%',height:1,background:'linear-gradient(90deg,transparent,rgba(255,255,255,0.30) 50%,transparent)' }}/>
+    <span style={{ position:'relative',zIndex:1 }}>{loading?'…':children}</span>
+  </button>
+);
+
+const FieldLabel = ({ children }) => (
+  <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.22em',textTransform:'uppercase',marginBottom:12 }}>{children}</div>
+);
+const Eyebrow = ({ children }) => (
+  <div style={{ fontFamily:fonts.mono,fontSize:9,color:`rgba(196,136,122,0.60)`,letterSpacing:'0.24em',textTransform:'uppercase',marginBottom:12 }}>{children}</div>
+);
+const SectionTitle = ({ children }) => (
+  <h2 style={{ fontFamily:fonts.serif,fontSize:32,fontWeight:400,color:T.w7,letterSpacing:'-0.01em',lineHeight:1.16,marginBottom:32 }}>{children}</h2>
+);
+const RuledInput = ({ placeholder, value, onChange, style, multiline, rows }) => {
+  const base = { width:'100%',background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 0',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:T.w7,resize:'none',...style };
+  return multiline
+    ? <textarea rows={rows||3} placeholder={placeholder} value={value} onChange={onChange} style={base}/>
+    : <input type="text" placeholder={placeholder} value={value} onChange={onChange} style={base}/>;
+};
+
+const EmptyState = ({ title, sub }) => (
+  <div style={{ padding:'48px 0',textAlign:'center' }}>
+    <div style={{ width:36,height:1,background:T.w3,margin:'0 auto 20px' }}/>
+    <div style={{ fontFamily:fonts.serif,fontSize:20,color:T.w5,fontWeight:400,marginBottom:8 }}>{title}</div>
+    {sub && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4,fontWeight:300,maxWidth:280,margin:'0 auto',lineHeight:1.7 }}>{sub}</div>}
+  </div>
+);
+
+// ── ONBOARDING COMPONENT ───────────────────────────────────────────────────────
+function Onboarding({ onComplete }) {
+  const [step, setStep] = useState(0);
+  const [data, setData] = useState({
+    name:'', dob:'', sex:'', hormonalStatus:'',
+    geographyOfOrigin:'', yearsInCurrentCountry:'',
+    symptoms:[], tests:[],
+    medications:'', supplements:'', conditions:'', goals:[],
+  });
+  const u = (k, v) => setData(p => ({ ...p, [k]:v }));
+  const toggle = (k, v) => setData(p => ({ ...p, [k]: p[k].includes(v) ? p[k].filter(x => x !== v) : [...p[k], v] }));
+
+  const STEPS = [
+    {
+      title:"Your Identity", sub:"The foundation of your personalised protocol.",
+      render:() => (
+        <div>
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>Full name</FieldLabel>
+            <RuledInput value={data.name} onChange={e=>u('name',e.target.value)} placeholder="Your name"/>
+          </div>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:20 }}>
+            <div>
+              <FieldLabel>Date of birth</FieldLabel>
+              <RuledInput value={data.dob} onChange={e=>u('dob',e.target.value)} placeholder="DD/MM/YYYY"/>
+            </div>
+            <div>
+              <FieldLabel>Biological sex</FieldLabel>
+              <div style={{ display:'flex',gap:8,marginTop:4 }}>
+                {['Female','Male','Other'].map(s=>(
+                  <Chip key={s} label={s} on={data.sex===s} onClick={()=>u('sex',s)}/>
+                ))}
+              </div>
+            </div>
+          </div>
+          <FieldLabel>Hormonal status</FieldLabel>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
+            {['Pre-menopausal','Peri-menopausal','Post-menopausal','On HRT','Male – standard','Male – on TRT','Not applicable'].map(s=>(
+              <Chip key={s} label={s} on={data.hormonalStatus===s} onClick={()=>u('hormonalStatus',s)}/>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Your Origins", sub:"Ancestral food history shapes your immune system's molecular pattern library.",
+      render:() => (
+        <div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>Country of origin</FieldLabel>
+            <RuledInput value={data.geographyOfOrigin} onChange={e=>u('geographyOfOrigin',e.target.value)} placeholder="e.g. Sweden, Turkey, Iran, India…"/>
+          </div>
+          <div>
+            <FieldLabel>Years living in current country</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+              {['Under 1','1–3','4–10','11–20','Over 20','Lifetime'].map(y=>(
+                <Chip key={y} label={y} on={data.yearsInCurrentCountry===y} onClick={()=>u('yearsInCurrentCountry',y)}/>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginTop:24 }}>
+            <FieldLabel>Primary health goals</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+              {['Energy restoration','Gut healing','Weight management','Hormonal balance','Brain clarity','Sleep quality','Skin health','Athletic performance','Longevity'].map(g=>(
+                <Chip key={g} label={g} on={data.goals.includes(g)} onClick={()=>toggle('goals',g)}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Your Symptoms", sub:"Identify patterns. Your protocol intensity is calibrated to your symptom burden.",
+      render:() => (
+        <div>
+          {Object.values(SYMPTOM_CATS).map(cat=>(
+            <div key={cat.label} style={{ marginBottom:20 }}>
+              <FieldLabel>{cat.label}</FieldLabel>
+              <div style={{ display:'flex',flexWrap:'wrap',gap:7 }}>
+                {cat.items.map(s=>(
+                  <Chip key={s} label={s} on={data.symptoms.includes(s)} onClick={()=>toggle('symptoms',s)}/>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      title:"Your Diagnostics", sub:"Which tests have you completed? Your data will be integrated automatically.",
+      render:() => (
+        <div>
+          <FieldLabel>Tests completed</FieldLabel>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginBottom:28 }}>
+            {['ALCAT 250','ALCAT 483','CMA','MethylDetox','GI-MAP','DUTCH','Werlabs','WGS','RNA Transcriptomics','Proteomics','BioAge'].map(t=>(
+              <Chip key={t} label={t} on={data.tests.includes(t)} onClick={()=>toggle('tests',t)}/>
+            ))}
+          </div>
+          <FieldLabel>Other tests or diagnostics (free text)</FieldLabel>
+          <RuledInput multiline rows={2} value={data.conditions} onChange={e=>u('conditions',e.target.value)} placeholder="List any other relevant tests, diagnoses, or clinical findings…"/>
+        </div>
+      ),
+    },
+    {
+      title:"Medications & Supplements", sub:"Your full protocol — free text. Hormonal therapies, micronutrients, pharmaceutical medications, herbal supplements, anything relevant.",
+      render:() => (
+        <div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>Current medications (pharmaceutical)</FieldLabel>
+            <RuledInput multiline rows={3} value={data.medications} onChange={e=>u('medications',e.target.value)} placeholder="e.g. Levothyroxine 50mcg, Estradiol patch 50mcg/24h, Metformin 500mg…"/>
+          </div>
+          <div>
+            <FieldLabel>Supplements & nutraceuticals</FieldLabel>
+            <RuledInput multiline rows={3} value={data.supplements} onChange={e=>u('supplements',e.target.value)} placeholder="e.g. Magnesium glycinate 400mg, Vitamin D3 5000IU, Omega-3, CoQ10, NMN…"/>
+          </div>
+        </div>
+      ),
+    },
+  ];
+
+  const current = STEPS[step];
+  const canAdvance = step === 0 ? data.name.length > 1 : true;
+
+  const handleComplete = () => {
+    onComplete({
+      ...data,
+      profileComplete: true,
+      protocol: 'Option A — 21-day universal detox',
+      phase: 1, dayInProtocol: 1,
+      severe:[], moderate:[], mild:[],
+      alsoAvoid:{ candida:[], whey:[] },
+      markers:[],
+      rotation:{ 1:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 2:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 3:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 4:{grains:[],veg:[],fruit:[],protein:[],misc:[]} },
+      meals:{},
+    });
+  };
+
+  return (
+    <div style={{ minHeight:'100vh',background:T.w,fontFamily:fonts.sans }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}`}</style>
+      <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')}/>
+      <div style={{ maxWidth:640,margin:'0 auto',padding:'64px 32px 80px' }}>
+        {/* Progress */}
+        <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:48 }}>
+          {STEPS.map((_,i)=>(
+            <div key={i} style={{ flex:1,height:2,background:i<=step?T.rg:T.w3,borderRadius:2,transition:'background .3s' }}/>
+          ))}
+          <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em',whiteSpace:'nowrap',marginLeft:8 }}>{step+1} / {STEPS.length}</span>
+        </div>
+        {/* Header */}
+        <div style={{ marginBottom:36 }}>
+          <Eyebrow>21-day biological reset · meet mario</Eyebrow>
+          <div style={{ fontFamily:fonts.serif,fontSize:34,fontWeight:400,color:T.w7,lineHeight:1.14,marginBottom:10 }}>{current.title}</div>
+          <div style={{ fontFamily:fonts.sans,fontSize:14,color:T.w4,fontWeight:300,lineHeight:1.7 }}>{current.sub}</div>
+        </div>
+        {/* Step content */}
+        <Panel style={{ marginBottom:32 }}>
+          {current.render()}
+        </Panel>
+        {/* Navigation */}
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+          {step > 0
+            ? <button onClick={()=>setStep(s=>s-1)} style={{ background:'none',border:`1px solid ${T.w3}`,borderRadius:9,padding:'11px 24px',cursor:'pointer',fontSize:12,fontFamily:fonts.sans,color:T.w5 }}>Back</button>
+            : <div/>
+          }
+          {step < STEPS.length - 1
+            ? <BtnPrimary onClick={()=>canAdvance&&setStep(s=>s+1)} disabled={!canAdvance}>Continue</BtnPrimary>
+            : <BtnPrimary onClick={handleComplete}>Enter My Dashboard</BtnPrimary>
+          }
+        </div>
+        {/* Protocol note */}
+        <div style={{ marginTop:32,borderTop:`1px solid ${T.w2}`,paddingTop:20 }}>
+          <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.14em',lineHeight:2 }}>
+            Your data is stored securely on GDPR-compliant servers in Frankfurt, Germany. MediBalans AB · Karlavägen 89, Stockholm · Patent Pending SE 2615203-3
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN DASHBOARD ─────────────────────────────────────────────────────────────
+export default function MeetMario({ patient: patientProp }) {
+  const [patient, setPatient] = useState(patientProp || {});
+  const [showLanding, setShowLanding] = useState(!patientProp?.name);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [tab, setTab] = useState('monitor');
+  const [country, setCountry] = useState('SE');
+
+  // Monitor state
+  const [monActive, setMonActive] = useState(false);
+  const [monTimer, setMonTimer] = useState(0);
+  const [monFoods, setMonFoods] = useState([]);
+  const [monFoodInput, setMonFoodInput] = useState('');
+  const [monTimeline, setMonTimeline] = useState([]);
+  const [monMealLabel, setMonMealLabel] = useState('Lunch');
+  const [monSpikes, setMonSpikes] = useState([]);
+  const [clinView, setClinView] = useState(false);
+  const [popup, setPopup] = useState(null);
+  const [popupStep, setPopupStep] = useState(0);
+  const [popupReactive, setPopupReactive] = useState(null);
+  const [popupSymptoms, setPopupSymptoms] = useState([]);
+  const [popupSeverity, setPopupSeverity] = useState('');
+  const [popupLoading, setPopupLoading] = useState(false);
+  const [popupAnalysis, setPopupAnalysis] = useState('');
+  const [diary, setDiary] = useState([]);
+
+  // Rotation / Meals
+  const [rotDay, setRotDay] = useState(1);
+  const [proteins, setProteins] = useState({});
+  const [picker, setPicker] = useState(null);
+  const [recipeLoading, setRecipeLoading] = useState(false);
+  const [recipeSteps, setRecipeSteps] = useState(null);
+  const [activeRecipe, setActiveRecipe] = useState(null);
+
+  // Generate
+  const [genPhase, setGenPhase] = useState('detox');
+  const [mealScope, setMealScope] = useState('full_day');
+  const [eatPat, setEatPat] = useState('standard');
+  const [cuisine, setCuisine] = useState('');
+  const [genLoad, setGenLoad] = useState(false);
+  const [genResult, setGenResult] = useState(null);
+  const [ifResearch, setIfResearch] = useState(null);
+  const [ifLoad, setIfLoad] = useState(false);
+
+  // Grocery
+  const [groceryWeek, setGroceryWeek] = useState([1,2,3,4]);
+  const [groceryLoad, setGroceryLoad] = useState(false);
+  const [groceryList, setGroceryList] = useState(null);
+  const [groceryStore, setGroceryStore] = useState(0);
+
+  // Food check
+  const [foodQ, setFoodQ] = useState('');
+
+  // Ask Mario chat
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatIn, setChatIn] = useState('');
+  const [chatLoad, setChatLoad] = useState(false);
+  const chatEndRef = useRef(null);
+
+  // Outcomes
+  const [outcomes, setOutcomes] = useState({ baseline:null, checkins:[] });
+  const [outSymptoms, setOutSymptoms] = useState([]);
+  const [outEnergy, setOutEnergy] = useState(5);
+  const [outNotes, setOutNotes] = useState('');
+
+  // GutCheck
+  const [gutLogs, setGutLogs] = useState([]);
+  const [gutType, setGutType] = useState(null);
+  const [gutNotes, setGutNotes] = useState('');
+
+  // PlateCheck
+  const [plateDesc, setPlateDesc] = useState('');
+  const [plateResult, setPlateResult] = useState(null);
+  const [plateLoad, setPlateLoad] = useState(false);
+
+  // Medications
+  const [medRx, setMedRx] = useState(patient?.medications || '');
+  const [medSupp, setMedSupp] = useState(patient?.supplements || '');
+  const [medNotes, setMedNotes] = useState('');
+  const [medAnalysis, setMedAnalysis] = useState('');
+  const [medLoad, setMedLoad] = useState(false);
+
+  const monIntervalRef = useRef(null);
+
+  // Geo detection on mount
+  useEffect(() => {
+    fetch('https://ipapi.co/json/').then(r=>r.json()).then(d=>{
+      const cc = d.country_code;
+      if (cc === 'SE' || cc === 'US' || cc === 'GB' || cc === 'DE') setCountry(cc);
+    }).catch(()=>{});
+  }, []);
+
+  // Scroll chat
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [chatMsgs]);
+
+  // Monitor interval
+  useEffect(() => {
+    if (monActive) {
+      monIntervalRef.current = setInterval(() => setMonTimer(t => t + 1), 1000);
+    } else clearInterval(monIntervalRef.current);
+    return () => clearInterval(monIntervalRef.current);
+  }, [monActive]);
+
+  const startMonitoring = () => {
+    const tl = simulateTimeline(monFoods.some(f => [...(patient.severe||[]),...(patient.moderate||[])].some(s => f.toUpperCase().includes(s))));
+    setMonTimeline(tl); setMonActive(true); setMonTimer(0); setMonSpikes([]);
+    setTimeout(() => {
+      const sp = detectSpikes(tl);
+      setMonSpikes(sp);
+      if (sp.length > 0) { setPopup(sp[0]); setPopupStep(0); setPopupSymptoms([]); setPopupSeverity(''); setPopupAnalysis(''); }
+    }, 8000);
+  };
+
+  const logAndDismiss = async () => {
+    setPopupLoading(true);
+    const sys = buildMarioSystemPrompt(patient);
+    const prompt = `The patient just had a ${popup.label} (${popup.val}) ${popup.min} minutes after eating ${monFoods.join(', ')}. They reported ${popupReactive?'possible reactive food':'strict protocol'} and symptoms: ${popupSymptoms.join(', ')||'none noted'}. Severity: ${popupSeverity||'unspecified'}. Give a brief, human, clinical explanation and next action. 3-4 sentences max.`;
+    try {
+      const analysis = await callClaude([{ role:'user',content:prompt }], sys);
+      setPopupAnalysis(analysis);
+      const flagClinic = popup.level === 'severe' || popupSeverity === 'severe';
+      setDiary(d => [{ id:Date.now(), ts:new Date(), meal:monMealLabel, foods:[...monFoods], spike:popup, symptoms:[...popupSymptoms], severity:popupSeverity, reactive:popupReactive, analysis, flagClinic }, ...d]);
+      setPopupStep(3);
+    } catch { setPopupAnalysis('Unable to connect. Reaction logged locally.'); setPopupStep(3); }
+    setPopupLoading(false);
+  };
+
+  const genMenu = async () => {
+    if (!cuisine || genLoad) return; setGenLoad(true); setGenResult(null);
+    const rot = (patient.rotation||{})[rotDay] || {};
+    const cu = CUISINES.find(c => c.id === cuisine)?.label;
+    const ep = EAT_PATS.find(e => e.id === eatPat);
+    const foods = rot.grains ? `Grains: ${rot.grains.join(', ')}\nVeg: ${rot.veg.join(', ')}\nFruit: ${rot.fruit.join(', ')}\nProtein: ${rot.protein.join(', ')}\nMisc: ${rot.misc.join(', ')}` : 'Patient rotation not yet loaded.';
+    const pInstr = eatPat === 'standard' ? 'Standard 6 meals every 3h.' : ep?.detail || 'Intermittent fasting protocol.';
+    const severe = (patient.severe||[]).join(', ');
+    const prompt = `Generate a ${mealScope === 'full_day' ? 'full day' : mealScope} menu in ${cu} style.\nHARD RULES: Day ${rotDay} foods only. Avoid: ${severe}. No sugars/yeast/vinegar. No seed oils. CPF every main meal. Fruit only with protein/fat in snacks.\nDay ${rotDay}:\n${foods}\n${pInstr}\nFormat: **Dish Name** then one sentence description. End with a clinical Notes paragraph.`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setGenResult(r); } catch { setGenResult('Error. Please try again.'); }
+    setGenLoad(false);
+  };
+
+  const fetchRecipeSteps = async (day, mealKey, protein, base, sides) => {
+    setRecipeLoading(true); setRecipeSteps(null);
+    const prompt = `Write a step-by-step recipe:\nDish: ${protein} — ${base}${sides ? ' · ' + sides : ''}\nALCAT Day ${day} rotation. No seed oils. Avoid: ${(patient.severe||[]).join(', ')}. 1 person.\n\nFormat:\nPREP TIME: X min | COOK TIME: X min | SERVES: 1\n\nINGREDIENTS:\n- [ingredient with amount]\n\nSTEPS:\n1. [step]\n(max 8 steps)\n\nCLINICAL NOTE: One sentence on ALCAT relevance.`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setRecipeSteps(r); } catch { setRecipeSteps('Error loading recipe.'); }
+    setRecipeLoading(false);
+  };
+
+  const buildGroceryList = async () => {
+    if (groceryLoad) return; setGroceryLoad(true); setGroceryList(null);
+    const rot = patient.rotation || {};
+    const days = groceryWeek;
+    const allFoodsList = days.map(d => {
+      const r = rot[d] || {};
+      return `Day ${d}: Grains: ${(r.grains||[]).slice(0,3).join(', ')} | Veg: ${(r.veg||[]).slice(0,5).join(', ')} | Protein: ${(r.protein||[]).slice(0,3).join(', ')} | Fruit: ${(r.fruit||[]).slice(0,3).join(', ')} | Misc: ${(r.misc||[]).slice(0,3).join(', ')}`;
+    }).join('\n');
+    const prompt = `Generate a structured weekly grocery list for the ALCAT rotation protocol.\nRotation days: ${days.join(', ')}\n${allFoodsList}\nRules: No seed oils. Avoid: ${(patient.severe||[]).join(', ')}. No sugar/yeast. No dairy. Organic where possible. Wild-caught fish only.\n\nFormat:\n**FISH & PROTEIN**\n**VEGETABLES**\n**FRUITS**\n**GRAINS & STARCHES**\n**OILS & FATS**\n**HERBS & SPICES**\n**STORE NOTES** (2-3 sentences)`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setGroceryList(r); } catch { setGroceryList('Error generating list.'); }
+    setGroceryLoad(false);
+  };
+
+  const sendChat = async () => {
+    if (!chatIn.trim() || chatLoad) return;
+    const msgs = [...chatMsgs, { role:'user',content:chatIn.trim() }];
+    setChatMsgs(msgs); setChatIn(''); setChatLoad(true);
+    try {
+      const r = await callClaude(msgs, buildMarioSystemPrompt(patient));
+      setChatMsgs([...msgs, { role:'assistant',content:r }]);
+    } catch { setChatMsgs(m => [...m, { role:'assistant',content:'Connection error. Please try again.' }]); }
+    setChatLoad(false);
+  };
+
+  const runPlateCheck = async () => {
+    if (!plateDesc.trim()) return; setPlateLoad(true); setPlateResult(null);
+    const severe = (patient.severe||[]).join(', ') || 'none on file';
+    const moderate = (patient.moderate||[]).join(', ') || 'none on file';
+    const prompt = `Analyse this meal description against the patient's ALCAT reactive foods.\nMeal: "${plateDesc}"\nPatient severe reactors: ${severe}\nPatient moderate reactors: ${moderate}\nAlso flag: seed oils, garlic, onion, tomato, yeast/fermented ingredients, dairy, sugar.\nOutput:\n- COMPLIANCE: PASS / REVIEW / FAIL\n- FLAGS: list any reactive ingredients found\n- SUBSTITUTIONS: suggest safer swaps if any\n- VERDICT: one sentence clinical note`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setPlateResult(r); } catch { setPlateResult('Error. Please try again.'); }
+    setPlateLoad(false);
+  };
+
+  const analyzeInteractions = async () => {
+    if (!medRx && !medSupp) return; setMedLoad(true); setMedAnalysis('');
+    const prompt = `Briefly review the following for clinically relevant interactions with the MediBalans ALCAT elimination protocol, methylation support, and gut healing:\nMedications: ${medRx || 'none listed'}\nSupplements: ${medSupp || 'none listed'}\nFocus on: nutrient depletions, timing considerations, contraindications with specific foods in the rotation protocol. Be concise — 3-5 sentences. Flag anything requiring Dr Mario's direct review.`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setMedAnalysis(r); } catch { setMedAnalysis('Error. Please try again.'); }
+    setMedLoad(false);
+  };
+
+  const logOutcome = () => {
+    const entry = { ts:new Date(), symptoms:[...outSymptoms], energy:outEnergy, notes:outNotes, day:patient.dayInProtocol||1 };
+    if (!outcomes.baseline) {
+      setOutcomes({ baseline:entry, checkins:[] });
+    } else {
+      setOutcomes(p => ({ ...p, checkins:[...p.checkins, entry] }));
+    }
+    setOutSymptoms([]); setOutEnergy(5); setOutNotes('');
+  };
+
+  const logGut = () => {
+    if (gutType === null) return;
+    setGutLogs(p => [{ id:Date.now(), ts:new Date(), type:gutType, notes:gutNotes }, ...p]);
+    setGutType(null); setGutNotes('');
+  };
+
+  const allFoods = [
+    ...(patient.severe||[]).map(f=>({food:f,level:'severe'})),
+    ...(patient.moderate||[]).map(f=>({food:f,level:'moderate'})),
+    ...(patient.mild||[]).map(f=>({food:f,level:'mild'})),
+    ...(patient.alsoAvoid?.candida||[]).map(f=>({food:f,level:'candida'})),
+    ...(patient.alsoAvoid?.whey||[]).map(f=>({food:f,level:'whey'})),
+  ];
+  const foodResults = foodQ.length > 1 ? allFoods.filter(({food})=>food.toLowerCase().includes(foodQ.toLowerCase())).slice(0,12) : [];
+
+  const getP = (d,k) => proteins[`${d}-${k}`] || (patient.meals?.[d]?.[k]?.defaultP) || '';
+  const setP = (d,k,p) => { setProteins(prev=>({...prev,[`${d}-${k}`]:p})); setPicker(null); };
+
+  const stores = STORES[country] || STORES.SE;
+
+  const TABS = [
+    { id:'monitor',  label:'Monitor' },
+    { id:'protocol', label:'Protocol' },
+    { id:'rotation', label:'Rotation' },
+    { id:'meals',    label:'Meals' },
+    { id:'generate', label:'Generate' },
+    { id:'grocery',  label:'Grocery' },
+    { id:'lookup',   label:'Food Check' },
+    { id:'chat',     label:'Ask Mario' },
+    { id:'outcomes', label:'Outcomes' },
+    { id:'gut',      label:'GutCheck' },
+    { id:'plate',    label:'PlateCheck' },
+    { id:'meds',     label:'Medications' },
+  ];
+
+  const P = patient;
+  const ROT = patient.rotation || {};
+  const MEALS_DATA = patient.meals || {};
+
+  // ── SPIKE POPUP ──────────────────────────────────────────────────────────────
+  const SpikePopup = () => {
+    if (!popup) return null;
+    const lc = popup.level === 'severe' ? T.err : T.warn;
+    return (
+      <div style={{ position:'fixed',inset:0,background:'rgba(28,20,16,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:24,backdropFilter:'blur(8px)' }}>
+        <div style={{ background:T.w,border:`1px solid ${lc}40`,borderRadius:16,maxWidth:480,width:'100%',boxShadow:`0 24px 64px rgba(28,20,16,0.22)` }}>
+          <div style={{ borderBottom:`1px solid ${T.w3}`,padding:'18px 24px 16px' }}>
+            <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:6 }}>
+              <div style={{ width:8,height:8,borderRadius:'50%',background:lc,boxShadow:`0 0 10px ${lc}` }}/>
+              <span style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.18em',color:lc,textTransform:'uppercase' }}>{popup.level} reaction detected · {popup.min}min post-meal</span>
+            </div>
+            <div style={{ fontFamily:fonts.serif,fontSize:22,color:T.w7,fontWeight:400 }}>{popup.label} {popup.val}</div>
+          </div>
+          <div style={{ padding:'20px 24px' }}>
+            {popupStep === 0 && <>
+              <p style={{ fontSize:13,color:T.w6,lineHeight:1.7,marginBottom:16,fontFamily:fonts.sans,fontWeight:300 }}>
+                Your <strong style={{ color:lc,fontWeight:500 }}>{popup.label}</strong> spiked unusually.
+                {monFoods.length > 0 && <span style={{ display:'block',marginTop:6,fontSize:11,color:T.w4,fontFamily:fonts.mono }}>Meal logged: {monFoods.join(', ')}</span>}
+              </p>
+              <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:12 }}>Did you eat anything outside your green list?</div>
+              <div style={{ display:'flex',gap:8 }}>
+                <button onClick={()=>{setPopupReactive(true);setPopupStep(1);}} style={{ flex:1,background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:9,padding:'11px',cursor:'pointer',color:T.rg2,fontSize:12,fontFamily:fonts.sans,fontWeight:500 }}>Yes — possibly</button>
+                <button onClick={()=>{setPopupReactive(false);setPopupStep(1);}} style={{ flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:'11px',cursor:'pointer',color:T.w5,fontSize:12,fontFamily:fonts.sans }}>No — on protocol</button>
+              </div>
+            </>}
+            {popupStep === 1 && <>
+              <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:14 }}>Symptoms right now</div>
+              {Object.values(SYMPTOM_CATS).map(cat=>(
+                <div key={cat.label} style={{ marginBottom:12 }}>
+                  <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>{cat.label}</div>
+                  <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                    {cat.items.map(s=>{const sel=popupSymptoms.includes(s);return(
+                      <button key={s} onClick={()=>setPopupSymptoms(p=>sel?p.filter(x=>x!==s):[...p,s])} style={{ background:sel?T.rgBg:T.w,border:`1px solid ${sel?T.rg:T.w3}`,borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:sel?T.rg2:T.w5 }}>{s}</button>
+                    );})}
+                  </div>
+                </div>
+              ))}
+              <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',margin:'14px 0 10px' }}>Overall severity</div>
+              <div style={{ display:'flex',gap:7,marginBottom:18 }}>
+                {['mild','moderate','severe'].map(sev=>{const c=sev==='severe'?T.err:sev==='moderate'?T.warn:T.ok;return(
+                  <button key={sev} onClick={()=>setPopupSeverity(sev)} style={{ flex:1,background:popupSeverity===sev?c+'18':T.w1,border:`1px solid ${popupSeverity===sev?c:T.w3}`,borderRadius:8,padding:'9px',cursor:'pointer',color:popupSeverity===sev?c:T.w5,fontSize:12,fontFamily:fonts.sans,fontWeight:500,textTransform:'capitalize' }}>{sev}</button>
+                );})}
+              </div>
+              <BtnPrimary onClick={logAndDismiss} loading={popupLoading}>Log reaction — get Mario's analysis</BtnPrimary>
+            </>}
+            {popupStep === 3 && <>
+              <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:'0.20em',textTransform:'uppercase',marginBottom:10 }}>Mario's Analysis</div>
+              <div style={{ fontSize:12,color:T.w6,lineHeight:1.8,fontFamily:fonts.sans,fontWeight:300,maxHeight:220,overflowY:'auto',marginBottom:16 }}>
+                {popupAnalysis.split('\n').map((l,i)=>l.trim()?<div key={i} style={{ marginBottom:6 }}>{l}</div>:null)}
+              </div>
+              {diary[0]?.flagClinic && <div style={{ background:`${T.err}10`,border:`1px solid ${T.err}35`,borderRadius:7,padding:'8px 12px',marginBottom:14,fontSize:11,color:T.err,fontFamily:fonts.mono }}>Flagged for clinician review</div>}
+              <button onClick={()=>setPopup(null)} style={{ width:'100%',background:T.w1,border:`1px solid ${T.w3}`,borderRadius:9,padding:'11px',cursor:'pointer',color:T.w5,fontSize:12,fontFamily:fonts.sans }}>Close — logged to diary</button>
+            </>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── TAB CONTENT ───────────────────────────────────────────────────────────────
+  const tabContent = () => {
+
+    // ── MONITOR ──
+    if (tab === 'monitor') return (
+      <div>
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:28 }}>
+          <div><Eyebrow>Real-time biometric monitoring</Eyebrow><SectionTitle>Post-Meal Response<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Tracker</em></SectionTitle></div>
+          <button onClick={()=>setClinView(v=>!v)} style={{ background:clinView?T.rgBg:T.w1,border:`1px solid ${clinView?T.rg:T.w3}`,borderRadius:9,padding:'8px 16px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:clinView?T.rg2:T.w5 }}>
+            {clinView?'Patient view':'Clinician view'}
+          </button>
+        </div>
+        {!monActive && monTimeline.length === 0 ? (
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:16 }}>
+            <Panel>
+              <FieldLabel>Meal type</FieldLabel>
+              <div style={{ display:'flex',gap:5,marginBottom:18,flexWrap:'wrap' }}>
+                {['Breakfast','Snack','Lunch','Dinner','Post-exercise'].map(m=>(
+                  <button key={m} onClick={()=>setMonMealLabel(m)} style={{ background:monMealLabel===m?T.rgBg:T.w,border:`1px solid ${monMealLabel===m?T.rg:T.w3}`,borderRadius:6,padding:'5px 12px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:monMealLabel===m?T.rg2:T.w5 }}>{m}</button>
+                ))}
+              </div>
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8 }}>
+                <FieldLabel>Foods eaten</FieldLabel>
+                <div style={{ display:'flex',gap:4 }}>
+                  {[1,2,3,4].map(d=>(
+                    <button key={d} onClick={()=>{setRotDay(d);setMonFoods([]);}} style={{ background:rotDay===d?T.rg:T.w,border:`1px solid ${rotDay===d?T.rg:T.w3}`,color:rotDay===d?'#fff':T.w5,borderRadius:4,padding:'2px 9px',cursor:'pointer',fontSize:10,fontFamily:fonts.mono }}>D{d}</button>
+                  ))}
+                </div>
+              </div>
+              {monFoods.length > 0 && (
+                <div style={{ background:`${T.ok}0F`,border:`1px solid ${T.ok}30`,borderRadius:7,padding:'8px 10px',marginBottom:8 }}>
+                  <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.ok,letterSpacing:'0.14em',marginBottom:5 }}>YOUR MEAL ({monFoods.length})</div>
+                  <div style={{ display:'flex',flexWrap:'wrap',gap:4 }}>
+                    {monFoods.map((f,i)=>{const fu=f.toUpperCase(),isS=(P.severe||[]).some(s=>fu.includes(s)||s.includes(fu.split(' ')[0])),isM=(P.moderate||[]).some(s=>fu.includes(s)||s.includes(fu.split(' ')[0])),col=isS?T.err:isM?T.warn:T.ok;return(
+                      <span key={i} onClick={()=>setMonFoods(p=>p.filter((_,j)=>j!==i))} style={{ background:col+'18',border:`1px solid ${col}50`,borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:fonts.sans,color:col,cursor:'pointer' }}>{f} ×</span>
+                    );})}
+                  </div>
+                </div>
+              )}
+              <RuledInput value={monFoodInput} onChange={e=>setMonFoodInput(e.target.value)} placeholder="Type food + Enter" style={{ marginBottom:10 }}/>
+              <div style={{ maxHeight:200,overflowY:'auto',marginTop:8 }}>
+                {ROT[rotDay] ? ['protein','veg','grains','fruit','misc'].map(cat=>{
+                  const items = (ROT[rotDay][cat]||[]).filter(f=>!monFoodInput||f.toLowerCase().includes(monFoodInput.toLowerCase()));
+                  if (!items.length) return null;
+                  return <div key={cat} style={{ marginBottom:8 }}>
+                    <div style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:4 }}>{cat}</div>
+                    <div style={{ display:'flex',flexWrap:'wrap',gap:3 }}>
+                      {items.map(f=>{const fu=f.toUpperCase(),isSev=(P.severe||[]).some(s=>fu===s),isMod=(P.moderate||[]).some(s=>fu===s),added=monFoods.includes(f),col=isSev?T.err:isMod?T.warn:T.ok;return(
+                        <button key={f} onClick={()=>setMonFoods(p=>added?p.filter(x=>x!==f):[...p,f])} style={{ background:added?col+'18':T.w,border:`1px solid ${added?col:isSev?T.err+'40':isMod?T.warn+'30':T.w3}`,borderRadius:4,padding:'2px 7px',cursor:'pointer',fontSize:10,fontFamily:fonts.sans,color:added?col:isSev?T.err+'90':isMod?T.warn+'90':T.w5,fontWeight:added?500:400 }}>
+                          {added?'+ ':''}{f}
+                        </button>
+                      );})}
+                    </div>
+                  </div>;
+                }) : <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.sans,paddingTop:8 }}>Upload your ALCAT results to load rotation foods.</div>}
+              </div>
+              <div style={{ marginTop:16 }}>
+                <BtnPrimary onClick={startMonitoring}>Start 2h monitoring</BtnPrimary>
+              </div>
+            </Panel>
+            <div>
+              <Panel>
+                <FieldLabel>Data Sources</FieldLabel>
+                {[
+                  { name:'Apple Watch',       abbr:'AW', streams:'HR · HRV · SpO2' },
+                  { name:'Oura Ring',          abbr:'OR', streams:'HRV · Temp · SpO2 · Readiness' },
+                  { name:'Garmin',             abbr:'GR', streams:'HR · HRV · Sleep · Stress' },
+                  { name:'Samsung Galaxy Watch',abbr:'SG', streams:'HR · HRV (IBI) · SpO2 · Skin temp' },
+                  { name:'Dexcom G7/G6',       abbr:'DX', streams:'Glucose · 5min intervals' },
+                  { name:'Libre 2 / 3',        abbr:'LB', streams:'Glucose · 1min intervals' },
+                ].map(d=>(
+                  <div key={d.name} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
+                    <div style={{ width:28,height:28,borderRadius:6,background:T.w2,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                      <span style={{ fontFamily:fonts.mono,fontSize:8.5,fontWeight:500,color:T.w5 }}>{d.abbr}</span>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,marginBottom:2 }}>{d.name}</div>
+                      <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{d.streams}</div>
+                    </div>
+                    <span style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:4,padding:'2px 7px' }}>Simulated</span>
+                  </div>
+                ))}
+              </Panel>
+              {diary.length > 0 && <Panel>
+                <FieldLabel>Recent Reactions</FieldLabel>
+                {diary.slice(0,3).map(e=>(
+                  <div key={e.id} style={{ borderBottom:`1px solid ${T.w2}`,paddingBottom:8,marginBottom:8 }}>
+                    <div style={{ display:'flex',justifyContent:'space-between',marginBottom:3 }}>
+                      <span style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans }}>{e.meal}</span>
+                      <span style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{new Date(e.ts).toLocaleDateString('en-SE')}</span>
+                    </div>
+                    <div style={{ display:'flex',gap:4,flexWrap:'wrap' }}>
+                      {e.spike && <span style={{ fontSize:10,background:e.spike.level==='severe'?`${T.err}18`:`${T.warn}18`,color:e.spike.level==='severe'?T.err:T.warn,border:`1px solid ${e.spike.level==='severe'?T.err:T.warn}40`,borderRadius:4,padding:'1px 7px',fontFamily:fonts.mono }}>{e.spike.label}</span>}
+                      {e.flagClinic && <span style={{ fontSize:10,color:T.err,fontFamily:fonts.mono }}>Flagged</span>}
+                    </div>
+                  </div>
+                ))}
+              </Panel>}
+            </div>
+          </div>
+        ) : (
+          <div>
+            {monActive && (
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+                  <div style={{ width:8,height:8,borderRadius:'50%',background:T.err,animation:'pulse 1.2s infinite' }}/>
+                  <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.err,letterSpacing:'0.12em' }}>MONITORING ACTIVE — {Math.floor(monTimer/60)}:{String(monTimer%60).padStart(2,'0')}</span>
+                  <span style={{ fontFamily:fonts.sans,fontSize:11,color:T.w4 }}>{monMealLabel} · Day {rotDay}</span>
+                </div>
+                <button onClick={()=>{setMonActive(false);setMonTimeline([]);setMonFoods([]);}} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:7,padding:'6px 14px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:T.w5 }}>Stop</button>
+              </div>
+            )}
+            {monTimeline.length > 0 && (
+              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20 }}>
+                {[
+                  { key:'hr',label:'Heart Rate',unit:'bpm',color:T.err,range:[50,140] },
+                  { key:'hrv',label:'HRV',unit:'ms',color:T.rg,range:[20,100] },
+                  { key:'glucose',label:'Glucose',unit:'mg/dL',color:T.warn,range:[60,200] },
+                  { key:'temp',label:'Temperature',unit:'°C',color:`#6A9E8E`,range:[36,38] },
+                ].map(m=>{
+                  const vals = monTimeline.map(p=>p[m.key]);
+                  const latest = vals[vals.length-1];
+                  const h=60,w=220,lo=m.range[0],hi=m.range[1];
+                  const pts = vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-(((v-lo)/(hi-lo))*h*0.8+h*0.1)}`).join(' ');
+                  return (
+                    <Panel key={m.key} style={{ marginBottom:0 }}>
+                      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
+                        <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase' }}>{m.label}</div>
+                        <div style={{ fontFamily:fonts.mono,fontSize:16,color:m.color,fontWeight:400 }}>{latest}<span style={{ fontSize:9,color:T.w4,marginLeft:3 }}>{m.unit}</span></div>
+                      </div>
+                      <svg width={w} height={h} style={{ display:'block' }}>
+                        <polyline points={pts} fill="none" stroke={m.color} strokeWidth={1.5} strokeLinejoin="round"/>
+                      </svg>
+                    </Panel>
+                  );
+                })}
+              </div>
+            )}
+            {monSpikes.length > 0 && (
+              <Panel style={{ border:`1px solid ${T.err}35`,background:`${T.err}06` }}>
+                <FieldLabel>Detected spikes</FieldLabel>
+                {monSpikes.map((s,i)=>(
+                  <div key={i} style={{ display:'flex',alignItems:'center',gap:12,padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
+                    <div style={{ width:6,height:6,borderRadius:'50%',background:s.level==='severe'?T.err:T.warn,flexShrink:0 }}/>
+                    <div style={{ flex:1,fontSize:12,color:T.w6,fontFamily:fonts.sans }}>{s.label} — {s.val}</div>
+                    <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4 }}>{s.min}min</span>
+                  </div>
+                ))}
+              </Panel>
+            )}
+          </div>
+        )}
+      </div>
+    );
+
+    // ── PROTOCOL ──
+    if (tab === 'protocol') return (
+      <div>
+        <Eyebrow>Clinical elimination protocol</Eyebrow>
+        <SectionTitle>Your<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Protocol</em></SectionTitle>
+        {P.name ? <>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:28 }}>
+            {[['Protocol',P.protocol||'Option A — 21-day detox'],['Phase',`Phase ${P.phase||1}`],['Day',`Day ${P.dayInProtocol||1}`]].map(([l,v])=>(
+              <Panel key={l} style={{ marginBottom:0,textAlign:'center' }}>
+                <div style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:6 }}>{l}</div>
+                <div style={{ fontFamily:fonts.serif,fontSize:15,color:T.w7,fontWeight:400 }}>{v}</div>
+              </Panel>
+            ))}
+          </div>
+          {P.severe?.length > 0 && <Panel>
+            <FieldLabel>Severe reactors — avoid 9 months</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+              {P.severe.map(f=><span key={f} style={{ background:`${T.err}12`,border:`1px solid ${T.err}35`,borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:T.err }}>{f}</span>)}
+            </div>
+          </Panel>}
+          {P.moderate?.length > 0 && <Panel>
+            <FieldLabel>Moderate reactors — avoid 6 months</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+              {P.moderate.map(f=><span key={f} style={{ background:`${T.warn}10`,border:`1px solid ${T.warn}30`,borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:T.warn }}>{f}</span>)}
+            </div>
+          </Panel>}
+          {P.mild?.length > 0 && <Panel>
+            <FieldLabel>Mild reactors — avoid 3 months</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+              {P.mild.map(f=><span key={f} style={{ background:`${T.w2}`,border:`1px solid ${T.w3}`,borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:T.w5 }}>{f}</span>)}
+            </div>
+          </Panel>}
+          {(P.alsoAvoid?.candida?.length > 0 || P.alsoAvoid?.whey?.length > 0) && <Panel>
+            <FieldLabel>Marker-specific avoidances</FieldLabel>
+            {P.alsoAvoid.candida?.length > 0 && <><div style={{ fontFamily:fonts.mono,fontSize:8,color:'#906080',letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>Candida — 90–120 days</div><div style={{ display:'flex',flexWrap:'wrap',gap:5,marginBottom:14 }}>{P.alsoAvoid.candida.map(f=><span key={f} style={{ background:'#90608012',border:'1px solid #90608030',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:'#906080' }}>{f}</span>)}</div></>}
+            {P.alsoAvoid.whey?.length > 0 && <><div style={{ fontFamily:fonts.mono,fontSize:8,color:'#5080A8',letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>Whey/Dairy — 120–180 days</div><div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>{P.alsoAvoid.whey.map(f=><span key={f} style={{ background:'#5080A812',border:'1px solid #5080A830',borderRadius:4,padding:'3px 9px',fontSize:11,fontFamily:fonts.sans,color:'#5080A8' }}>{f}</span>)}</div></>}
+          </Panel>}
+          <Panel>
+            <FieldLabel>Reintroduction phases</FieldLabel>
+            {PHASES.map(ph=>(
+              <div key={ph.id} style={{ borderLeft:`2px solid ${ph.color}`,paddingLeft:14,marginBottom:18 }}>
+                <div style={{ display:'flex',justifyContent:'space-between',marginBottom:4 }}>
+                  <span style={{ fontSize:13,fontFamily:fonts.sans,fontWeight:500,color:T.w7 }}>Phase {ph.id} — {ph.label}</span>
+                  <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4 }}>{ph.range}</span>
+                </div>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:5,marginBottom:6 }}>
+                  {ph.rules.map(r=><span key={r} style={{ fontSize:11,fontFamily:fonts.sans,color:T.w5,background:T.w2,borderRadius:4,padding:'2px 8px' }}>{r}</span>)}
+                </div>
+                <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.sans,fontStyle:'italic' }}>{ph.note}</div>
+              </div>
+            ))}
+          </Panel>
+        </> : <EmptyState title="No protocol loaded" sub="Complete onboarding and upload your ALCAT results to see your personalised protocol."/>}
+      </div>
+    );
+
+    // ── ROTATION ──
+    if (tab === 'rotation') return (
+      <div>
+        <Eyebrow>4-day food rotation</Eyebrow>
+        <SectionTitle>Rotation<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Calendar</em></SectionTitle>
+        <div style={{ display:'flex',gap:8,marginBottom:28 }}>
+          {[1,2,3,4].map(d=>(
+            <button key={d} onClick={()=>setRotDay(d)} style={{ flex:1,background:rotDay===d?T.rg:T.w1,border:`1px solid ${rotDay===d?T.rg:T.w3}`,borderRadius:9,padding:'12px 8px',cursor:'pointer',color:rotDay===d?'#fff':T.w5,fontFamily:fonts.mono,fontSize:11,fontWeight:rotDay===d?500:400,transition:'all .18s' }}>Day {d}</button>
+          ))}
+        </div>
+        {ROT[rotDay] && Object.keys(ROT[rotDay]).length > 0 ? (
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12 }}>
+            {Object.entries(ROT[rotDay]).map(([cat,items])=>(
+              <Panel key={cat} style={{ marginBottom:0 }}>
+                <FieldLabel>{cat}</FieldLabel>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                  {items.map(f=><span key={f} style={{ fontSize:12,color:T.w6,fontFamily:fonts.sans,background:T.w,border:`1px solid ${T.w3}`,borderRadius:4,padding:'3px 8px' }}>{f}</span>)}
+                </div>
+              </Panel>
+            ))}
+          </div>
+        ) : <EmptyState title="Rotation not yet loaded" sub="Your 4-day rotation is generated from your ALCAT results. Upload your results to unlock this view."/>}
+      </div>
+    );
+
+    // ── MEALS ──
+    if (tab === 'meals') return (
+      <div>
+        <Eyebrow>Daily meal planner</Eyebrow>
+        <SectionTitle>Meal<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Plans</em></SectionTitle>
+        <div style={{ display:'flex',gap:8,marginBottom:28 }}>
+          {[1,2,3,4].map(d=>(
+            <button key={d} onClick={()=>{setRotDay(d);setRecipeSteps(null);setActiveRecipe(null);}} style={{ flex:1,background:rotDay===d?T.rg:T.w1,border:`1px solid ${rotDay===d?T.rg:T.w3}`,borderRadius:9,padding:'12px 8px',cursor:'pointer',color:rotDay===d?'#fff':T.w5,fontFamily:fonts.mono,fontSize:11,fontWeight:rotDay===d?500:400,transition:'all .18s' }}>Day {d}</button>
+          ))}
+        </div>
+        {MEALS_DATA[rotDay] ? (
+          Object.entries(MEALS_DATA[rotDay]).map(([mealKey, meal])=>{
+            const prot = getP(rotDay, mealKey);
+            const active = activeRecipe === `${rotDay}-${mealKey}`;
+            return (
+              <Panel key={mealKey}>
+                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:meal.isProtein?12:0 }}>
+                  <div>
+                    <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>{mealKey.replace(/(\d)/,' $1').replace('snack','Snack ')}</div>
+                    <div style={{ fontSize:14,color:T.w6,fontFamily:fonts.sans }}>{meal.base}</div>
+                  </div>
+                  {meal.isProtein && (
+                    <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+                      <button onClick={()=>setPicker(picker===`${rotDay}-${mealKey}`?null:`${rotDay}-${mealKey}`)} style={{ background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:T.rg2 }}>{prot||'Choose protein'}</button>
+                    </div>
+                  )}
+                </div>
+                {picker === `${rotDay}-${mealKey}` && (
+                  <div style={{ background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'10px',marginTop:8 }}>
+                    <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                      {Object.keys(meal.methods||{}).map(p=>(
+                        <button key={p} onClick={()=>setP(rotDay,mealKey,p)} style={{ background:prot===p?T.rgBg:T.w,border:`1px solid ${prot===p?T.rg:T.w3}`,borderRadius:5,padding:'5px 10px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:prot===p?T.rg2:T.w5 }}>{p}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {meal.isProtein && prot && (
+                  <div style={{ marginTop:10 }}>
+                    <button onClick={()=>{setActiveRecipe(active?null:`${rotDay}-${mealKey}`);if(!active)fetchRecipeSteps(rotDay,mealKey,prot,meal.base,meal.sides);}} style={{ background:'none',border:`1px solid ${T.w3}`,borderRadius:7,padding:'6px 14px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:T.w5 }}>
+                      {active ? 'Hide recipe' : 'Get recipe steps'}
+                    </button>
+                    {active && (
+                      <div style={{ marginTop:12,fontSize:11.5,color:T.w6,lineHeight:1.8,fontFamily:fonts.sans,fontWeight:300 }}>
+                        {recipeLoading ? <span style={{ color:T.w4,fontFamily:fonts.mono,fontSize:10 }}>Loading recipe…</span>
+                          : recipeSteps?.split('\n').map((l,i)=>l.trim()?<div key={i} style={{ marginBottom:4 }}>{l}</div>:null)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </Panel>
+            );
+          })
+        ) : <EmptyState title="Meal plans not loaded" sub="Meal plans are generated from your ALCAT rotation data. Upload your results to unlock this tab."/>}
+      </div>
+    );
+
+    // ── GENERATE ──
+    if (tab === 'generate') return (
+      <div>
+        <Eyebrow>AI menu generation</Eyebrow>
+        <SectionTitle>Generate<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Menu</em></SectionTitle>
+        <Panel>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:24,marginBottom:20 }}>
+            <div>
+              <FieldLabel>Rotation day</FieldLabel>
+              <div style={{ display:'flex',gap:6 }}>
+                {[1,2,3,4].map(d=>(
+                  <button key={d} onClick={()=>setRotDay(d)} style={{ flex:1,background:rotDay===d?T.rg:T.w,border:`1px solid ${rotDay===d?T.rg:T.w3}`,borderRadius:7,padding:'9px 6px',cursor:'pointer',color:rotDay===d?'#fff':T.w5,fontFamily:fonts.mono,fontSize:11 }}>D{d}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <FieldLabel>Phase</FieldLabel>
+              <div style={{ display:'flex',gap:6 }}>
+                {[{id:'detox',label:'Detox'},{id:'post3months',label:'Post Month 3'}].map(p=>(
+                  <button key={p.id} onClick={()=>setGenPhase(p.id)} style={{ flex:1,background:genPhase===p.id?T.rgBg:T.w,border:`1px solid ${genPhase===p.id?T.rg:T.w3}`,borderRadius:7,padding:'9px 6px',cursor:'pointer',color:genPhase===p.id?T.rg2:T.w5,fontFamily:fonts.sans,fontSize:11,fontWeight:genPhase===p.id?500:400 }}>{p.label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>Scope</FieldLabel>
+            <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
+              {[['full_day','Full Day'],['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner']].map(([id,label])=>(
+                <button key={id} onClick={()=>setMealScope(id)} style={{ background:mealScope===id?T.rgBg:T.w,border:`1px solid ${mealScope===id?T.rg:T.w3}`,borderRadius:7,padding:'8px 16px',cursor:'pointer',color:mealScope===id?T.rg2:T.w5,fontFamily:fonts.sans,fontSize:11,fontWeight:mealScope===id?500:400 }}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>Eating pattern</FieldLabel>
+            <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+              {EAT_PATS.map(ep=>(
+                <button key={ep.id} onClick={async()=>{setEatPat(ep.id);if(ep.fasting&&!ifResearch){setIfLoad(true);try{const r=await callClaude([{role:'user',content:'Summarise the latest clinical evidence on intermittent fasting for metabolic inflammation and gut healing. 3 sentences max.'}],buildMarioSystemPrompt(P));setIfResearch(r);}catch{}setIfLoad(false);}}} style={{ background:eatPat===ep.id?T.rgBg:T.w,border:`1px solid ${eatPat===ep.id?T.rg:T.w3}`,borderRadius:8,padding:'8px 14px',cursor:'pointer',textAlign:'left',minWidth:120 }}>
+                  <div style={{ fontSize:12,color:eatPat===ep.id?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{ep.label}</div>
+                  <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{ep.desc}</div>
+                  {ep.detail && eatPat===ep.id && <div style={{ fontSize:10,color:T.rg2,fontFamily:fonts.mono,marginTop:2 }}>{ep.detail}</div>}
+                </button>
+              ))}
+            </div>
+            {ifResearch && <div style={{ marginTop:12,background:T.rgBg,border:`1px solid ${T.rg}25`,borderRadius:8,padding:'10px 14px',fontSize:11,color:T.w5,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>{ifLoad?'Loading research…':ifResearch}</div>}
+          </div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>Cuisine</FieldLabel>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8 }}>
+              {CUISINES.map(c=>(
+                <button key={c.id} onClick={()=>setCuisine(c.id)} style={{ background:cuisine===c.id?T.rgBg:T.w,border:`1px solid ${cuisine===c.id?T.rg:T.w3}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',textAlign:'left',transition:'all .15s' }}>
+                  <div style={{ fontSize:12,color:cuisine===c.id?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{c.label}</div>
+                  <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{c.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <BtnPrimary onClick={genMenu} loading={genLoad} disabled={!cuisine}>Generate menu</BtnPrimary>
+        </Panel>
+        {genResult && <Panel>
+          <FieldLabel>Generated menu</FieldLabel>
+          <div style={{ fontSize:13,color:T.w6,lineHeight:1.9,fontFamily:fonts.sans,fontWeight:300 }}>
+            {genResult.split('\n').map((l,i)=>{
+              if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.serif,fontSize:15,fontWeight:600,color:T.w7,marginTop:14,marginBottom:3 }}>{l.replace(/\*\*/g,'')}</div>;
+              return l.trim()?<div key={i} style={{ marginBottom:4 }}>{l}</div>:null;
+            })}
+          </div>
+        </Panel>}
+      </div>
+    );
+
+    // ── GROCERY ──
+    if (tab === 'grocery') return (
+      <div>
+        <Eyebrow>Smart grocery — geo-adaptive</Eyebrow>
+        <SectionTitle>Grocery<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>List</em></SectionTitle>
+        <Panel>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:20 }}>
+            <div>
+              <FieldLabel>Country</FieldLabel>
+              <div style={{ display:'flex',gap:6 }}>
+                {['SE','US','GB','DE'].map(cc=>(
+                  <button key={cc} onClick={()=>setCountry(cc)} style={{ background:country===cc?T.rg:T.w,border:`1px solid ${country===cc?T.rg:T.w3}`,borderRadius:6,padding:'5px 12px',cursor:'pointer',color:country===cc?'#fff':T.w5,fontFamily:fonts.mono,fontSize:10 }}>{cc}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <FieldLabel>Rotation days</FieldLabel>
+              <div style={{ display:'flex',gap:6 }}>
+                {[1,2,3,4].map(d=>{const sel=groceryWeek.includes(d);return(
+                  <button key={d} onClick={()=>setGroceryWeek(p=>sel?p.filter(x=>x!==d):[...p,d].sort())} style={{ background:sel?T.rg:T.w,border:`1px solid ${sel?T.rg:T.w3}`,borderRadius:6,padding:'5px 12px',cursor:'pointer',color:sel?'#fff':T.w5,fontFamily:fonts.mono,fontSize:10 }}>D{d}</button>
+                );})}
+              </div>
+            </div>
+          </div>
+          <BtnPrimary onClick={buildGroceryList} loading={groceryLoad} disabled={groceryWeek.length===0}>Build grocery list</BtnPrimary>
+        </Panel>
+        {groceryList && <>
+          <Panel>
+            <FieldLabel>Your list</FieldLabel>
+            <div style={{ fontSize:12.5,color:T.w6,lineHeight:1.9,fontFamily:fonts.sans,fontWeight:300 }}>
+              {groceryList.split('\n').map((l,i)=>{
+                if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:'0.18em',textTransform:'uppercase',marginTop:16,marginBottom:6 }}>{l.replace(/\*\*/g,'')}</div>;
+                if(l.startsWith('- '))return<div key={i} style={{ display:'flex',gap:8,alignItems:'flex-start',marginBottom:2 }}><span style={{ color:T.rg,flexShrink:0 }}>·</span><span>{l.slice(2)}</span></div>;
+                return l.trim()?<div key={i} style={{ fontSize:11,color:T.w4 }}>{l}</div>:null;
+              })}
+            </div>
+          </Panel>
+          <Panel>
+            <FieldLabel>Order online — {country} stores</FieldLabel>
+            <div style={{ marginBottom:12 }}>
+              {stores.map((s,i)=>(
+                <button key={s.name} onClick={()=>setGroceryStore(i)} style={{ background:groceryStore===i?T.rgBg:T.w1,border:`1px solid ${groceryStore===i?T.rg:T.w3}`,borderRadius:8,padding:'8px 14px',cursor:'pointer',marginRight:8,marginBottom:8,fontSize:11.5,fontFamily:fonts.sans,color:groceryStore===i?T.rg2:T.w5,fontWeight:groceryStore===i?500:400 }}>{s.name}</button>
+              ))}
+            </div>
+            {groceryList.split('\n').filter(l=>l.startsWith('- ')).map(l=>l.slice(2).trim().split('(')[0].trim()).filter(Boolean).slice(0,16).map((item,i)=>(
+              <a key={i} href={stores[groceryStore].search + encodeURIComponent(item)} target="_blank" rel="noopener noreferrer" style={{ display:'inline-flex',alignItems:'center',gap:6,background:T.w,border:`1px solid ${T.w3}`,borderRadius:6,padding:'5px 12px',margin:'0 6px 6px 0',textDecoration:'none',fontSize:11.5,color:T.w6,fontFamily:fonts.sans,transition:'all .15s' }}>
+                {item}
+                <span style={{ fontSize:9,color:T.rg,fontFamily:fonts.mono }}>search</span>
+              </a>
+            ))}
+          </Panel>
+        </>}
+        <Panel>
+          <FieldLabel>Shopping rules — always apply</FieldLabel>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+            {[
+              { rule:'Wild-caught fish only',          detail:'Farm-raised contains inflammatory omega-6. Look for MSC certified.' },
+              { rule:'Oils: tallow, coconut, avocado', detail:'No sunflower, canola, rapeseed, or vegetable oil.' },
+              { rule:'Organic for today\'s rotation',  detail:'Buy organic for items on your plate today.' },
+              { rule:'No hidden yeast or sugars',      detail:'Nutritional yeast, malt extract, dextrose — all Candida triggers.' },
+            ].map(r=>(
+              <div key={r.rule} style={{ background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'12px' }}>
+                <div style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,fontWeight:500,marginBottom:4 }}>{r.rule}</div>
+                <div style={{ fontSize:10.5,color:T.w4,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.5 }}>{r.detail}</div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    );
+
+    // ── FOOD CHECK ──
+    if (tab === 'lookup') return (
+      <div>
+        <Eyebrow>ALCAT reactive food search</Eyebrow>
+        <SectionTitle>Food<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Check</em></SectionTitle>
+        <Panel>
+          <FieldLabel>Search any food</FieldLabel>
+          <RuledInput value={foodQ} onChange={e=>setFoodQ(e.target.value)} placeholder="e.g. salmon, oat, tomato…"/>
+          {foodQ.length > 1 && (
+            <div style={{ marginTop:16 }}>
+              {foodResults.length === 0
+                ? <div style={{ fontSize:13,color:T.ok,fontFamily:fonts.sans,padding:'10px 0' }}>Not found in reactive list — cleared for your protocol.</div>
+                : foodResults.map(({food,level},i)=>{
+                    const col = level==='severe'?T.err:level==='moderate'?T.warn:level==='mild'?T.w5:level==='candida'?'#906080':'#5080A8';
+                    const bg = level==='severe'?`${T.err}12`:level==='moderate'?`${T.warn}10`:T.w2;
+                    const avoidText = level==='severe'?'Avoid 9 months':level==='moderate'?'Avoid 6 months':level==='mild'?'Avoid 3 months':level==='candida'?'Candida trigger — 90 days':'Whey/Dairy — 120 days';
+                    return (
+                      <div key={i} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',background:bg,border:`1px solid ${col}30`,borderRadius:8,padding:'12px 14px',marginBottom:8 }}>
+                        <div>
+                          <div style={{ fontSize:14,color:T.w7,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{food}</div>
+                          <div style={{ fontSize:11,color:col,fontFamily:fonts.mono,letterSpacing:'0.1em',textTransform:'uppercase' }}>{level}</div>
+                        </div>
+                        <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.sans,textAlign:'right' }}>{avoidText}</div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          )}
+          {foodQ.length <= 1 && allFoods.length > 0 && (
+            <div style={{ marginTop:14 }}>
+              <div style={{ display:'flex',gap:12,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:10 }}>
+                <span style={{ color:T.err }}>{P.severe?.length||0} severe</span>
+                <span style={{ color:T.warn }}>{P.moderate?.length||0} moderate</span>
+                <span style={{ color:T.w5 }}>{P.mild?.length||0} mild</span>
+              </div>
+            </div>
+          )}
+          {allFoods.length === 0 && <EmptyState title="No ALCAT data loaded" sub="Upload your ALCAT results to enable food lookup."/>}
+        </Panel>
+      </div>
+    );
+
+    // ── ASK MARIO ──
+    if (tab === 'chat') return (
+      <div>
+        <Eyebrow>Clinical AI companion</Eyebrow>
+        <SectionTitle>Ask<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Mario</em></SectionTitle>
+        {chatMsgs.length === 0 && (
+          <Panel>
+            <div style={{ fontSize:13,color:T.w5,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.8,marginBottom:16 }}>
+              {P.name ? `Hello${P.name?' — this is your personalised clinical AI built on your ALCAT data and the full MediBalans protocol.':'.'}` : 'Introduce yourself and I will personalise my responses to your protocol.'}
+            </div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:7 }}>
+              {['Why can I not eat oats?','What should I eat on Day 2?','I feel worse — is this normal?','Explain my Candida protocol','Can I exercise on the detox?'].map(q=>(
+                <button key={q} onClick={()=>setChatIn(q)} style={{ background:T.rgBg,border:`1px solid ${T.rg}25`,borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:11.5,fontFamily:fonts.sans,color:T.rg2 }}>{q}</button>
+              ))}
+            </div>
+          </Panel>
+        )}
+        <div style={{ display:'flex',flexDirection:'column',gap:12,marginBottom:20,maxHeight:440,overflowY:'auto' }}>
+          {chatMsgs.map((m,i)=>(
+            <div key={i} style={{ display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start' }}>
+              <div style={{ maxWidth:'76%',background:m.role==='user'?T.rg:T.w1,border:`1px solid ${m.role==='user'?T.rg:T.w3}`,borderRadius:m.role==='user'?'12px 12px 3px 12px':'12px 12px 12px 3px',padding:'12px 16px',fontSize:13,color:m.role==='user'?'#fff':T.w6,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>
+                {m.content.split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
+              </div>
+            </div>
+          ))}
+          {chatLoad && <div style={{ display:'flex',justifyContent:'flex-start' }}><div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:'12px 12px 12px 3px',padding:'12px 16px',fontSize:13,color:T.w4,fontFamily:fonts.mono }}>…</div></div>}
+          <div ref={chatEndRef}/>
+        </div>
+        <div style={{ display:'flex',gap:10,position:'sticky',bottom:0,background:T.w,paddingTop:10 }}>
+          <RuledInput value={chatIn} onChange={e=>setChatIn(e.target.value)} placeholder="Ask Mario anything about your protocol…" style={{ flex:1 }}/>
+          <BtnPrimary onClick={sendChat} disabled={!chatIn.trim()} loading={chatLoad} small>Send</BtnPrimary>
+        </div>
+      </div>
+    );
+
+    // ── OUTCOMES ──
+    if (tab === 'outcomes') return (
+      <div>
+        <Eyebrow>Progress tracking</Eyebrow>
+        <SectionTitle>Outcomes<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Engine</em></SectionTitle>
+        <Panel>
+          <FieldLabel>{outcomes.baseline ? 'Log check-in' : 'Set baseline'}</FieldLabel>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:8 }}>Energy level (1–10)</div>
+            <div style={{ display:'flex',gap:6 }}>
+              {[1,2,3,4,5,6,7,8,9,10].map(n=>(
+                <button key={n} onClick={()=>setOutEnergy(n)} style={{ width:32,height:32,borderRadius:6,border:`1px solid ${outEnergy===n?T.rg:T.w3}`,background:outEnergy===n?T.rg:T.w,cursor:'pointer',fontFamily:fonts.mono,fontSize:11,color:outEnergy===n?'#fff':T.w5 }}>{n}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase',marginBottom:8 }}>Active symptoms</div>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:7 }}>
+              {Object.values(SYMPTOM_CATS).flatMap(c=>c.items).map(s=>(
+                <Chip key={s} label={s} on={outSymptoms.includes(s)} onClick={()=>setOutSymptoms(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s])}/>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:16 }}>
+            <FieldLabel>Notes</FieldLabel>
+            <RuledInput multiline rows={2} value={outNotes} onChange={e=>setOutNotes(e.target.value)} placeholder="How do you feel today? Any observations…"/>
+          </div>
+          <BtnPrimary onClick={logOutcome}>{outcomes.baseline ? 'Log check-in' : 'Set baseline'}</BtnPrimary>
+        </Panel>
+        {outcomes.baseline && <>
+          <Panel>
+            <FieldLabel>Baseline — Day {outcomes.baseline.day}</FieldLabel>
+            <div style={{ display:'flex',gap:24 }}>
+              <div style={{ textAlign:'center' }}>
+                <div style={{ fontFamily:fonts.serif,fontSize:32,color:T.rg,fontWeight:400 }}>{outcomes.baseline.energy}</div>
+                <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase' }}>Energy</div>
+              </div>
+              <div>
+                <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6 }}>Baseline symptoms</div>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                  {outcomes.baseline.symptoms.length > 0 ? outcomes.baseline.symptoms.map(s=><span key={s} style={{ background:`${T.err}10`,border:`1px solid ${T.err}25`,borderRadius:4,padding:'2px 8px',fontSize:11,fontFamily:fonts.sans,color:T.err }}>{s}</span>) : <span style={{ fontSize:12,color:T.w4,fontFamily:fonts.sans }}>No symptoms logged</span>}
+                </div>
+              </div>
+            </div>
+          </Panel>
+          {outcomes.checkins.length > 0 && <Panel>
+            <FieldLabel>Progress trajectory</FieldLabel>
+            <div style={{ position:'relative',height:80,marginBottom:12 }}>
+              <svg width="100%" height={80} style={{ display:'block' }}>
+                {(() => {
+                  const all = [outcomes.baseline, ...outcomes.checkins];
+                  const max = 10, w = 600;
+                  const pts = all.map((e,i)=>`${(i/(all.length-1||1))*w},${80-(e.energy/max)*70}`).join(' ');
+                  return <>
+                    <polyline points={pts} fill="none" stroke={T.rg} strokeWidth={2} strokeLinejoin="round"/>
+                    {all.map((e,i)=><circle key={i} cx={(i/(all.length-1||1))*w} cy={80-(e.energy/max)*70} r={3} fill={T.rg}/>)}
+                  </>;
+                })()}
+              </svg>
+            </div>
+            {outcomes.checkins.slice(-3).reverse().map((c,i)=>(
+              <div key={i} style={{ display:'flex',alignItems:'center',gap:16,padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
+                <div style={{ fontFamily:fonts.serif,fontSize:22,color:c.energy>=7?T.ok:c.energy>=4?T.warn:T.err,fontWeight:400,minWidth:28 }}>{c.energy}</div>
+                <div>
+                  <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.mono }}>{new Date(c.ts).toLocaleDateString('en-SE')} · Day {c.day}</div>
+                  {c.notes && <div style={{ fontSize:12,color:T.w5,fontFamily:fonts.sans,fontWeight:300,marginTop:2 }}>{c.notes}</div>}
+                </div>
+              </div>
+            ))}
+          </Panel>}
+        </>}
+      </div>
+    );
+
+    // ── GUTCHECK ──
+    if (tab === 'gut') return (
+      <div>
+        <Eyebrow>Stool journal · Bristol Stool Scale</Eyebrow>
+        <SectionTitle>GutCheck<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Journal</em></SectionTitle>
+        <Panel>
+          <FieldLabel>Select Bristol type</FieldLabel>
+          <div style={{ display:'flex',flexDirection:'column',gap:7,marginBottom:20 }}>
+            {[
+              { type:1, label:'Type 1 — Separate hard lumps, like nuts', clinical:'Severe constipation', color:T.err },
+              { type:2, label:'Type 2 — Sausage-shaped, lumpy',          clinical:'Mild constipation',  color:T.warn },
+              { type:3, label:'Type 3 — Like a sausage, cracks on surface', clinical:'Normal, slight dehydration', color:T.ok },
+              { type:4, label:'Type 4 — Like a sausage, smooth and soft',  clinical:'Optimal transit',  color:T.ok },
+              { type:5, label:'Type 5 — Soft blobs, clear-cut edges',     clinical:'Lacking fibre',     color:T.warn },
+              { type:6, label:'Type 6 — Fluffy, mushy, ragged edges',     clinical:'Mild diarrhoea',    color:T.warn },
+              { type:7, label:'Type 7 — Entirely liquid, no solid pieces', clinical:'Severe diarrhoea or reaction', color:T.err },
+            ].map(t=>(
+              <button key={t.type} onClick={()=>setGutType(t.type)} style={{ display:'flex',alignItems:'center',gap:12,background:gutType===t.type?T.rgBg:T.w,border:`1px solid ${gutType===t.type?T.rg:T.w3}`,borderRadius:8,padding:'10px 14px',cursor:'pointer',textAlign:'left',transition:'all .15s' }}>
+                <div style={{ width:28,height:28,borderRadius:'50%',background:gutType===t.type?T.rg:T.w2,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                  <span style={{ fontFamily:fonts.mono,fontSize:11,fontWeight:500,color:gutType===t.type?'#fff':T.w5 }}>{t.type}</span>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,marginBottom:2 }}>{t.label}</div>
+                  <div style={{ fontSize:10,color:t.color,fontFamily:fonts.mono,letterSpacing:'0.1em' }}>{t.clinical}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+          <FieldLabel>Notes</FieldLabel>
+          <RuledInput value={gutNotes} onChange={e=>setGutNotes(e.target.value)} placeholder="Any relevant notes — pain, urgency, colour, timing…" style={{ marginBottom:16 }}/>
+          <BtnPrimary onClick={logGut} disabled={gutType===null}>Log entry</BtnPrimary>
+        </Panel>
+        {gutLogs.length > 0 && <Panel>
+          <FieldLabel>Journal ({gutLogs.length} entries)</FieldLabel>
+          {gutLogs.slice(0,10).map(e=>(
+            <div key={e.id} style={{ display:'flex',alignItems:'center',gap:12,padding:'9px 0',borderBottom:`1px solid ${T.w2}` }}>
+              <div style={{ width:32,height:32,borderRadius:'50%',background:e.type<=2||e.type>=6?`${T.err}18`:e.type===4?`${T.ok}18`:`${T.warn}18`,border:`1px solid ${e.type<=2||e.type>=6?T.err:e.type===4?T.ok:T.warn}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                <span style={{ fontFamily:fonts.mono,fontSize:12,fontWeight:500,color:e.type<=2||e.type>=6?T.err:e.type===4?T.ok:T.warn }}>{e.type}</span>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:11,color:T.w4,fontFamily:fonts.mono }}>{new Date(e.ts).toLocaleDateString('en-SE')} {new Date(e.ts).toLocaleTimeString('en-SE',{hour:'2-digit',minute:'2-digit'})}</div>
+                {e.notes && <div style={{ fontSize:12,color:T.w5,fontFamily:fonts.sans,fontWeight:300,marginTop:2 }}>{e.notes}</div>}
+              </div>
+            </div>
+          ))}
+        </Panel>}
+      </div>
+    );
+
+    // ── PLATECHECK ──
+    if (tab === 'plate') return (
+      <div>
+        <Eyebrow>AI meal compliance scanner</Eyebrow>
+        <SectionTitle>Plate<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Check</em></SectionTitle>
+        <Panel>
+          <FieldLabel>Describe your meal</FieldLabel>
+          <RuledInput multiline rows={3} value={plateDesc} onChange={e=>setPlateDesc(e.target.value)} placeholder="e.g. Grilled salmon with roasted broccoli, olive oil, and quinoa. Side salad with lemon dressing." style={{ marginBottom:20 }}/>
+          <BtnPrimary onClick={runPlateCheck} loading={plateLoad} disabled={!plateDesc.trim()}>Scan meal for compliance</BtnPrimary>
+        </Panel>
+        {plateResult && <Panel>
+          {(() => {
+            const isPass = plateResult.includes('PASS');
+            const isReview = plateResult.includes('REVIEW');
+            const col = isPass ? T.ok : isReview ? T.warn : T.err;
+            return <>
+              <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:16 }}>
+                <div style={{ width:10,height:10,borderRadius:'50%',background:col }}/>
+                <div style={{ fontFamily:fonts.mono,fontSize:9,color:col,letterSpacing:'0.18em',textTransform:'uppercase' }}>
+                  {isPass ? 'Meal clears protocol' : isReview ? 'Review required' : 'Protocol conflict detected'}
+                </div>
+              </div>
+              <div style={{ fontSize:12.5,color:T.w6,lineHeight:1.9,fontFamily:fonts.sans,fontWeight:300 }}>
+                {plateResult.split('\n').map((l,i)=>{
+                  const isHeader = l.startsWith('-') && l.includes(':');
+                  return l.trim() ? <div key={i} style={{ marginBottom:5,color:isHeader?T.rg2:T.w6,fontFamily:isHeader?fonts.mono:fonts.sans,fontSize:isHeader?9:12.5,letterSpacing:isHeader?'0.12em':'normal',textTransform:isHeader?'uppercase':'none' }}>{l}</div> : null;
+                })}
+              </div>
+            </>;
+          })()}
+        </Panel>}
+        {!P.severe?.length && <Panel><EmptyState title="No ALCAT data loaded" sub="PlateCheck is most accurate when your reactive food lists are loaded from your ALCAT results."/></Panel>}
+      </div>
+    );
+
+    // ── MEDICATIONS ──
+    if (tab === 'meds') return (
+      <div>
+        <Eyebrow>Protocol interaction review</Eyebrow>
+        <SectionTitle>Medications<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>& Supplements</em></SectionTitle>
+        <Panel>
+          <div style={{ marginBottom:22 }}>
+            <FieldLabel>Current medications (pharmaceutical)</FieldLabel>
+            <RuledInput multiline rows={4} value={medRx} onChange={e=>setMedRx(e.target.value)} placeholder="List all pharmaceutical medications — name, dose, frequency&#10;e.g. Levothyroxine 50mcg once daily&#10;     Estradiol transdermal patch 50mcg/24h&#10;     Metformin 500mg twice daily"/>
+          </div>
+          <div style={{ marginBottom:22 }}>
+            <FieldLabel>Supplements & nutraceuticals</FieldLabel>
+            <RuledInput multiline rows={4} value={medSupp} onChange={e=>setMedSupp(e.target.value)} placeholder="List all supplements — name, dose, frequency&#10;e.g. Magnesium glycinate 400mg at bedtime&#10;     Vitamin D3 5000 IU with K2-MK7 200mcg&#10;     Omega-3 EPA/DHA 2g daily"/>
+          </div>
+          <div style={{ marginBottom:22 }}>
+            <FieldLabel>Clinical notes (free text)</FieldLabel>
+            <RuledInput multiline rows={3} value={medNotes} onChange={e=>setMedNotes(e.target.value)} placeholder="Any relevant clinical context — diagnoses, intolerances, previous reactions…"/>
+          </div>
+          <BtnPrimary onClick={analyzeInteractions} loading={medLoad} disabled={!medRx && !medSupp}>Analyse protocol interactions</BtnPrimary>
+        </Panel>
+        {medAnalysis && <Panel>
+          <FieldLabel>Mario's interaction analysis</FieldLabel>
+          <div style={{ fontSize:13,color:T.w6,lineHeight:1.85,fontFamily:fonts.sans,fontWeight:300 }}>
+            {medAnalysis.split('\n').map((l,i)=>l.trim()?<div key={i} style={{ marginBottom:6 }}>{l}</div>:null)}
+          </div>
+          <div style={{ marginTop:16,padding:'10px 14px',background:`${T.warn}0C`,border:`1px solid ${T.warn}25`,borderRadius:8 }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.warn,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>Clinical advisory</div>
+            <div style={{ fontSize:11,color:T.w5,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.6 }}>This analysis is informational. Always review medication adjustments with Dr Mario Anthis before making changes.</div>
+          </div>
+        </Panel>}
+        {/* Hormone delivery reference */}
+        <Panel>
+          <FieldLabel>Hormonal therapy reference</FieldLabel>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+            {[
+              { hormone:'Oestrogen',  methods:['Transdermal patch','Transdermal gel','Oral tablet','Vaginal cream'] },
+              { hormone:'Progesterone', methods:['Oral micronised (Utrogestan)','Intrauterine (Mirena)','Transdermal cream'] },
+              { hormone:'Testosterone', methods:['Transdermal gel','Subcutaneous implant','Oral undecanoate','IM injection'] },
+              { hormone:'Thyroid',      methods:['Levothyroxine (T4)','Liothyronine (T3)','Desiccated (T4+T3)','Compounded'] },
+            ].map(h=>(
+              <div key={h.hormone} style={{ background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'12px' }}>
+                <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.rg2,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:8 }}>{h.hormone}</div>
+                {h.methods.map(m=><div key={m} style={{ fontSize:11.5,color:T.w5,fontFamily:fonts.sans,fontWeight:300,marginBottom:4 }}>· {m}</div>)}
+              </div>
+            ))}
+          </div>
+        </Panel>
+        {/* API integrations — scaffolded */}
+        <Panel>
+          <FieldLabel>Lab integrations</FieldLabel>
+          <div style={{ display:'flex',gap:10 }}>
+            {[
+              { name:'Dante Labs WGS',  status:danteStub.ready?'Connected':'Pending',  note:'Genomic data — awaiting service token', color:danteStub.ready?T.ok:T.w4 },
+              { name:'VitaminLab',      status:vitaminLabStub.ready?'Connected':'Pending', note:'Micronutrient data — awaiting API docs', color:vitaminLabStub.ready?T.ok:T.w4 },
+            ].map(api=>(
+              <div key={api.name} style={{ flex:1,background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'12px' }}>
+                <div style={{ display:'flex',alignItems:'center',gap:7,marginBottom:4 }}>
+                  <div style={{ width:6,height:6,borderRadius:'50%',background:api.color }}/>
+                  <span style={{ fontSize:12,color:T.w7,fontFamily:fonts.sans,fontWeight:500 }}>{api.name}</span>
+                </div>
+                <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:api.color,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4 }}>{api.status}</div>
+                <div style={{ fontSize:10.5,color:T.w4,fontFamily:fonts.sans,fontWeight:300 }}>{api.note}</div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    );
+
+    return null;
+  };
+
+  // ── LANDING ───────────────────────────────────────────────────────────────────
+  if (showLanding) return (
+    <div style={{ minHeight:'100vh',background:T.w,overflow:'hidden',position:'relative' }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');*{box-sizing:border-box}button:hover{opacity:0.88}`}</style>
+      {/* Orbs */}
+      {[{s:520,c:`rgba(220,180,168,0.22)`,an:'ob1',t:'8%',l:'58%'},{s:360,c:`rgba(196,136,122,0.14)`,an:'ob2',t:'40%',l:'72%'},{s:440,c:`rgba(240,210,195,0.16)`,an:'ob3',t:'-8%',l:'36%'}].map((o,i)=>(
+        <div key={i} style={{ position:'absolute',top:o.t,left:o.l,width:o.s,height:o.s,borderRadius:'50%',background:o.c,filter:'blur(80px)',animation:`${o.an} ${14+i*2.5}s ease-in-out infinite`,pointerEvents:'none' }}/>
+      ))}
+      {/* Caustic lines */}
+      {[{an:'ca1',rot:'-6deg',t:'22%'},{an:'ca2',rot:'9deg',t:'58%'}].map((c,i)=>(
+        <div key={i} style={{ position:'absolute',left:0,top:c.t,width:'100%',height:1,background:`linear-gradient(90deg,transparent,rgba(196,136,122,0.18) 30%,rgba(196,136,122,0.32) 50%,rgba(196,136,122,0.18) 70%,transparent)`,transform:`rotate(${c.rot})`,animation:`${c.an} 11s ease-in-out infinite`,pointerEvents:'none' }}/>
+      ))}
+      {/* Nav */}
+      <div style={{ position:'relative',zIndex:10,height:58,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 60px',borderBottom:`1px solid ${T.w3}` }}>
+        <div style={{ display:'flex',alignItems:'center',gap:12 }}>
+          <div style={{ width:9,height:9,borderRadius:'50%',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 2px 8px rgba(160,100,85,0.40)` }}/>
+          <span style={{ fontFamily:fonts.serif,fontSize:18,fontWeight:400,color:T.w7 }}>meet mario</span>
+        </div>
+        <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,border:`1px solid ${T.w3}`,borderRadius:3,padding:'3px 8px',letterSpacing:'0.14em' }}>PATENT PENDING · SE 2615203-3</span>
+      </div>
+      {/* Hero */}
+      <div style={{ position:'relative',zIndex:2,padding:'80px 72px 100px',maxWidth:860 }}>
+        <div style={{ display:'inline-flex',alignItems:'center',gap:12,marginBottom:44 }}>
+          <div style={{ width:28,height:1,background:T.rg }}/>
+          <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,letterSpacing:'0.24em',textTransform:'uppercase' }}>precision medicine · stockholm</span>
+        </div>
+        <h1 style={{ fontFamily:fonts.serif,fontSize:72,fontWeight:400,lineHeight:0.95,letterSpacing:'-0.02em',color:T.w7,marginBottom:28 }}>
+          Your body has<br/>been speaking.<br/>
+          <em style={{ fontStyle:'italic',background:`linear-gradient(118deg,${T.rg2} 0%,${T.rg} 22%,#ECC8B8 36%,${T.rg} 50%,${T.rg2} 72%,${T.rg3} 88%,${T.rg} 100%)`,backgroundSize:'220% auto',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',backgroundClip:'text',animation:'shimmer 5.5s linear infinite' }}>We translate it.</em>
+        </h1>
+        <p style={{ fontSize:16,fontWeight:300,color:T.w5,lineHeight:1.8,maxWidth:480,marginBottom:52,fontFamily:fonts.sans }}>A clinical intake built on proprietary immune reactivity data. Ten minutes. A 21-day anti-inflammatory protocol designed for your precise biology.</p>
+        <div style={{ display:'flex',gap:0,borderTop:`1px solid ${T.w3}`,borderBottom:`1px solid ${T.w3}`,marginBottom:52,width:'fit-content' }}>
+          {[['21','Day Protocol'],['10′','Intake Time'],['7','Patent Claims'],['4','Diagnostic Pillars']].map(([n,l],i,arr)=>(
+            <div key={l} style={{ padding:'18px 36px 16px 0',marginRight:36,borderRight:i<arr.length-1?`1px solid ${T.w3}`:'none' }}>
+              <div style={{ fontFamily:fonts.serif,fontSize:34,fontWeight:400,color:T.w7,letterSpacing:'-0.03em',lineHeight:1,marginBottom:5 }}>{n}</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>{l}</div>
+            </div>
+          ))}
+        </div>
+        <BtnPrimary onClick={()=>{setShowLanding(false);setShowOnboarding(true);}}>Begin Assessment</BtnPrimary>
+        <p style={{ marginTop:14,fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em' }}>~10 minutes · GDPR compliant · No credit card required</p>
+      </div>
+      <style>{`@keyframes ob1{0%,100%{transform:translate(0,0) scale(1) rotate(0deg)}25%{transform:translate(36px,-30px) scale(1.04) rotate(4deg)}50%{transform:translate(14px,38px) scale(.97) rotate(-3deg)}75%{transform:translate(-24px,12px) scale(1.02) rotate(6deg)}}@keyframes ob2{0%,100%{transform:translate(0,0) scale(1)}40%{transform:translate(-28px,22px) scale(.95)}70%{transform:translate(20px,-16px) scale(1.03)}}@keyframes ob3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(-18px,-24px) scale(1.07)}}@keyframes ca1{0%,100%{opacity:.38;transform:rotate(-6deg) scaleX(1)}50%{opacity:.08;transform:rotate(-3deg) scaleX(1.45)}}@keyframes ca2{0%,100%{opacity:.32;transform:rotate(9deg) scaleX(1)}50%{opacity:.06;transform:rotate(6deg) scaleX(.62)}}@keyframes shimmer{0%{background-position:0% center}100%{background-position:220% center}}`}</style>
+    </div>
+  );
+
+  // ── ONBOARDING ────────────────────────────────────────────────────────────────
+  if (showOnboarding) return (
+    <Onboarding onComplete={(data)=>{ setPatient(data); setShowOnboarding(false); setTab('monitor'); }}/>
+  );
+
+  // ── DASHBOARD ─────────────────────────────────────────────────────────────────
+  return (
+    <div style={{ minHeight:'100vh',background:T.w,color:T.w7,fontFamily:fonts.sans }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lato:wght@300;400;500&family=IBM+Plex+Mono:wght@300;400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:${T.w3};border-radius:2px}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
+      {popup && <SpikePopup/>}
+      <Nav onBabyBalans={()=>window.open('/pregnancy','_blank')}/>
+      {/* Tab bar */}
+      <div style={{ background:T.w,borderBottom:`1px solid ${T.w3}`,padding:'0 44px',display:'flex',gap:0,position:'sticky',top:58,zIndex:99,overflowX:'auto' }}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{ background:'none',border:'none',cursor:'pointer',padding:'14px 14px',fontSize:11,fontFamily:fonts.sans,color:tab===t.id?T.rg2:T.w4,borderBottom:`2px solid ${tab===t.id?T.rg:'transparent'}`,fontWeight:tab===t.id?500:400,whiteSpace:'nowrap',transition:'all .15s',letterSpacing:'-0.01em' }}>
+            {t.id==='monitor' && monActive && <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:T.err,marginRight:6,verticalAlign:'middle',boxShadow:`0 0 6px ${T.err}`,animation:'pulse 1.2s infinite' }}/>}
+            {t.label}
+          </button>
+        ))}
+        {/* Patient markers */}
+        {(patient.markers||[]).length > 0 && (
+          <div style={{ marginLeft:'auto',display:'flex',alignItems:'center',gap:8,paddingRight:8,flexShrink:0 }}>
+            {(patient.markers||[]).map(m=>{
+              const parts = m.toLowerCase().split(' ');
+              const isC = parts.includes('candida'), isW = parts.includes('whey');
+              const col = isC?'#906080':isW?'#5080A8':T.rg;
+              return <div key={m} style={{ background:T.w1,border:`1px solid ${col}30`,borderRadius:4,padding:'3px 9px',display:'flex',gap:5,alignItems:'center' }}>
+                <div style={{ width:4,height:4,borderRadius:'50%',background:col }}/>
+                <span style={{ fontSize:9,fontFamily:fonts.mono,color:col,letterSpacing:'0.1em' }}>{m}</span>
+              </div>;
+            })}
+          </div>
+        )}
+      </div>
+      {/* Content */}
+      <div style={{ maxWidth:900,margin:'0 auto',padding:'44px 44px 80px' }} onClick={()=>picker&&setPicker(null)}>
+        {/* Patient header — minimal */}
+        {patient.name && (
+          <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:32,paddingBottom:20,borderBottom:`1px solid ${T.w2}` }}>
+            <div>
+              <div style={{ fontFamily:fonts.serif,fontSize:20,color:T.w7,fontWeight:400,marginBottom:2 }}>{patient.name}</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:T.w4,letterSpacing:'0.18em',textTransform:'uppercase' }}>
+                {patient.hormonalStatus||patient.sex||''}{patient.dayInProtocol?` · Day ${patient.dayInProtocol} of protocol`:''}
+              </div>
+            </div>
+            <div style={{ display:'flex',gap:8 }}>
+              {[['Severe',(P.severe||[]).length,T.err],['Moderate',(P.moderate||[]).length,T.warn],['Mild',(P.mild||[]).length,T.w5]].filter(([,n])=>n>0).map(([l,n,c])=>(
+                <div key={l} style={{ textAlign:'center',padding:'6px 12px',background:T.w1,border:`1px solid ${T.w3}`,borderRadius:7 }}>
+                  <div style={{ fontFamily:fonts.serif,fontSize:18,color:c,fontWeight:400 }}>{n}</div>
+                  <div style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase' }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {tabContent()}
+      </div>
+      {/* Footer */}
+      <div style={{ borderTop:`1px solid ${T.w3}`,padding:'14px 44px',display:'flex',justifyContent:'space-between',alignItems:'center',background:T.w1 }}>
+        <div style={{ fontFamily:fonts.mono,fontSize:8,color:T.w4,letterSpacing:'0.12em' }}>
+          <span style={{ color:T.w6,fontWeight:500 }}>meet mario</span> · MediBalans AB · Karlavägen 89, Stockholm
+        </div>
+        <div style={{ display:'flex',gap:10,alignItems:'center' }}>
+          <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.rg2,border:`1px solid ${T.rg}25`,borderRadius:3,padding:'2px 8px',letterSpacing:'0.12em',background:T.rgBg }}>PATENT PENDING · SE 2615203-3</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:7.5,color:T.w4,letterSpacing:'0.1em' }}>AI-driven clinical decision support · Global Constraint Rule framework</span>
+        </div>
+      </div>
+    </div>
+  );
 }
