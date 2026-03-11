@@ -347,95 +347,46 @@ function Onboarding({ onComplete }) {
   const [labParsed, setLabParsed] = useState(false);
   const [labParseError, setLabParseError] = useState(false);
 
-  // Render PDF page to base64 image using PDF.js
-  const pdfPageToBase64 = async (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          // Load PDF.js dynamically
-          if (!window.pdfjsLib) {
-            await new Promise((res, rej) => {
-              const s = document.createElement('script');
-              s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
-              s.onload = res; s.onerror = rej;
-              document.head.appendChild(s);
-            });
-            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-          }
-          const typedArray = new Uint8Array(e.target.result);
-          const pdf = await window.pdfjsLib.getDocument({ data: typedArray }).promise;
-          const pages = [];
-          // Render up to 4 pages (ALCAT reports are usually 2-3 pages)
-          const numPages = Math.min(pdf.numPages, 4);
-          for (let i = 1; i <= numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 2.0 });
-            const canvas = document.createElement('canvas');
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-            pages.push(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
-          }
-          resolve(pages);
-        } catch(err) { reject(err); }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  };
-
   const parseLabFile = async (file, isAdditional = false) => {
     if (!file) return;
     setLabParsing(true); setLabParsed(false); setLabParseError(false);
     setLabFileName(file.name);
     const isPDF = file.type === 'application/pdf';
     const isImage = file.type.startsWith('image/');
+
     try {
-      let pages = []; // array of base64 strings
-      if (isPDF) {
-        try {
-          pages = await pdfPageToBase64(file);
-        } catch(pdfErr) {
-          console.error('PDF render error:', pdfErr);
-          // Fallback: ask user to screenshot
-          setLabParseError(true); setLabParsed(true); setLabParsing(false);
-          return;
-        }
-      } else if (isImage) {
-        const b64 = await new Promise(res => {
-          const r = new FileReader();
-          r.onload = e => res(e.target.result.split(',')[1]);
-          r.readAsDataURL(file);
-        });
-        pages = [b64];
-      }
+      // Read file as base64
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
 
-      // Build message content — send all pages as separate image blocks
-      const imageBlocks = pages.map(b64 => ({
-        type: 'image',
-        source: { type: 'base64', media_type: 'image/jpeg', data: b64 }
-      }));
+      // Build content — PDFs use document type (native Anthropic support), images use image type
+      const fileBlock = isPDF
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+        : { type: 'image', source: { type: 'base64', media_type: file.type || 'image/jpeg', data: base64 } };
+
       const content = [
-        ...imageBlocks,
-        { type: 'text', text: `These are pages from a medical lab test result — likely an ALCAT food immune reactivity report, CMA intracellular analysis, or blood work panel.
+        fileBlock,
+        { type: 'text', text: `This is a medical lab test result — an ALCAT food immune reactivity report, CMA intracellular analysis, or blood work panel.
 
-TASK: Scan ALL pages carefully. Find every food name, substance, or analyte with a reactivity class or level assigned.
+TASK: Find every food, substance, or analyte with a reactivity level assigned.
 
-ALCAT colour bands:
+ALCAT classification:
 - Red / Class 3-4 / SEVERE → "severe" array
 - Orange / Class 2 / MODERATE → "moderate" array
 - Yellow / Class 1 / MILD → "mild" array
-- Green / Class 0 / ACCEPTABLE → omit
+- Green / Class 0 / ACCEPTABLE → omit entirely
 
-CMA reports: put any "low" or "deficient" nutrient in "mild".
+CMA reports: "low" or "deficient" nutrients → "mild" array.
 
-Return ONLY valid JSON — no text before or after, no markdown fences:
+Return ONLY this JSON (no text before/after, no markdown):
 {"severe":["food1","food2"],"moderate":["food1"],"mild":["food1"]}
 
-Food names in lowercase English. Translate from Swedish if needed.
-If no reactive foods found: {"severe":[],"moderate":[],"mild":[]}` }
+Lowercase English food names. Translate Swedish to English.
+If nothing found: {"severe":[],"moderate":[],"mild":[]}` }
       ];
 
       const res = await fetch('/api/chat', {
@@ -443,9 +394,10 @@ If no reactive foods found: {"severe":[],"moderate":[],"mild":[]}` }
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 3000,
-          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else.',
-          messages: [{ role: 'user', content }]
+          max_tokens: 4000,
+          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
+          messages: [{ role: 'user', content }],
+          betas: ['pdfs-2024-09-25']
         }),
       });
       const d = await res.json();
@@ -475,9 +427,79 @@ If no reactive foods found: {"severe":[],"moderate":[],"mild":[]}` }
       }
       u('alcat_raw', text);
       setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-      if (newSevere.length === 0 && newModerate.length === 0 && newMild.length === 0) {
+
+      const hasResults = newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0;
+      if (!hasResults) {
         setLabParseError(true);
       }
+
+      // ── Save to Supabase alcat_results ──────────────────────────────────────
+      if (hasResults && authUser?.id) {
+        try {
+          // Detect report type from filename
+          const fn = file.name.toLowerCase();
+          const reportType = fn.includes('cna') || fn.includes('cma') ? 'CMA'
+            : fn.includes('alc') || fn.includes('alcat') ? 'ALCAT'
+            : 'LAB';
+
+          // Merge with any existing results if isAdditional
+          const finalSevere = isAdditional
+            ? [...new Set([...(data.alcat_severe||[]), ...newSevere])]
+            : newSevere;
+          const finalModerate = isAdditional
+            ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])]
+            : newModerate;
+          const finalMild = isAdditional
+            ? [...new Set([...(data.alcat_mild||[]), ...newMild])]
+            : newMild;
+
+          await supabase.from('alcat_results').upsert({
+            patient_id: authUser.id,
+            severe: finalSevere,
+            moderate: finalModerate,
+            mild: finalMild,
+            test_date: new Date().toISOString().split('T')[0],
+            lab_id: file.name,
+            raw_report_url: reportType,
+            created_at: new Date().toISOString(),
+          }, { onConflict: 'patient_id' });
+
+          // Also update onboarding_intake reactive lists
+          await supabase.from('onboarding_intake').upsert({
+            user_id: authUser.id,
+            alcat_severe: finalSevere,
+            alcat_moderate: finalModerate,
+            alcat_mild: finalMild,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' });
+
+          // And profiles.patient_data
+          const { data: profRow } = await supabase
+            .from('profiles')
+            .select('patient_data')
+            .eq('id', authUser.id)
+            .single();
+          if (profRow?.patient_data) {
+            const pd = typeof profRow.patient_data === 'string'
+              ? JSON.parse(profRow.patient_data) : profRow.patient_data;
+            pd.alcat_severe = finalSevere;
+            pd.alcat_moderate = finalModerate;
+            pd.alcat_mild = finalMild;
+            await supabase.from('profiles').upsert({
+              id: authUser.id,
+              patient_data: JSON.stringify(pd),
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'id' });
+          }
+
+          console.log('[Lab upload] Saved to DB:', reportType, finalSevere.length + finalModerate.length + finalMild.length, 'items');
+        } catch(dbErr) {
+          console.error('[Lab upload] DB save error:', dbErr);
+          // Non-fatal — user can still continue
+        }
+      }
+      // ───────────────────────────────────────────────────────────────────────
+
       setLabParsed(true);
     } catch(err) {
       console.error('Lab parse error:', err);
@@ -850,7 +872,15 @@ export default function MeetMario({ patient: patientProp }) {
   // Load profile from Supabase for a given user
   const loadProfile = async (user) => {
     if (!user) return null;
-    // 1. Try profiles.patient_data (most reliable — always written)
+    // 1. Check sessionStorage first (instant, no network, set on onboarding complete)
+    try {
+      const local = sessionStorage.getItem('mm_profile_' + user.id);
+      if (local) {
+        const pd = JSON.parse(local);
+        if (pd?.name) { console.log('Profile from sessionStorage'); return pd; }
+      }
+    } catch {}
+    // 2. Try profiles.patient_data
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -865,7 +895,7 @@ export default function MeetMario({ patient: patientProp }) {
       }
       if (!error && data?.full_name) return { name: data.full_name };
     } catch {}
-    // 2. Try onboarding_intake
+    // 3. Try onboarding_intake
     try {
       const { data, error } = await supabase
         .from('onboarding_intake')
@@ -2017,7 +2047,28 @@ export default function MeetMario({ patient: patientProp }) {
     <Onboarding onComplete={async (data)=>{
       setPatient(data);
       setShowOnboarding(false);
-      // Save profile to Supabase so returning users skip onboarding
+      // Save profile to Supabase + sessionStorage so returning users skip onboarding
+      const profilePayload = {
+        name: data.name,
+        dob: data.dob,
+        sex: data.sex,
+        hormonalStatus: data.hormonalStatus,
+        geographyOfOrigin: data.geographyOfOrigin,
+        yearsInCurrentCountry: data.yearsInCurrentCountry,
+        symptoms: data.symptoms,
+        tests: data.tests,
+        medications: data.medications,
+        supplements: data.supplements,
+        conditions: data.conditions,
+        goals: data.goals,
+        alcat_severe: data.alcat_severe || [],
+        alcat_moderate: data.alcat_moderate || [],
+        alcat_mild: data.alcat_mild || [],
+      };
+      // Immediate sessionStorage save — works regardless of Supabase RLS
+      if (authUser?.id) {
+        try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(profilePayload)); } catch {}
+      }
       if (authUser?.id) {
         // Try profiles table (always exists)
         try {
@@ -2025,23 +2076,7 @@ export default function MeetMario({ patient: patientProp }) {
             id: authUser.id,
             full_name: data.name,
             onboarding_complete: true,
-            patient_data: JSON.stringify({
-              name: data.name,
-              dob: data.dob,
-              sex: data.sex,
-              hormonalStatus: data.hormonalStatus,
-              geographyOfOrigin: data.geographyOfOrigin,
-              yearsInCurrentCountry: data.yearsInCurrentCountry,
-              symptoms: data.symptoms,
-              tests: data.tests,
-              medications: data.medications,
-              supplements: data.supplements,
-              conditions: data.conditions,
-              goals: data.goals,
-              alcat_severe: data.alcat_severe || [],
-              alcat_moderate: data.alcat_moderate || [],
-              alcat_mild: data.alcat_mild || [],
-            }),
+            patient_data: JSON.stringify(profilePayload),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
         } catch(e) { console.error('Profile save (profiles) error:', e); }
