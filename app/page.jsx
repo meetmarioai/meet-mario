@@ -892,6 +892,166 @@ export default function MeetMario({ patient: patientProp }) {
   const [medAnalysis, setMedAnalysis] = useState('');
   const [medLoad, setMedLoad] = useState(false);
 
+  // Lab uploads (dashboard)
+  const [dashLabFile, setDashLabFile] = useState(null);
+  const [dashLabParsing, setDashLabParsing] = useState(false);
+  const [dashLabError, setDashLabError] = useState(false);
+  const [dashLabSuccess, setDashLabSuccess] = useState(false);
+  const [dashLabFiles, setDashLabFiles] = useState([]);
+
+  const dashParseFile = async (file, isAdditional = false) => {
+    if (!file) return;
+    setDashLabParsing(true); setDashLabError(false); setDashLabSuccess(false);
+
+    const ext = (file.name || '').split('.').pop().toLowerCase();
+    const isPDF = file.type === 'application/pdf' || ext === 'pdf';
+    const isImage = file.type.startsWith('image/') || ['jpg','jpeg','png','gif','webp','heic','heif','bmp','tiff'].includes(ext);
+    const isVCF = ext === 'vcf' || ext === 'txt';
+    const isWord = ext === 'doc' || ext === 'docx';
+    const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+    try {
+      const base64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = e => res(e.target.result.split(',')[1]);
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+
+      // VCF / text files — send as text content
+      if (isVCF || isWord) {
+        const textContent = atob(base64);
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            max_tokens: 4000,
+            system: 'You extract structured data from medical lab results and genetic reports. Return only valid JSON.',
+            messages: [{ role: 'user', content: `This is a ${isVCF ? 'VCF (Variant Call Format) genetic data file' : 'Word document with lab results'}. Extract any relevant health data.\n\nFor genetic/VCF data, identify clinically relevant SNPs and return:\n{"snps":[{"rsid":"rs12345","gene":"MTHFR","genotype":"CT","impact":"description"}],"severe":[],"moderate":[],"mild":[]}\n\nFor lab results, extract reactive foods:\n{"severe":[],"moderate":[],"mild":[]}\n\nFile contents:\n${textContent.slice(0, 50000)}` }],
+          }),
+        });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+        let json = {};
+        try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch {}
+        if (json.snps?.length) {
+          setPatient(p => ({ ...p, genomicSnps: [...(p.genomicSnps || []), ...json.snps] }));
+        }
+        const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
+        if (json.severe?.length || json.moderate?.length || json.mild?.length) {
+          if (isAdditional) {
+            setPatient(p => ({
+              ...p,
+              severe: [...new Set([...(p.severe||[]), ...norm(json.severe)])],
+              moderate: [...new Set([...(p.moderate||[]), ...norm(json.moderate)])],
+              mild: [...new Set([...(p.mild||[]), ...norm(json.mild)])],
+              alcat_severe: [...new Set([...(p.alcat_severe||[]), ...norm(json.severe)])],
+              alcat_moderate: [...new Set([...(p.alcat_moderate||[]), ...norm(json.moderate)])],
+              alcat_mild: [...new Set([...(p.alcat_mild||[]), ...norm(json.mild)])],
+            }));
+          } else {
+            setPatient(p => ({
+              ...p,
+              severe: norm(json.severe), moderate: norm(json.moderate), mild: norm(json.mild),
+              alcat_severe: norm(json.severe), alcat_moderate: norm(json.moderate), alcat_mild: norm(json.mild),
+            }));
+          }
+        }
+        setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+        setDashLabSuccess(true);
+        setDashLabParsing(false);
+        return;
+      }
+
+      // PDF / Image — use document or image block
+      const fileBlock = isPDF
+        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+        : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          max_tokens: 4000,
+          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else.',
+          messages: [{ role: 'user', content: [
+            fileBlock,
+            { type: 'text', text: `This is a medical lab test result — an ALCAT food immune reactivity report, CMA/CNA intracellular analysis, or blood work panel.
+
+TASK: Find every food, substance, or analyte with a reactivity level assigned.
+
+ALCAT classification:
+- Red / Class 3-4 / SEVERE → "severe" array
+- Orange / Class 2 / MODERATE → "moderate" array
+- Yellow / Class 1 / MILD → "mild" array
+- Green / Class 0 / ACCEPTABLE → omit entirely
+
+CMA/CNA reports: any nutrient marked "low", "deficient", or below reference range → "mild" array.
+
+Return ONLY this JSON (no markdown): {"severe":[],"moderate":[],"mild":[]}
+Lowercase English names. Translate Swedish to English.` }
+          ] }],
+        }),
+      });
+
+      if (!res.ok) throw new Error('API returned ' + res.status);
+      const d = await res.json();
+      if (d.error) throw new Error(d.error);
+      const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+
+      let json = { severe: [], moderate: [], mild: [] };
+      try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); }
+      catch { const m = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/); if (m) try { json = JSON.parse(m[0]); } catch {} }
+
+      const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
+      const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
+
+      if (isAdditional) {
+        setPatient(p => ({
+          ...p,
+          severe: [...new Set([...(p.severe||[]), ...newS])],
+          moderate: [...new Set([...(p.moderate||[]), ...newM])],
+          mild: [...new Set([...(p.mild||[]), ...newMi])],
+          alcat_severe: [...new Set([...(p.alcat_severe||[]), ...newS])],
+          alcat_moderate: [...new Set([...(p.alcat_moderate||[]), ...newM])],
+          alcat_mild: [...new Set([...(p.alcat_mild||[]), ...newMi])],
+        }));
+      } else {
+        setPatient(p => ({
+          ...p,
+          severe: newS, moderate: newM, mild: newMi,
+          alcat_severe: newS, alcat_moderate: newM, alcat_mild: newMi,
+        }));
+      }
+
+      setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+      const hasResults = newS.length > 0 || newM.length > 0 || newMi.length > 0;
+      if (!hasResults) { setDashLabError('0 foods extracted — try a clearer file or different page'); }
+      else {
+        setDashLabSuccess(true);
+        // Save to Supabase
+        if (authUser?.id) {
+          try {
+            const p = patient;
+            const finalS = isAdditional ? [...new Set([...(p.severe||[]), ...newS])] : newS;
+            const finalM = isAdditional ? [...new Set([...(p.moderate||[]), ...newM])] : newM;
+            const finalMi = isAdditional ? [...new Set([...(p.mild||[]), ...newMi])] : newMi;
+            await supabase.from('alcat_results').upsert({
+              patient_id: authUser.id, severe: finalS, moderate: finalM, mild: finalMi,
+              test_date: new Date().toISOString().split('T')[0], lab_id: file.name,
+              created_at: new Date().toISOString(),
+            }, { onConflict: 'patient_id' });
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.error('[Lab upload]', err);
+      setDashLabError(err.message || 'Upload failed');
+    }
+    setDashLabParsing(false);
+  };
+
   const monIntervalRef = useRef(null);
 
   // Load profile from Supabase for a given user
@@ -1257,6 +1417,7 @@ export default function MeetMario({ patient: patientProp }) {
     { id:'gut',      label:'GutCheck' },
     { id:'plate',    label:'PlateCheck' },
     { id:'meds',     label:'Medications' },
+    { id:'labs',     label:'Lab Results' },
   ];
 
   const P = patient;
@@ -2083,6 +2244,118 @@ export default function MeetMario({ patient: patientProp }) {
                 </div>
                 <div style={{ fontFamily:fonts.mono,fontSize:8.5,color:api.color,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:4 }}>{api.status}</div>
                 <div style={{ fontSize:10.5,color:T.w4,fontFamily:fonts.sans,fontWeight:300 }}>{api.note}</div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+    );
+
+    // ── LAB RESULTS ──
+    if (tab === 'labs') return (
+      <div>
+        <Eyebrow>Upload & manage lab data</Eyebrow>
+        <SectionTitle>Lab<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Results</em></SectionTitle>
+
+        {/* Current results summary */}
+        {(P.severe?.length > 0 || P.moderate?.length > 0 || P.mild?.length > 0) && (
+          <Panel>
+            <FieldLabel>Current ALCAT results loaded</FieldLabel>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:8 }}>
+              {[['Severe', P.severe, T.err], ['Moderate', P.moderate, T.warn], ['Mild', P.mild, T.w5]].map(([label, items, color]) => (
+                <div key={label}>
+                  <div style={{ fontFamily:fonts.mono, fontSize:8, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:4 }}>{label} · {(items||[]).length}</div>
+                  {(items||[]).slice(0, 6).map(f => <div key={f} style={{ fontSize:11, color:T.w6, fontFamily:fonts.sans, padding:'1px 0' }}>{f}</div>)}
+                  {(items||[]).length > 6 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4 }}>+{items.length - 6} more</div>}
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {/* Upload area */}
+        <Panel>
+          <FieldLabel>Upload new results</FieldLabel>
+          <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:16, lineHeight:1.6 }}>
+            PDF, photo, or screenshot of your ALCAT / CMA / CNA report. VCF genetic data files also accepted.
+          </div>
+
+          <div style={{ border:`2px dashed ${dashLabSuccess ? T.ok : dashLabError ? T.warn : T.w3}`, borderRadius:12, padding:'28px 20px', textAlign:'center', background:dashLabSuccess ? `${T.ok}08` : T.w1, transition:'all 0.3s', marginBottom:16 }}>
+            {dashLabParsing ? (
+              <div>
+                <div style={{ display:'flex', gap:8, justifyContent:'center', marginBottom:12 }}>
+                  {[0,1,2].map(i => <div key={i} style={{ width:8, height:8, borderRadius:'50%', background:T.rg, animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+                </div>
+                <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.12em' }}>ANALYSING YOUR RESULTS...</div>
+              </div>
+            ) : dashLabSuccess ? (
+              <div>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:8 }}>
+                  RESULTS UPDATED — {(P.severe||[]).length + (P.moderate||[]).length + (P.mild||[]).length} items loaded
+                </div>
+                {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4 }}>{fn}</div>)}
+              </div>
+            ) : (
+              <div>
+                <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w6, marginBottom:6 }}>Drop your lab results here</div>
+                <div style={{ fontFamily:fonts.sans, fontSize:11, color:T.w4, marginBottom:14 }}>ALCAT PDF · CMA/CNA report · Lab photo · VCF genetic data</div>
+              </div>
+            )}
+
+            {dashLabError && (
+              <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.warn, marginTop:8 }}>{typeof dashLabError === 'string' ? dashLabError : 'Could not extract results'}</div>
+            )}
+
+            <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:12, flexWrap:'wrap' }}>
+              <label style={{ cursor:'pointer' }}>
+                <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx" style={{ display:'none' }}
+                  onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, false); } }}/>
+                <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600 }}>
+                  {dashLabSuccess ? 'Replace results' : 'Choose file'}
+                </div>
+              </label>
+              {dashLabSuccess && (
+                <label style={{ cursor:'pointer' }}>
+                  <input type="file" accept="application/pdf,image/*,.vcf,.txt,.doc,.docx" style={{ display:'none' }}
+                    onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, true); } }}/>
+                  <div style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg, borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600 }}>
+                    + Add another file
+                  </div>
+                </label>
+              )}
+            </div>
+          </div>
+        </Panel>
+
+        {/* Genomic data display */}
+        {P.genomicSnps?.length > 0 && (
+          <Panel>
+            <FieldLabel>Genomic variants (from VCF)</FieldLabel>
+            {P.genomicSnps.map((snp, i) => (
+              <div key={i} style={{ display:'flex', gap:12, padding:'6px 0', borderBottom:`1px solid ${T.w2}`, fontSize:12, fontFamily:fonts.sans }}>
+                <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.rg2, minWidth:80 }}>{snp.rsid}</span>
+                <span style={{ color:T.w5, minWidth:60 }}>{snp.gene}</span>
+                <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w6 }}>{snp.genotype}</span>
+                <span style={{ color:T.w4, fontSize:11, flex:1 }}>{snp.impact}</span>
+              </div>
+            ))}
+          </Panel>
+        )}
+
+        {/* File type guide */}
+        <Panel>
+          <FieldLabel>Supported file types</FieldLabel>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            {[
+              { type:'ALCAT / CMA / CNA', formats:'PDF, photo, screenshot', desc:'Food reactivity & nutrient analysis' },
+              { type:'Blood work', formats:'PDF, photo', desc:'Standard blood panels, thyroid, hormones' },
+              { type:'VCF genetic data', formats:'.vcf, .txt', desc:'23andMe, AncestryDNA, Dante Labs exports' },
+              { type:'Clinical reports', formats:'.doc, .docx, PDF', desc:'Doctor\'s notes, specialist reports' },
+            ].map(ft => (
+              <div key={ft.type} style={{ background:T.w, border:`1px solid ${T.w3}`, borderRadius:8, padding:12 }}>
+                <div style={{ fontFamily:fonts.mono, fontSize:8.5, color:T.rg2, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:4 }}>{ft.type}</div>
+                <div style={{ fontSize:11, color:T.w6, fontFamily:fonts.sans, marginBottom:2 }}>{ft.formats}</div>
+                <div style={{ fontSize:10, color:T.w4, fontFamily:fonts.sans, fontWeight:300 }}>{ft.desc}</div>
               </div>
             ))}
           </div>
