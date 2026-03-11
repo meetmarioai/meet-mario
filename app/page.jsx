@@ -347,87 +347,146 @@ function Onboarding({ onComplete }) {
   const [labParsed, setLabParsed] = useState(false);
   const [labParseError, setLabParseError] = useState(false);
 
+  // Render PDF page to base64 image using PDF.js
+  const pdfPageToBase64 = async (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          // Load PDF.js dynamically
+          if (!window.pdfjsLib) {
+            await new Promise((res, rej) => {
+              const s = document.createElement('script');
+              s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+              s.onload = res; s.onerror = rej;
+              document.head.appendChild(s);
+            });
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+              'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          }
+          const typedArray = new Uint8Array(e.target.result);
+          const pdf = await window.pdfjsLib.getDocument({ data: typedArray }).promise;
+          const pages = [];
+          // Render up to 4 pages (ALCAT reports are usually 2-3 pages)
+          const numPages = Math.min(pdf.numPages, 4);
+          for (let i = 1; i <= numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+            pages.push(canvas.toDataURL('image/jpeg', 0.92).split(',')[1]);
+          }
+          resolve(pages);
+        } catch(err) { reject(err); }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
   const parseLabFile = async (file, isAdditional = false) => {
     if (!file) return;
     setLabParsing(true); setLabParsed(false); setLabParseError(false);
     setLabFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target.result.split(',')[1];
-      const mediaType = file.type.startsWith('image/') ? file.type : 'image/jpeg';
-      const isImage = file.type.startsWith('image/');
-      try {
-        const content = isImage
-          ? [{ type:'image', source:{ type:'base64', media_type:mediaType, data:base64 }},
-             { type:'text', text:`This is a medical lab test result image — likely an ALCAT food intolerance / immune reactivity report, or a CMA intracellular analysis, or blood work.
-
-TASK: Scan the entire image carefully. Find ALL food names, substances, or analytes that have a reactivity class or level assigned to them.
-
-ALCAT reports use colour bands or class labels:
-- Red / Class 3-4 / SEVERE = goes in "severe" array
-- Orange / Class 2 / MODERATE = goes in "moderate" array  
-- Yellow / Class 1 / MILD = goes in "mild" array
-- Green / Class 0 / ACCEPTABLE = ignore
-
-CMA reports list nutrients with levels — put any "deficient" or "low" items in "mild".
-
-Return ONLY this JSON, no other text, no markdown:
-{"severe":["food name","food name"],"moderate":["food name"],"mild":["food name"]}
-
-Food names should be lowercase English. If the report is in Swedish, translate to English.
-If you cannot find any reactive foods, return: {"severe":[],"moderate":[],"mild":[]}` }]
-          : [{ type:'text', text:'Extract all reactive foods from this ALCAT/CMA lab result text. Return ONLY JSON: {"severe":[],"moderate":[],"mild":[]}' }];
-
-        const res = await fetch('/api/chat', {
-          method:'POST',
-          headers:{ 'Content-Type':'application/json' },
-          body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:3000, system:'You are a medical data extraction assistant. You read lab results and extract structured data. Always return valid JSON only — no markdown, no explanation.', messages:[{ role:'user', content }] }),
-        });
-        const d = await res.json();
-        const text = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-
-        // Robust JSON extraction
-        let json = { severe:[], moderate:[], mild:[] };
+    const isPDF = file.type === 'application/pdf';
+    const isImage = file.type.startsWith('image/');
+    try {
+      let pages = []; // array of base64 strings
+      if (isPDF) {
         try {
-          json = JSON.parse(text.replace(/```json|```/g,'').trim());
-        } catch {
-          const match = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/);
-          if (match) { try { json = JSON.parse(match[0]); } catch {} }
+          pages = await pdfPageToBase64(file);
+        } catch(pdfErr) {
+          console.error('PDF render error:', pdfErr);
+          // Fallback: ask user to screenshot
+          setLabParseError(true); setLabParsed(true); setLabParsing(false);
+          return;
         }
-
-        const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
-        const newSevere = norm(json.severe);
-        const newModerate = norm(json.moderate);
-        const newMild = norm(json.mild);
-
-        if (isAdditional) {
-          // Merge with existing results (for second file upload e.g. CMA after ALCAT)
-          u('alcat_severe', [...new Set([...(data.alcat_severe||[]), ...newSevere])]);
-          u('alcat_moderate', [...new Set([...(data.alcat_moderate||[]), ...newModerate])]);
-          u('alcat_mild', [...new Set([...(data.alcat_mild||[]), ...newMild])]);
-        } else {
-          u('alcat_severe', newSevere);
-          u('alcat_moderate', newModerate);
-          u('alcat_mild', newMild);
-        }
-        u('alcat_raw', text);
-
-        // Track uploaded files
-        setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-
-        if (newSevere.length === 0 && newModerate.length === 0 && newMild.length === 0) {
-          setLabParseError(true);
-        }
-        setLabParsed(true);
-      } catch(err) {
-        console.error('Lab parse error:', err);
-        setLabParseError(true);
-        setLabParsed(true);
+      } else if (isImage) {
+        const b64 = await new Promise(res => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result.split(',')[1]);
+          r.readAsDataURL(file);
+        });
+        pages = [b64];
       }
-      setLabParsing(false);
-    };
-    reader.readAsDataURL(file);
+
+      // Build message content — send all pages as separate image blocks
+      const imageBlocks = pages.map(b64 => ({
+        type: 'image',
+        source: { type: 'base64', media_type: 'image/jpeg', data: b64 }
+      }));
+      const content = [
+        ...imageBlocks,
+        { type: 'text', text: `These are pages from a medical lab test result — likely an ALCAT food immune reactivity report, CMA intracellular analysis, or blood work panel.
+
+TASK: Scan ALL pages carefully. Find every food name, substance, or analyte with a reactivity class or level assigned.
+
+ALCAT colour bands:
+- Red / Class 3-4 / SEVERE → "severe" array
+- Orange / Class 2 / MODERATE → "moderate" array
+- Yellow / Class 1 / MILD → "mild" array
+- Green / Class 0 / ACCEPTABLE → omit
+
+CMA reports: put any "low" or "deficient" nutrient in "mild".
+
+Return ONLY valid JSON — no text before or after, no markdown fences:
+{"severe":["food1","food2"],"moderate":["food1"],"mild":["food1"]}
+
+Food names in lowercase English. Translate from Swedish if needed.
+If no reactive foods found: {"severe":[],"moderate":[],"mild":[]}` }
+      ];
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 3000,
+          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else.',
+          messages: [{ role: 'user', content }]
+        }),
+      });
+      const d = await res.json();
+      const text = (d.content||[]).filter(b => b.type === 'text').map(b => b.text).join('');
+
+      let json = { severe:[], moderate:[], mild:[] };
+      try {
+        json = JSON.parse(text.replace(/```json|```/g,'').trim());
+      } catch {
+        const match = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/);
+        if (match) { try { json = JSON.parse(match[0]); } catch {} }
+      }
+
+      const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
+      const newSevere = norm(json.severe);
+      const newModerate = norm(json.moderate);
+      const newMild = norm(json.mild);
+
+      if (isAdditional) {
+        u('alcat_severe', [...new Set([...(data.alcat_severe||[]), ...newSevere])]);
+        u('alcat_moderate', [...new Set([...(data.alcat_moderate||[]), ...newModerate])]);
+        u('alcat_mild', [...new Set([...(data.alcat_mild||[]), ...newMild])]);
+      } else {
+        u('alcat_severe', newSevere);
+        u('alcat_moderate', newModerate);
+        u('alcat_mild', newMild);
+      }
+      u('alcat_raw', text);
+      setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+      if (newSevere.length === 0 && newModerate.length === 0 && newMild.length === 0) {
+        setLabParseError(true);
+      }
+      setLabParsed(true);
+    } catch(err) {
+      console.error('Lab parse error:', err);
+      setLabParseError(true);
+      setLabParsed(true);
+    }
+    setLabParsing(false);
   };
+
   const u = (k, v) => setData(p => ({ ...p, [k]:v }));
   const toggle = (k, v) => setData(p => ({ ...p, [k]: p[k].includes(v) ? p[k].filter(x => x !== v) : [...p[k], v] }));
 
@@ -791,6 +850,22 @@ export default function MeetMario({ patient: patientProp }) {
   // Load profile from Supabase for a given user
   const loadProfile = async (user) => {
     if (!user) return null;
+    // 1. Try profiles.patient_data (most reliable — always written)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name, patient_data, onboarding_complete')
+        .eq('id', user.id)
+        .single();
+      if (!error && data?.onboarding_complete && data?.patient_data) {
+        const pd = typeof data.patient_data === 'string'
+          ? JSON.parse(data.patient_data)
+          : data.patient_data;
+        if (pd?.name) return pd;
+      }
+      if (!error && data?.full_name) return { name: data.full_name };
+    } catch {}
+    // 2. Try onboarding_intake
     try {
       const { data, error } = await supabase
         .from('onboarding_intake')
@@ -800,15 +875,6 @@ export default function MeetMario({ patient: patientProp }) {
         .limit(1)
         .single();
       if (!error && data?.name) return data;
-    } catch {}
-    // Fallback: try profiles table
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      if (!error && data?.full_name) return { name: data.full_name, ...data };
     } catch {}
     return null;
   };
@@ -1953,6 +2019,33 @@ export default function MeetMario({ patient: patientProp }) {
       setShowOnboarding(false);
       // Save profile to Supabase so returning users skip onboarding
       if (authUser?.id) {
+        // Try profiles table (always exists)
+        try {
+          await supabase.from('profiles').upsert({
+            id: authUser.id,
+            full_name: data.name,
+            onboarding_complete: true,
+            patient_data: JSON.stringify({
+              name: data.name,
+              dob: data.dob,
+              sex: data.sex,
+              hormonalStatus: data.hormonalStatus,
+              geographyOfOrigin: data.geographyOfOrigin,
+              yearsInCurrentCountry: data.yearsInCurrentCountry,
+              symptoms: data.symptoms,
+              tests: data.tests,
+              medications: data.medications,
+              supplements: data.supplements,
+              conditions: data.conditions,
+              goals: data.goals,
+              alcat_severe: data.alcat_severe || [],
+              alcat_moderate: data.alcat_moderate || [],
+              alcat_mild: data.alcat_mild || [],
+            }),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+        } catch(e) { console.error('Profile save (profiles) error:', e); }
+        // Also try onboarding_intake
         try {
           await supabase.from('onboarding_intake').upsert({
             user_id: authUser.id,
@@ -1962,18 +2055,18 @@ export default function MeetMario({ patient: patientProp }) {
             hormonal_status: data.hormonalStatus,
             geography_of_origin: data.geographyOfOrigin,
             years_in_current_country: data.yearsInCurrentCountry,
-            symptoms: data.symptoms,
-            tests: data.tests,
-            medications: data.medications,
-            supplements: data.supplements,
-            conditions: data.conditions,
-            goals: data.goals,
+            symptoms: data.symptoms || [],
+            tests: data.tests || [],
+            medications: data.medications || '',
+            supplements: data.supplements || '',
+            conditions: data.conditions || '',
+            goals: data.goals || [],
             alcat_severe: data.alcat_severe || [],
             alcat_moderate: data.alcat_moderate || [],
             alcat_mild: data.alcat_mild || [],
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
-        } catch(e) { console.error('Profile save error:', e); }
+        } catch(e) { console.error('Profile save (intake) error:', e); }
       }
       let score = 20;
       if (data.symptoms?.length >= 5) score += 25;
