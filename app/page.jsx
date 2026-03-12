@@ -1076,7 +1076,9 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
     const isImage = mimeType.startsWith('image/') || imageExts.includes(ext)
       // Android camera fallback: empty MIME, no known non-image extension → treat as image
       || (mimeType === '' && !['pdf','vcf','txt','doc','docx','zip','csv','tsv'].includes(ext) && file.size > 1024);
-    const isVCF = ext === 'vcf' || ext === 'txt';
+    // .vcf, .vcf.gz (check second-to-last extension too), .txt
+    const rawNameLower = rawName.toLowerCase();
+    const isVCF = ext === 'vcf' || ext === 'txt' || rawNameLower.endsWith('.vcf.gz') || rawNameLower.endsWith('.vcf.bgz');
     const isWord = ext === 'doc' || ext === 'docx';
     const isZip = ext === 'zip' || mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed';
     const imageMediaType = mimeType.startsWith('image/') ? mimeType : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
@@ -2924,27 +2926,38 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             These uploaded results inform your personalised protocol, meal design, and supplement recommendations.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            {[
-              { name:'ALCAT food reactivity', active: (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0, detail: `${(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)} reactive foods identified` },
-              { name:'CMA/CNA micronutrients', active: (P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0, detail: `${(P.cmaAllNutrients||[]).length} nutrients tested` },
-              { name:'REDOX / Spectrox', active: P.redoxScore != null, detail: P.redoxScore != null ? `Score: ${P.redoxScore}/100` : null },
-              { name:'Antioxidant panel', active: (P.cmaAntioxidants||[]).length > 0, detail: `${(P.cmaAntioxidants||[]).length} markers` },
-              { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0, detail: `${(P.genomicSnps||[]).length} SNPs analysed` },
-              { name:'Blood work / Other labs', active: P.customLabs?.length > 0, detail: P.customLabs?.length ? `${P.customLabs.length} reports` : null },
-            ].map(t => (
-              <div key={t.name} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: t.active ? `${T.ok}08` : T.w1, border:`1px solid ${t.active ? T.ok+'30' : T.w3}`, borderRadius:8 }}>
-                <div style={{ width:22, height:22, borderRadius:'50%', background: t.active ? T.ok : T.w3, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-                  {t.active
-                    ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                    : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 3V9M3 6H9" stroke={T.w5} strokeWidth="1.2" strokeLinecap="round"/></svg>}
-                </div>
-                <div>
-                  <div style={{ fontFamily:fonts.sans, fontSize:12, color: t.active ? T.w7 : T.w4, fontWeight: t.active ? 500 : 400 }}>{t.name}</div>
-                  {t.active && t.detail && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.06em', marginTop:1 }}>{t.detail}</div>}
-                  {!t.active && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.06em', marginTop:1 }}>Not uploaded</div>}
-                </div>
-              </div>
-            ))}
+            {(() => {
+              // Detect files on record by name pattern for "uploaded but not parsed" state
+              const hasFile = (patterns) => uploadedLabFiles.some(f => patterns.some(p => f.name.toLowerCase().includes(p)));
+              const tiles = [
+                { name:'ALCAT food reactivity',  active: (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0, filePresent: hasFile(['alc','alcat']),         detail: `${(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)} reactive foods identified` },
+                { name:'CMA/CNA micronutrients', active: (P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0,         filePresent: hasFile(['cma','cna']),           detail: `${(P.cmaAllNutrients||[]).length} nutrients tested` },
+                { name:'REDOX / Spectrox',       active: P.redoxScore != null,                                                   filePresent: hasFile(['redox','spectrox']),    detail: P.redoxScore != null ? `Score: ${P.redoxScore}/100` : null },
+                { name:'Antioxidant panel',      active: (P.cmaAntioxidants||[]).length > 0,                                     filePresent: hasFile(['antioxidant']),         detail: `${(P.cmaAntioxidants||[]).length} markers` },
+                { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0,                                         filePresent: hasFile(['.vcf','.txt','.gz']),   detail: `${(P.genomicSnps||[]).length} SNPs analysed` },
+                { name:'Blood work / Other labs',active: P.customLabs?.length > 0,                                               filePresent: hasFile(['blood','lab','result']),detail: P.customLabs?.length ? `${P.customLabs.length} reports` : null },
+              ];
+              return tiles.map(t => {
+                const timeout = !t.active && t.filePresent; // file stored but parse failed/timed out
+                return (
+                  <div key={t.name} onClick={() => !t.active && labFileRef.current?.click()} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: t.active ? `${T.ok}08` : timeout ? `${T.warn}08` : T.w1, border:`1px solid ${t.active ? T.ok+'30' : timeout ? T.warn+'50' : T.w3}`, borderRadius:8, cursor: t.active ? 'default' : 'pointer' }}>
+                    <div style={{ width:22, height:22, borderRadius:'50%', background: t.active ? T.ok : timeout ? T.warn : T.w3, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      {t.active
+                        ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        : timeout
+                          ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v4l2.5 2.5" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/><circle cx="6" cy="6" r="4.5" stroke="#fff" strokeWidth="1.2" fill="none"/></svg>
+                          : <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 3V9M3 6H9" stroke={T.w5} strokeWidth="1.2" strokeLinecap="round"/></svg>}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontFamily:fonts.sans, fontSize:12, color: t.active ? T.w7 : timeout ? T.warn : T.w4, fontWeight: t.active ? 500 : 400 }}>{t.name}</div>
+                      {t.active && t.detail && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.06em', marginTop:1 }}>{t.detail}</div>}
+                      {timeout && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.warn, letterSpacing:'0.06em', marginTop:1 }}>Parse timeout · tap to retry</div>}
+                      {!t.active && !timeout && <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.06em', marginTop:1 }}>Tap to upload</div>}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
           {((P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)+(P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0)+(P.genomicSnps?.length||0)) === 0 && (
             <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.warn, marginTop:14, padding:'10px 14px', background:`${T.warn}08`, borderRadius:8, lineHeight:1.5 }}>
