@@ -517,7 +517,8 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       }
 
       // ── Save to Supabase alcat_results ──────────────────────────────────────
-      if (hasResults && authUser?.id) {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (hasResults && currentUser?.id) {
         try {
           // Detect report type from filename
           const fn = file.name.toLowerCase();
@@ -537,7 +538,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             : newMild;
 
           await supabase.from('alcat_results').upsert({
-            patient_id: authUser.id,
+            patient_id: currentUser.id,
             severe: finalSevere,
             moderate: finalModerate,
             mild: finalMild,
@@ -549,7 +550,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
           // Also update onboarding_intake reactive lists
           await supabase.from('onboarding_intake').upsert({
-            user_id: authUser.id,
+            user_id: currentUser.id,
             alcat_severe: finalSevere,
             alcat_moderate: finalModerate,
             alcat_mild: finalMild,
@@ -560,7 +561,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           const { data: profRow } = await supabase
             .from('profiles')
             .select('patient_data')
-            .eq('id', authUser.id)
+            .eq('id', currentUser.id)
             .single();
           if (profRow?.patient_data) {
             const pd = typeof profRow.patient_data === 'string'
@@ -569,7 +570,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             pd.alcat_moderate = finalModerate;
             pd.alcat_mild = finalMild;
             await supabase.from('profiles').upsert({
-              id: authUser.id,
+              id: currentUser.id,
               patient_data: JSON.stringify(pd),
               updated_at: new Date().toISOString(),
             }, { onConflict: 'id' });
