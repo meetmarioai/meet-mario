@@ -1,0 +1,8 @@
+{
+  "kty": "RSA",
+  "n": "ojxRyS88VCDDB5brzobGS3yCdaIqmjFK1Q1diZis3xzN_omtBTNIEW1OUVV8qNP5njLHajNetdkMr9rcn24ETy6Uv8XahCyGdeldlIB6Lx-_liUrLGrPUgknR0LWEacWzL_NQutS-WmcburgROq4LQwJ_nqpByZUSt3UOmsPuVktvpNBIAx7cWEIr3PBsrmkyKfLeUpxMRY9nTNnFtyApt2W0wNN11AxQktsoU-SuM6LA9MoQxNdBPvHL6D3GAs6tuyvYsM09g5qIGvpygp2WBfG3B_99bB5IsLJpggPJKjXarUWlLcwvA4xlHTQqNn_nOOh33fmiLlgp1L5vreIzQ",
+  "e": "AQAB",
+  "use": "sig",
+  "alg": "RS256",
+  "kid": "meetmario-1"
+}

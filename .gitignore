@@ -39,6 +39,10 @@ out/
 # Patch scripts
 patch_*.py
 
+# Private keys
+*.pem
+dante_private.pem
+
 # Build artifacts
 app.zip
 

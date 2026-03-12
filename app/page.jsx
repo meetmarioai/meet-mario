@@ -405,6 +405,8 @@ function Onboarding({ onComplete, onPatientUpdate }) {
   const [labParsing, setLabParsing] = useState(false);
   const [labParsed, setLabParsed] = useState(false);
   const [labParseError, setLabParseError] = useState(false);
+  const [lastFileType, setLastFileType] = useState('alcat'); // alcat | micronutrient | genomic | redox
+  const [lastRedoxScore, setLastRedoxScore] = useState(null);
 
   const parseLabFile = async (file, isAdditional = false) => {
     if (!file) return;
@@ -418,7 +420,16 @@ function Onboarding({ onComplete, onPatientUpdate }) {
     const imageMediaType = file.type.startsWith('image/') ? file.type : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
     const isVCF = ext === 'vcf';
-    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| size:', (file.size/1024).toFixed(0)+'KB');
+
+    // Detect report type from filename
+    const fn2 = file.name.toLowerCase();
+    const detectedType = isVCF ? 'genomic'
+      : (fn2.includes('cma') || fn2.includes('cna')) ? 'micronutrient'
+      : (fn2.includes('redox') || fn2.includes('antioxidant') || fn2.includes('spectrox')) ? 'redox'
+      : 'alcat';
+    setLastFileType(detectedType);
+
+    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| detectedType:', detectedType, '| size:', (file.size/1024).toFixed(0)+'KB');
 
     // ── VCF (Variant Call Format) — plain text, send as text block ────────────
     if (isVCF) {
@@ -539,6 +550,11 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const newSevere = norm(json.severe);
       const newModerate = norm(json.moderate);
       const newMild = norm(json.mild);
+
+      // Extract redox score if this is a REDOX report
+      if (detectedType === 'redox' && json.redox_score != null) {
+        setLastRedoxScore(Number(json.redox_score));
+      }
 
       if (isAdditional) {
         u('alcat_severe', [...new Set([...(data.alcat_severe||[]), ...newSevere])]);
@@ -717,23 +733,28 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           <div style={{ border:`2px dashed ${labParsed?T.ok:T.w3}`, borderRadius:12, padding:'32px 24px', textAlign:'center', background:labParsed?`${T.ok}08`:T.w1, transition:'all 0.3s', marginBottom:20 }}>
             {!labParsed && !labParsing && (
               <>
-                <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w6, marginBottom:8 }}>Drop your ALCAT results here</div>
-                <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:20 }}>Photo of your results, PDF, or screenshot — Mario reads it automatically</div>
+                <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w6, marginBottom:8 }}>Upload your lab results</div>
+                <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:20 }}>ALCAT · CMA · REDOX · VCF — Mario identifies the report type automatically</div>
                 <label style={{ cursor:'pointer' }}>
-                  <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                  <input type="file" accept="image/*,application/pdf,.vcf,text/plain" style={{ display:'none' }}
                     onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f); } }}/>
                   <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'11px 28px', display:'inline-block', fontFamily:fonts.sans, fontSize:13, fontWeight:700 }}>
                     Choose file
                   </div>
                 </label>
                 <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:12, letterSpacing:'0.1em' }}>
-                  ALCAT · CMA · BLOOD WORK · ANY FORMAT
+                  PDF · IMAGE · VCF · ANY FORMAT
                 </div>
               </>
             )}
             {labParsing && (
               <div>
-                <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w6, marginBottom:16 }}>Reading your results...</div>
+                <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w6, marginBottom:8 }}>
+                  {lastFileType === 'genomic' ? 'Matching variants to clinical index...'
+                    : lastFileType === 'micronutrient' ? 'Reading intracellular nutrients...'
+                    : lastFileType === 'redox' ? 'Calculating antioxidant capacity...'
+                    : 'Reading your results...'}
+                </div>
                 <div style={{ display:'flex', gap:6, justifyContent:'center' }}>
                   {[0,1,2].map(i=><div key={i} style={{ width:7,height:7,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
                 </div>
@@ -755,25 +776,81 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
                 {labParseError ? (
                   <div style={{ padding:'12px 16px', background:`${T.warn}15`, border:`1px solid ${T.warn}40`, borderRadius:8, marginBottom:14 }}>
-                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ REACTIVE FOODS</div>
-                    <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5 }}>Mario couldn't extract the food list from this file. Try a clearer photo, or upload the other page of the report. You can also skip and add results manually in the Protocol tab.</div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.warn, letterSpacing:'0.12em', marginBottom:6 }}>COULD NOT READ FILE</div>
+                    <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5 }}>Mario couldn't extract data from this file. Try a clearer photo or a different page of the report. You can also skip and upload later from your dashboard.</div>
                     {typeof labParseError === 'string' && labParseError !== 'true' && (
                       <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:6 }}>{labParseError}</div>
                     )}
                   </div>
+                ) : lastFileType === 'micronutrient' ? (
+                  <>
+                    <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
+                      EXTRACTED — {(data.alcat_severe||[]).length + (data.alcat_moderate||[]).length + (data.alcat_mild||[]).length} nutrients analysed
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
+                      {[['Deficient', data.alcat_severe, T.err], ['Borderline', data.alcat_moderate, T.warn], ['Adequate', data.alcat_mild, T.ok]].map(([label, items, color]) => (
+                        <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
+                          <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {(items||[]).length}</div>
+                          {(items||[]).slice(0,6).map(f => (
+                            <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
+                          ))}
+                          {(items||[]).length > 6 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(items||[]).length-6} more</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : lastFileType === 'genomic' ? (
+                  <>
+                    <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
+                      EXTRACTED — {(data.alcat_severe||[]).length + (data.alcat_moderate||[]).length + (data.alcat_mild||[]).length} variants matched to clinical SNP index
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
+                      {[['Pathogenic', data.alcat_severe, T.err], ['Uncertain significance', data.alcat_moderate, T.warn]].map(([label, items, color]) => (
+                        <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
+                          <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>VARIANTS · {(items||[]).length}</div>
+                          <div style={{ fontFamily:fonts.sans, fontSize:11, color:T.w5, marginBottom:6 }}>{label}</div>
+                          {(items||[]).slice(0,5).map(f => (
+                            <div key={f} style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
+                          ))}
+                          {(items||[]).length > 5 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(items||[]).length-5} more</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : lastFileType === 'redox' ? (
+                  <>
+                    <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
+                      EXTRACTED — antioxidant capacity analysed
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
+                      <div style={{ background:'#fff', borderRadius:8, padding:'14px 16px', border:`1px solid ${T.ok}30`, textAlign:'center' }}>
+                        <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:6 }}>REDOX SCORE</div>
+                        <div style={{ fontFamily:fonts.serif, fontSize:28, color:T.w7, lineHeight:1 }}>{lastRedoxScore != null ? lastRedoxScore : '—'}</div>
+                        <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>/100</div>
+                      </div>
+                      <div style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${T.err}30` }}>
+                        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.err, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>DEFICIENT ANTIOXIDANTS · {(data.alcat_severe||[]).length}</div>
+                        {(data.alcat_severe||[]).slice(0,5).map(f => (
+                          <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
+                        ))}
+                        {(data.alcat_severe||[]).length > 5 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(data.alcat_severe||[]).length-5} more</div>}
+                      </div>
+                    </div>
+                  </>
                 ) : (
+                  // Default: ALCAT food reactivity
                   <>
                     <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
                       EXTRACTED — {(data.alcat_severe||[]).length + (data.alcat_moderate||[]).length + (data.alcat_mild||[]).length} reactive foods found
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
-                      {[['Severe',data.alcat_severe,T.err],['Moderate',data.alcat_moderate,T.warn],['Mild',data.alcat_mild,T.w5]].map(([label,items,color])=>(
+                      {[['Severe', data.alcat_severe, T.err], ['Moderate', data.alcat_moderate, T.warn], ['Mild', data.alcat_mild, T.w5]].map(([label, items, color]) => (
                         <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
-                          <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {items.length}</div>
-                          {items.slice(0,8).map(f=>(
+                          <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {(items||[]).length}</div>
+                          {(items||[]).slice(0,8).map(f => (
                             <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
                           ))}
-                          {items.length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{items.length-8} more</div>}
+                          {(items||[]).length > 8 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(items||[]).length-8} more</div>}
                         </div>
                       ))}
                     </div>
@@ -782,12 +859,12 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
                 <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
                   <label style={{ cursor:'pointer' }}>
-                    <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                    <input type="file" accept="image/*,application/pdf,.vcf,text/plain" style={{ display:'none' }}
                       onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f, true); } }}/>
-                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>+ Add another file (CMA / page 2)</div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>+ Add another file</div>
                   </label>
                   <label style={{ cursor:'pointer' }}>
-                    <input type="file" accept="image/*,application/pdf" style={{ display:'none' }}
+                    <input type="file" accept="image/*,application/pdf,.vcf,text/plain" style={{ display:'none' }}
                       onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); setLabFiles([]); setLabParsed(false); parseLabFile(f, false); } }}/>
                     <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.1em', textDecoration:'underline', cursor:'pointer' }}>Replace with different file</div>
                   </label>
@@ -1607,143 +1684,107 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
   const monIntervalRef = useRef(null);
 
-  // Load profile from Supabase for a given user
+  // Load profile from Supabase for a given user.
+  // Supabase is always the primary source — sessionStorage is fallback-only (offline/network failure).
+  // This ensures CMA, REDOX, VCF, and any data added after onboarding is always fresh.
   const loadProfile = async (user) => {
     if (!user) return null;
-    // 1. Check sessionStorage first (instant, no network, set on onboarding complete)
+
+    // Helper: merge alcat_results into profile object
+    const mergeAlcat = (pd, alcat) => {
+      if (!alcat) return pd;
+      if (alcat.severe?.length || alcat.moderate?.length || alcat.mild?.length) {
+        pd.severe = alcat.severe || [];
+        pd.moderate = alcat.moderate || [];
+        pd.mild = alcat.mild || [];
+        pd.alcat_severe = alcat.severe || [];
+        pd.alcat_moderate = alcat.moderate || [];
+        pd.alcat_mild = alcat.mild || [];
+      } else if (!pd.severe?.length && pd.alcat_severe?.length) {
+        pd.severe = pd.alcat_severe;
+        pd.moderate = pd.alcat_moderate || [];
+        pd.mild = pd.alcat_mild || [];
+      }
+      return pd;
+    };
+
+    // 1. PRIMARY: profiles.patient_data + alcat_results in parallel (always fresh)
+    try {
+      const [profileRes, alcatRes] = await Promise.all([
+        supabase.from('profiles').select('full_name, patient_data, onboarding_complete').eq('id', user.id).single(),
+        supabase.from('alcat_results').select('severe, moderate, mild').eq('patient_id', user.id).single(),
+      ]);
+      const { data: row, error } = profileRes;
+      const { data: alcat } = alcatRes;
+
+      if (!error && row?.onboarding_complete && row?.patient_data) {
+        let pd = typeof row.patient_data === 'string' ? JSON.parse(row.patient_data) : row.patient_data;
+        if (!pd?.name && row?.full_name) { if (pd) pd.name = row.full_name; else pd = { name: row.full_name }; }
+        if (pd?.name) {
+          pd = mergeAlcat(pd, alcat);
+          if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
+          try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
+          console.log('[profile] Supabase — severe:', pd.severe?.length || 0, '| cma:', pd.cmaDeficiencies?.length || 0, '| redox:', pd.redoxScore ?? 'null', '| snps:', pd.genomicSnps?.length || 0);
+          return pd;
+        }
+      }
+      if (!error && row?.full_name) {
+        const pd = mergeAlcat({ name: row.full_name }, alcat);
+        return pd;
+      }
+    } catch (e) { console.error('[profile] Supabase primary failed:', e); }
+
+    // 2. FALLBACK: sessionStorage (used only when Supabase is unreachable)
     try {
       const local = sessionStorage.getItem('mm_profile_' + user.id);
       if (local) {
-        const pd = JSON.parse(local);
+        let pd = JSON.parse(local);
         if (pd?.name) {
-          // Normalize: map alcat_* → severe/moderate/mild if missing
           if (!pd.severe?.length && pd.alcat_severe?.length) {
             pd.severe = pd.alcat_severe; pd.moderate = pd.alcat_moderate || []; pd.mild = pd.alcat_mild || [];
           }
-          console.log('[profile] from sessionStorage');
           if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
+          console.log('[profile] sessionStorage fallback (Supabase unreachable)');
           return pd;
         }
       }
     } catch {}
-    // 2. Try profiles.patient_data (primary source — camelCase JSON blob)
+
+    // 3. LAST RESORT: onboarding_intake table
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('full_name, patient_data, onboarding_complete')
-        .eq('id', user.id)
-        .single();
-      if (!error && data?.onboarding_complete && data?.patient_data) {
-        const pd = typeof data.patient_data === 'string'
-          ? JSON.parse(data.patient_data)
-          : data.patient_data;
-        // Accept profile if it has either a name inside patient_data OR a full_name in the profiles row
-        if (!pd?.name && data?.full_name) {
-          // patient_data exists but name field is missing — patch it from full_name
-          if (pd) pd.name = data.full_name;
-          else { return { name: data.full_name }; }
-        }
-        if (pd?.name) {
-          console.log('[profile] from profiles.patient_data');
-          // Always ensure severe/moderate/mild are populated
-          // alcat_results is the authoritative source — always check it
-          try {
-            const { data: alcat } = await supabase
-              .from('alcat_results')
-              .select('severe, moderate, mild')
-              .eq('patient_id', user.id)
-              .single();
-            if (alcat?.severe?.length || alcat?.moderate?.length || alcat?.mild?.length) {
-              pd.alcat_severe = alcat.severe || [];
-              pd.alcat_moderate = alcat.moderate || [];
-              pd.alcat_mild = alcat.mild || [];
-              pd.severe = alcat.severe || [];
-              pd.moderate = alcat.moderate || [];
-              pd.mild = alcat.mild || [];
-            }
-          } catch {}
-          // Fallback: map alcat_* → severe/moderate/mild if alcat_results was empty
-          if (!pd.severe?.length && pd.alcat_severe?.length) {
-            pd.severe = pd.alcat_severe;
-            pd.moderate = pd.alcat_moderate || [];
-            pd.mild = pd.alcat_mild || [];
-          }
-          // Re-enrich genomicSnps in case stored before full annotation was added
-          if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
-          // Cache to sessionStorage for next time
-          try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
-          return pd;
-        }
-      }
-      if (!error && data?.full_name) return { name: data.full_name };
-    } catch (e) { console.error('[profile] profiles query failed:', e); }
-    // 3. Try onboarding_intake (fallback — map snake_case → camelCase)
-    try {
-      const { data, error } = await supabase
-        .from('onboarding_intake')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      const [intakeRes, alcatRes] = await Promise.all([
+        supabase.from('onboarding_intake').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).single(),
+        supabase.from('alcat_results').select('severe, moderate, mild').eq('patient_id', user.id).single(),
+      ]);
+      const { data, error } = intakeRes;
+      const { data: alcat } = alcatRes;
       if (!error && data?.name) {
-        console.log('[profile] from onboarding_intake (mapping snake_case)');
-        const pd = {
-          name: data.name,
-          dob: data.dob,
-          sex: data.sex,
+        console.log('[profile] onboarding_intake fallback');
+        let pd = {
+          name: data.name, dob: data.dob, sex: data.sex,
           hormonalStatus: data.hormonal_status || data.hormonalStatus || '',
           geographyOfOrigin: data.geography_of_origin || data.geographyOfOrigin || '',
           yearsInCurrentCountry: data.years_in_current_country || data.yearsInCurrentCountry || '',
-          symptoms: data.symptoms || [],
-          tests: data.tests || [],
-          medications: data.medications || '',
-          supplements: data.supplements || '',
-          conditions: data.conditions || '',
-          goals: data.goals || [],
-          alcat_severe: data.alcat_severe || [],
-          alcat_moderate: data.alcat_moderate || [],
-          alcat_mild: data.alcat_mild || [],
-          severe: data.alcat_severe || [],
-          moderate: data.alcat_moderate || [],
-          mild: data.alcat_mild || [],
-          profileComplete: true,
-          protocol: 'Option A — 21-day universal detox',
-          phase: 1, dayInProtocol: 1,
-          alsoAvoid: { candida: [], whey: [] },
-          markers: [],
+          symptoms: data.symptoms || [], tests: data.tests || [],
+          medications: data.medications || '', supplements: data.supplements || '',
+          conditions: data.conditions || '', goals: data.goals || [],
+          alcat_severe: data.alcat_severe || [], alcat_moderate: data.alcat_moderate || [], alcat_mild: data.alcat_mild || [],
+          severe: data.alcat_severe || [], moderate: data.alcat_moderate || [], mild: data.alcat_mild || [],
+          profileComplete: true, protocol: 'Option A — 21-day universal detox',
+          phase: 1, dayInProtocol: 1, alsoAvoid: { candida: [], whey: [] }, markers: [],
         };
-        // Also check alcat_results table
-        try {
-          const { data: alcat } = await supabase
-            .from('alcat_results')
-            .select('severe, moderate, mild')
-            .eq('patient_id', user.id)
-            .single();
-          if (alcat) {
-            pd.alcat_severe = alcat.severe || pd.alcat_severe;
-            pd.alcat_moderate = alcat.moderate || pd.alcat_moderate;
-            pd.alcat_mild = alcat.mild || pd.alcat_mild;
-            pd.severe = alcat.severe || pd.severe;
-            pd.moderate = alcat.moderate || pd.moderate;
-            pd.mild = alcat.mild || pd.mild;
-          }
-        } catch {}
-        // Cache to sessionStorage
+        pd = mergeAlcat(pd, alcat);
         try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
-        // Backfill profiles table so next login is faster
+        // Backfill profiles table
         try {
           await supabase.from('profiles').upsert({
-            id: user.id,
-            full_name: pd.name,
-            onboarding_complete: true,
-            patient_data: JSON.stringify(pd),
-            updated_at: new Date().toISOString(),
+            id: user.id, full_name: pd.name, onboarding_complete: true,
+            patient_data: JSON.stringify(pd), updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
         } catch {}
         return pd;
       }
-    } catch (e) { console.error('[profile] onboarding_intake query failed:', e); }
+    } catch (e) { console.error('[profile] onboarding_intake failed:', e); }
     return null;
   };
 
@@ -4083,7 +4124,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
                 </div>
                 <div style={{ display:'grid', gap:12, marginBottom:20 }}>
                   {[
-                    { icon:'🛡️', title:'Immune system (ALCAT)', desc:'Your innate immune reactivity profile — which foods your immune system recognises as threats. These are excluded to achieve immune silence.', active:(patient.severe?.length||0)+(patient.moderate?.length||0)+(patient.mild?.length||0)>0 },
+                    { icon:'🛡️', title:'Immune system (ALCAT)', desc:'Your innate immune reactivity profile — which foods your immune system recognises as threats. These are excluded to achieve immune silence.', active:(patient.severe?.length||patient.alcat_severe?.length||0)+(patient.moderate?.length||patient.alcat_moderate?.length||0)+(patient.mild?.length||patient.alcat_mild?.length||0)>0 },
                     { icon:'🔬', title:'Cellular function (CMA/CNA)', desc:'Your intracellular micronutrient levels — 55 nutrients measured inside your cells. Deficiencies are corrected through targeted food selection.', active:(patient.cmaDeficiencies?.length||0)+(patient.cmaAdequate?.length||0)>0 },
                     { icon:'⚡', title:'Antioxidant defence (REDOX)', desc:'Your total antioxidant capacity and individual antioxidant levels. Every meal is designed to restore your redox balance.', active:patient.redoxScore!=null },
                     { icon:'🧬', title:'Genetics (VCF)', desc:'Your genetic variants in methylation, detox, nutrient metabolism, hormesis response, and autonomic balance. Genes tell us WHY — the protocol addresses WHAT.', active:(patient.genomicSnps?.length||0)>0 },
