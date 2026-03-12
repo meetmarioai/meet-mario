@@ -1576,7 +1576,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const local = sessionStorage.getItem('mm_profile_' + user.id);
       if (local) {
         const pd = JSON.parse(local);
-        if (pd?.name) { console.log('[profile] from sessionStorage'); return pd; }
+        if (pd?.name) {
+          // Normalize: map alcat_* → severe/moderate/mild if missing
+          if (!pd.severe?.length && pd.alcat_severe?.length) {
+            pd.severe = pd.alcat_severe; pd.moderate = pd.alcat_moderate || []; pd.mild = pd.alcat_mild || [];
+          }
+          console.log('[profile] from sessionStorage');
+          return pd;
+        }
       }
     } catch {}
     // 2. Try profiles.patient_data (primary source — camelCase JSON blob)
@@ -1598,23 +1605,28 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         }
         if (pd?.name) {
           console.log('[profile] from profiles.patient_data');
-          // Also load ALCAT results if not already in patient_data
-          if (!(pd.alcat_severe?.length || pd.alcat_moderate?.length || pd.alcat_mild?.length)) {
-            try {
-              const { data: alcat } = await supabase
-                .from('alcat_results')
-                .select('severe, moderate, mild')
-                .eq('patient_id', user.id)
-                .single();
-              if (alcat) {
-                pd.alcat_severe = alcat.severe || [];
-                pd.alcat_moderate = alcat.moderate || [];
-                pd.alcat_mild = alcat.mild || [];
-                pd.severe = alcat.severe || [];
-                pd.moderate = alcat.moderate || [];
-                pd.mild = alcat.mild || [];
-              }
-            } catch {}
+          // Always ensure severe/moderate/mild are populated
+          // alcat_results is the authoritative source — always check it
+          try {
+            const { data: alcat } = await supabase
+              .from('alcat_results')
+              .select('severe, moderate, mild')
+              .eq('patient_id', user.id)
+              .single();
+            if (alcat?.severe?.length || alcat?.moderate?.length || alcat?.mild?.length) {
+              pd.alcat_severe = alcat.severe || [];
+              pd.alcat_moderate = alcat.moderate || [];
+              pd.alcat_mild = alcat.mild || [];
+              pd.severe = alcat.severe || [];
+              pd.moderate = alcat.moderate || [];
+              pd.mild = alcat.mild || [];
+            }
+          } catch {}
+          // Fallback: map alcat_* → severe/moderate/mild if alcat_results was empty
+          if (!pd.severe?.length && pd.alcat_severe?.length) {
+            pd.severe = pd.alcat_severe;
+            pd.moderate = pd.alcat_moderate || [];
+            pd.mild = pd.alcat_mild || [];
           }
           // Cache to sessionStorage for next time
           try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
