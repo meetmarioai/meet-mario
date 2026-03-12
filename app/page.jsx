@@ -1,6 +1,7 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react";
 import { buildMarioSystemPrompt } from "../lib/marioSystemPrompt";
+import { POS_INDEX, CLINICAL_RSID_SET } from "../lib/clinicalSNPs";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -1171,169 +1172,13 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
       // VCF genetic files — stream line-by-line to avoid OOM on large files (23andMe = 25MB, Dante = 400MB)
       if (isVCF) {
-        // ── POSITION-BASED LOOKUP — GRCh37, no chr prefix (Danteomics format) ──
-        // Danteomics VCFs have "." in ID column — no rsIDs. Match by CHROM:POS:REF:ALT instead.
-        // Also supports 23andMe (has rsIDs) via the rsID set below.
-        const POS_LOOKUP = {
-          // METHYLATION & FOLATE CYCLE
-          '1:11856378:G:A':   {rsid:'rs1801133',gene:'MTHFR',name:'C677T',domain:'methylation',   impact:'Folate conversion -35%. Use methylfolate (5-MTHF) not folic acid. Prioritise leafy greens, eggs, legumes.'},
-          '1:11854476:T:G':   {rsid:'rs1801131',gene:'MTHFR',name:'A1298C',domain:'methylation',  impact:'BH4 synthesis reduced — affects dopamine/serotonin. Supplement 5-MTHF, riboflavin B2, P5P B6.'},
-          '5:7870973:A:G':    {rsid:'rs1801394',gene:'MTRR',name:'A66G',domain:'methylation',     impact:'B12 recycling impaired. Methylcobalamin 1-2mg sublingual daily. Avoid cyanocobalamin.'},
-          '1:237048500:A:G':  {rsid:'rs1805087',gene:'MTR',name:'A2756G',domain:'methylation',    impact:'Methionine synthase activity reduced. Stack methylcobalamin + methylfolate together daily.'},
-          '22:19951271:G:A':  {rsid:'rs4680',gene:'COMT',name:'Val158Met',domain:'methylation',   impact:'Slow COMT — catecholamines clear slowly. Limit caffeine after noon. Magnesium and B2 support.'},
-          '22:19950235:C:T':  {rsid:'rs4633',gene:'COMT',name:'H62H',domain:'methylation',        impact:'COMT regulatory variant. Monitor catecholamine clearance alongside Val158Met.'},
-          '21:43053274:C:T':  {rsid:'rs234706',gene:'CBS',name:'C699T',domain:'methylation',      impact:'Transsulfuration upregulated. Limit methionine-rich foods. Molybdenum supports sulfite clearance.'},
-          '11:71784401:G:A':  {rsid:'rs12325817',gene:'FOLR1',name:'FOLR1',domain:'methylation',  impact:'Folate receptor efficiency reduced. Higher dietary folate required. Avoid methotrexate-class drugs.'},
-          '17:18019809:G:A':  {rsid:'rs1979277',gene:'SHMT1',name:'SHMT1',domain:'methylation',   impact:'Serine-to-glycine conversion reduced — folate pool disrupted. Glycine supplement, serine-rich diet.'},
-          '17:17580893:G:A':  {rsid:'rs7946',gene:'PEMT',name:'PEMT',domain:'methylation',        impact:'Choline synthesis reduced. Supplement choline 500mg, phosphatidylcholine. Egg yolks daily.'},
-          '19:49206986:G:A':  {rsid:'rs601338',gene:'FUT2',name:'W143X',domain:'nutrients',       impact:'Non-secretor — reduced B12 absorption and gut microbiome diversity. B12 sublingual preferred. Prebiotics.'},
-          '19:49208178:A:G':  {rsid:'rs602662',gene:'FUT2',name:'FUT2',domain:'nutrients',        impact:'FUT2 secretor variant — gut flora diversity affected. Probiotic supplementation beneficial.'},
-          '22:30899826:C:T':  {rsid:'rs1801198',gene:'TCN2',name:'P259R',domain:'nutrients',      impact:'B12 cellular transport reduced. Serum B12 may appear normal despite cellular deficiency. Test MMA.'},
-          // DETOX & GLUTATHIONE
-          '11:67352689:A:G':  {rsid:'rs1695',gene:'GSTP1',name:'Ile105Val',domain:'detox',        impact:'Phase II glutathione conjugation reduced. NAC 600mg, sulforaphane from broccoli sprouts. Minimise toxin exposure.'},
-          '11:67353878:C:T':  {rsid:'rs1138272',gene:'GSTP1',name:'Ala114Val',domain:'detox',     impact:'GSTP1 compound — combined with Ile105Val doubles detox burden. Glycine + glutamine supplementation.'},
-          '6:160113872:T:C':  {rsid:'rs4880',gene:'SOD2',name:'Val16Ala',domain:'detox',          impact:'Mitochondrial antioxidant capacity -30%. CoQ10 200-400mg, manganese, NAC, R-lipoic acid.'},
-          '11:34499305:C:T':  {rsid:'rs1001179',gene:'CAT',name:'CAT',domain:'detox',             impact:'Catalase activity reduced — H2O2 accumulates. Riboflavin B2, selenium, selenium-rich foods.'},
-          '15:75041917:A:C':  {rsid:'rs762551',gene:'CYP1A2',name:'CYP1A2',domain:'detox',        impact:'Slow caffeine metaboliser. Hard caffeine cutoff 13:00. Avoid chargrilled meats and grapefruit.'},
-          '10:96702047:C:T':  {rsid:'rs1799853',gene:'CYP2C9',name:'*2',domain:'detox',           impact:'CYP2C9 *2 — reduced clearance of NSAIDs and warfarin. Report to prescribing physicians.'},
-          '10:96741053:A:C':  {rsid:'rs1057910',gene:'CYP2C9',name:'*3',domain:'detox',           impact:'CYP2C9 *3 — severely reduced. NSAIDs and warfarin dosing must be reviewed by physician.'},
-          '10:96522463:G:A':  {rsid:'rs4244285',gene:'CYP2C19',name:'*2',domain:'detox',          impact:'CYP2C19 poor metaboliser — PPIs, clopidogrel, SSRIs affected. Review with physician.'},
-          // INFLAMMATION & IMMUNITY
-          '7:22766645:G:C':   {rsid:'rs1800795',gene:'IL6',name:'IL6 -174',domain:'inflammation', impact:'Elevated IL-6 baseline. Anti-inflammatory diet critical. Omega-3 3g/day, curcumin, avoid seed oils.'},
-          '6:31543031:G:A':   {rsid:'rs1800629',gene:'TNF',name:'TNF-α -308',domain:'inflammation',impact:'Higher TNF-α expression — systemic inflammation. GCR protocol is priority. Eliminate processed foods.'},
-          '2:113070456:G:A':  {rsid:'rs2241880',gene:'ATG16L1',name:'ATG16L1',domain:'inflammation',impact:'Autophagy impaired. Intermittent fasting, spermidine (wheat germ), reduce lectin load.'},
-          // LONGEVITY
-          '19:45411941:T:C':  {rsid:'rs429358',gene:'APOE',name:'ε4 allele',domain:'longevity',   impact:'APOE ε4 — elevated Alzheimer\'s + cardiovascular risk. Strict Mediterranean pattern. DHA 1g/day.'},
-          '19:45412079:C:T':  {rsid:'rs7412',gene:'APOE',name:'ε2 allele',domain:'longevity',     impact:'APOE ε2 — longevity-associated phenotype. Continue anti-inflammatory protocol. Annual lipid panel.'},
-          '6:26093141:G:A':   {rsid:'rs1800562',gene:'HFE',name:'C282Y',domain:'longevity',       impact:'HFE C282Y — haemochromatosis risk. Test ferritin + transferrin saturation. Limit red meat. No iron supplements.'},
-          '6:26091179:C:G':   {rsid:'rs1799945',gene:'HFE',name:'H63D',domain:'longevity',        impact:'HFE H63D carrier — mild iron accumulation. Monitor ferritin annually. Max 2× red meat/week.'},
-          '16:53820527:T:A':  {rsid:'rs9939609',gene:'FTO',name:'FTO',domain:'longevity',         impact:'FTO variant — appetite dysregulation. Exercise epigenetically silences FTO. Protein at every meal.'},
-          '10:114758349:C:T': {rsid:'rs7903146',gene:'TCF7L2',name:'TCF7L2',domain:'longevity',   impact:'Strongest T2D genetic risk — GLP-1 impaired. Low glycaemic diet, time-restricted eating, berberine.'},
-          '12:47844974:C:T':  {rsid:'rs2228570',gene:'VDR',name:'Fok1',domain:'longevity',        impact:'Reduced VDR sensitivity. Target 25-OH-D 80-100 nmol/L. 3000-5000 IU D3 + K2 MK-7 daily.'},
-          '12:48238757:A:G':  {rsid:'rs1544410',gene:'VDR',name:'BsmI',domain:'longevity',        impact:'VDR expression reduced. Higher D3 requirement. Test serum 25-OH-D every 6 months.'},
-          '12:48272895:A:C':  {rsid:'rs7975232',gene:'VDR',name:'ApaI',domain:'longevity',        impact:'VDR variant — immune regulation and bone density. D3 co-factors: K2, Mg, boron essential.'},
-          // NUTRIENTS
-          '16:81257926:T:C':  {rsid:'rs12934922',gene:'BCMO1',name:'R267S',domain:'nutrients',    impact:'Beta-carotene to retinol conversion -57%. Must eat preformed vitamin A: liver, cod liver oil, eggs.'},
-          '16:81294249:T:C':  {rsid:'rs7501331',gene:'BCMO1',name:'A379V',domain:'nutrients',     impact:'BCMO1 compound variant — near-zero carotenoid conversion. Preformed vitamin A non-negotiable.'},
-          '11:61597212:T:C':  {rsid:'rs174547',gene:'FADS1',name:'FADS1',domain:'nutrients',      impact:'Omega-3 desaturation reduced. Direct DHA+EPA 2-3g/day required. ALA from flax is insufficient.'},
-          '11:61512718:A:T':  {rsid:'rs174570',gene:'FADS2',name:'FADS2',domain:'nutrients',      impact:'FADS2 impaired. Marine omega-3 essential. Avoid omega-6 competition from seed oils.'},
-          '9:77404466:A:G':   {rsid:'rs2274924',gene:'TRPM6',name:'TRPM6',domain:'nutrients',     impact:'Magnesium transport reduced. Mg glycinate/malate 300-400mg. Monitor RBC Mg not serum. Avoid PPIs.'},
-          '4:72618334:C:A':   {rsid:'rs4588',gene:'GC',name:'VDBP',domain:'nutrients',            impact:'Vitamin D binding protein variant. May need higher D3 dose to achieve target serum levels.'},
-          '4:72614739:T:G':   {rsid:'rs7041',gene:'GC',name:'VDBP Gc2',domain:'nutrients',        impact:'VDBP Gc2 variant — altered free vitamin D fraction. Test free 25-OH-D if total appears adequate.'},
-          // CIRCADIAN & SLEEP
-          '22:24598203:T:C':  {rsid:'rs5751876',gene:'ADORA2A',name:'ADORA2A',domain:'circadian', impact:'High caffeine sensitivity. Maximum one coffee before 09:00. Sleep pressure builds rapidly — protect it.'},
-          '2:238319766:C:T':  {rsid:'rs57875989',gene:'PER2',name:'PER2',domain:'circadian',      impact:'Circadian phase shift variant. Strict 22:30 sleep, blackout blinds, blue light block from 20:00.'},
-          '4:56295506:C:T':   {rsid:'rs12649507',gene:'CLOCK',name:'CLOCK',domain:'circadian',    impact:'Free-running circadian drift. Morning light exposure within 30 min of waking is essential.'},
-          '1:215923198:C:T':  {rsid:'rs2287161',gene:'CRY1',name:'CRY1',domain:'circadian',       impact:'Delayed sleep phase. Melatonin 0.5mg at 21:00, morning light therapy, consistent wake time.'},
-          // ANS & NEUROLOGICAL
-          'X:43514416:T:G':   {rsid:'rs6323',gene:'MAOA',name:'MAOA',domain:'ans',                impact:'Monoamine oxidase variant — serotonin/NE clearance altered. Magnesium, P5P B6, tryptophan timing.'},
-          '5:148206461:A:G':  {rsid:'rs1042713',gene:'ADRB2',name:'Arg16Gly',domain:'ans',        impact:'Beta-2 adrenergic variant — catecholamine sensitivity altered. HRV monitoring recommended.'},
-          '11:113283459:C:T': {rsid:'rs1800497',gene:'DRD2',name:'TaqIA',domain:'ans',            impact:'Reduced D2 receptor density — reward variant. Exercise for dopamine. Avoid addictive substances.'},
-          '17:28521337:A:G':  {rsid:'rs25531',gene:'SLC6A4',name:'5-HTTLPR',domain:'ans',         impact:'Serotonin transporter variant — stress resilience. HRV coherence practice, tryptophan at dinner.'},
-          // EXERCISE & HORMESIS
-          '11:66560624:C:T':  {rsid:'rs1815739',gene:'ACTN3',name:'R577X',domain:'exercise',      impact:'Endurance phenotype (no alpha-actinin-3). Zone 2 cardio dominant. Plyometric loading less effective.'},
-          '4:23808660:C:T':   {rsid:'rs8192678',gene:'PPARGC1A',name:'Gly482Ser',domain:'exercise',impact:'Mitochondrial biogenesis reduced. Zone 2 training essential. Cold exposure: daily cold shower.'},
-          '11:27679916:C:T':  {rsid:'rs6265',gene:'BDNF',name:'Val66Met',domain:'exercise',       impact:'BDNF secretion impaired. Exercise is the primary trigger — 30 min aerobic minimum daily. No alcohol.'},
-          // SUN & SKIN
-          '16:89985844:T:C':  {rsid:'rs1805007',gene:'MC1R',name:'R151C',domain:'sun',            impact:'MC1R red hair variant — UV damage risk. SPF 50 daily, D3 supplement (cannot synthesise efficiently).'},
-          '16:89986117:C:T':  {rsid:'rs1805008',gene:'MC1R',name:'R160W',domain:'sun',            impact:'MC1R variant — pheomelanin dominant, melanoma risk. Avoid peak sun 11:00-15:00. Astaxanthin.'},
-          '15:28365618:A:G':  {rsid:'rs12913832',gene:'HERC2',name:'OCA2',domain:'sun',           impact:'Light eye/skin — higher UV sensitivity and damage risk. Daily SPF, regular dermatologist check.'},
-        };
+        // ── POSITION & RSID LOOKUP — imported from lib/clinicalSNPs.js ──
+        // POS_INDEX: CHROM:POS:REF:ALT → full SNP annotation (GRCh37, no chr prefix)
+        // CLINICAL_RSID_SET: Set of all clinical rsIDs (for 23andMe rsID-based matching)
 
         // ── STREAMING VCF READER — never loads full file into memory ──
         // Only SNPs where we can intervene via supplementation, diet, training, hormesis, circadian, or lifestyle
-        const clinicalRsIds = new Set([
-          // ── METHYLATION & FOLATE CYCLE ──
-          'rs1801133','rs1801131', // MTHFR C677T, A1298C — folate metabolism
-          'rs1805087',  // MTR A2756G — B12-dependent remethylation
-          'rs1801394',  // MTRR A66G — methionine synthase reductase
-          'rs234706',   // CBS — transsulfuration, sulfur/ammonia balance
-          'rs1979277',  // SHMT1 — serine→glycine, folate pool
-          'rs1006737',  // CACNA1C — calcium channel, mood/methylation link
-          'rs7946',     // PEMT — choline synthesis (phosphatidylcholine, acetylcholine, bile)
-          'rs12325817', // FOLR1 — folate receptor
-          'rs602662','rs601338', // FUT2 — B12 absorption, gut Bifidobacterium
-          'rs1801198',  // TCN2 — transcobalamin, B12 cellular delivery
-          // ── DETOX & GLUTATHIONE ──
-          'rs1695','rs1138272', // GSTP1 — Phase II glutathione conjugation
-          'rs1056806',  // GSTM1 — glutathione S-transferase mu
-          'rs1138272',  // GSTP1 Ile105Val
-          'rs4880',     // SOD2 (MnSOD) — mitochondrial superoxide dismutase
-          'rs1001179',  // CAT — catalase, H2O2 clearance
-          'rs7943316',  // HMOX1 — heme oxygenase, oxidative stress response
-          'rs2066853',  // AHR — aryl hydrocarbon receptor, xenobiotic detox
-          'rs1048943','rs4646903', // CYP1A1 — Phase I detox, polycyclic aromatic hydrocarbons
-          'rs762551',   // CYP1A2 — caffeine metabolism, circadian impact
-          'rs1799853','rs1057910', // CYP2C9 — drug/toxin metabolism
-          'rs4244285',  // CYP2C19 — drug metabolism (PPIs, SSRIs)
-          'rs3892097',  // CYP2D6 — drug metabolism (beta-blockers, antidepressants)
-          'rs4149056',  // SLCO1B1 — hepatic transporter, statin clearance
-          // ── INFLAMMATION & IMMUNITY ──
-          'rs1800795',  // IL6 — interleukin-6 promoter, inflammatory response
-          'rs1800629',  // TNF-α — tumor necrosis factor, systemic inflammation
-          'rs1143634',  // IL1B — interleukin-1β, inflammatory cascade
-          'rs1800896',  // IL10 — anti-inflammatory cytokine capacity
-          'rs20417',    // COX2/PTGS2 — prostaglandin synthesis, pain/inflammation
-          'rs2241880',  // ATG16L1 — autophagy, gut immune homeostasis
-          'rs3135388',  // HLA-DRB1 — adaptive immunity, autoimmune risk
-          'rs2476601',  // PTPN22 — T-cell activation threshold
-          // ── LONGEVITY PATHWAYS (SIRT1, AMPK, mTOR, telomeres) ──
-          'rs7895833','rs7069102','rs2273773', // SIRT1 — silent information regulator, longevity
-          'rs2249105',  // PRKAA2/AMPK — energy sensor, autophagy activation
-          'rs1801282',  // PPARγ — metabolic regulation, insulin sensitivity, fat storage
-          'rs9939609','rs1421085','rs17817449', // FTO — appetite, obesity, exercise epigenetics
-          'rs7903146',  // TCF7L2 — strongest T2D genetic risk, GLP-1 secretion
-          'rs1050450',  // GPX1 — glutathione peroxidase, selenium-dependent antioxidant
-          'rs10936599', // TERC — telomerase RNA component, telomere length
-          'rs2736100',  // TERT — telomerase reverse transcriptase, cellular ageing
-          'rs11568820','rs2228570','rs1544410','rs7975232', // VDR — vitamin D receptor, immune modulation, longevity
-          'rs10741657','rs2060793', // CYP2R1 — vitamin D activation
-          'rs429358','rs7412', // APOE — lipid metabolism, neurodegeneration, longevity
-          'rs1800562','rs1799945', // HFE — iron overload, Fenton reaction damage
-          // ── NUTRIENT METABOLISM ──
-          'rs4588','rs7041', // GC/VDBP — vitamin D binding protein
-          'rs12934922','rs7501331', // BCMO1 — beta-carotene→retinol conversion
-          'rs174547','rs174546','rs174570', // FADS1/2 — omega-3/6 desaturation (ALA→EPA→DHA)
-          'rs4654748',  // NBPF3 — vitamin B6 metabolism
-          'rs1801198',  // TCN2 — B12 transport
-          'rs4680','rs4633','rs4818', // COMT — catecholamine clearance, polyphenol metabolism
-          'rs1799998',  // CYP11B2 — aldosterone, sodium/potassium balance
-          'rs1800588',  // LIPC — hepatic lipase, HDL metabolism
-          'rs328',      // LPL — lipoprotein lipase, triglyceride clearance
-          // ── CIRCADIAN RHYTHM & SLEEP ──
-          'rs57875989', // PER2 — period circadian clock, sleep timing
-          'rs12649507', // CLOCK — circadian locomotor output cycles kaput
-          'rs2287161',  // CRY1 — cryptochrome, delayed sleep phase
-          'rs73598374', // ADA — adenosine deaminase, deep sleep quality
-          'rs5751876',  // ADORA2A — adenosine receptor, caffeine sensitivity + sleep pressure
-          'rs228697',   // PER3 — period 3, morning/evening chronotype
-          // ── SYMPATHETIC / PARASYMPATHETIC / VAGUS / ANS ──
-          'rs6323',     // MAOA — monoamine oxidase A, serotonin/NE/dopamine breakdown
-          'rs1042713','rs1042714', // ADRB2 — beta-2 adrenergic receptor, catecholamine sensitivity
-          'rs1800544',  // ADRA2A — alpha-2 adrenergic, sympathetic regulation
-          'rs53576','rs2254298', // OXTR — oxytocin receptor, social bonding, parasympathetic
-          'rs1800497',  // DRD2/ANKK1 — dopamine D2 receptor density, reward system
-          'rs4570625',  // TPH2 — tryptophan hydroxylase 2, serotonin synthesis in brain
-          'rs6295',     // HTR1A — serotonin 1A receptor, anxiety, vagal tone
-          'rs25531',    // SLC6A4 (5-HTTLPR) — serotonin transporter, stress resilience
-          'rs165599',   // COMT 3'UTR — additional COMT regulation variant
-          // ── EXERCISE & HORMESIS RESPONSE ──
-          'rs1815739',  // ACTN3 — alpha-actinin-3, fast-twitch muscle (power vs endurance)
-          'rs8192678',  // PPARGC1A (PGC-1α) — mitochondrial biogenesis, endurance capacity
-          'rs1042713',  // ADRB2 — exercise heart rate response
-          'rs4253778',  // PPARα — fat oxidation during exercise
-          'rs699',      // AGT — angiotensinogen, blood pressure response to exercise
-          'rs5443',     // GNB3 — G-protein β3, exercise blood pressure response
-          'rs1800169',  // BDNF — brain-derived neurotrophic factor, exercise-brain link
-          'rs6265',     // BDNF Val66Met — neuroplasticity, exercise mental health benefit
-          'rs1800012',  // COL1A1 — collagen type I, tendon/ligament injury risk
-          'rs12722',    // COL5A1 — collagen type V, flexibility and injury risk
-          'rs1799752',  // ACE I/D — angiotensin converting enzyme, endurance vs power
-          // ── SUN / SKIN / UV RESPONSE ──
-          'rs1805007','rs1805008','rs1805009', // MC1R — melanocortin receptor, UV sensitivity, vitamin D synthesis efficiency
-          'rs16891982', // SLC45A2 — skin pigmentation, UV damage susceptibility
-          'rs12913832', // HERC2/OCA2 — eye/skin colour, UV tolerance
-        ]);
+        const clinicalRsIds = CLINICAL_RSID_SET;
 
         // ── GT extraction helper ──
         const extractGT = (line, ref, alt) => {
@@ -1373,11 +1218,14 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
           // 1. Position-based match (primary — works on Danteomics/no-rsID VCFs)
           const posKey = `${chrom}:${pos}:${ref}:${alt}`;
-          const annotation = POS_LOOKUP[posKey];
+          const annotation = POS_INDEX[posKey];
           if (annotation) {
             const { genotype, status } = extractGT(line, ref, alt);
             if (status !== 'normal') { // skip wild-type
-              posMatchedSnps.push({ ...annotation, genotype, status });
+              const impact = status === 'risk'
+                ? (annotation.hom_interpretation || annotation.functional_impact || '')
+                : (annotation.het_interpretation || annotation.functional_impact || '');
+              posMatchedSnps.push({ ...annotation, genotype, status, impact });
             }
             return;
           }
@@ -3582,9 +3430,9 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         { label:'Micronutrient',color:(P.cmaDeficiencies?.length||0)>0?T.warn:(P.cmaAdequate?.length||0)>0?T.ok:T.w4, detail:(P.cmaDeficiencies?.length||0)>0?`${P.cmaDeficiencies.length} deficient`:(P.cmaAdequate?.length||0)>0?'Adequate':'Not tested' },
         { label:'Methylation', ...(() => {
             const snps = P.genomicSnps || [];
-            const methGenes = ['mthfr','mtrr','mtr','comt','mthfd'];
-            const methSnps = snps.filter(s => methGenes.some(g => (s.gene||'').toLowerCase().includes(g)));
-            const homoImpaired = methSnps.some(s => (s.status==='risk') && ['mthfr'].some(g => (s.gene||'').toLowerCase().includes(g)));
+            const methSnps = snps.filter(s => s.domain === 'methylation' ||
+              ['mthfr','mtrr','mtr','comt','cbs','shmt','pemt','mthfd'].some(g => (s.gene||'').toLowerCase().includes(g)));
+            const homoImpaired = methSnps.some(s => s.status === 'risk' && (s.gene||'').toLowerCase().includes('mthfr'));
             const hasWgs = snps.length > 0;
             if (!hasWgs) return { color:T.w4, detail:'Not tested' };
             if (methSnps.length === 0) return { color:T.ok, detail:'Normal' };
@@ -3593,8 +3441,8 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           })() },
         { label:'Mitochondrial', ...(() => {
             const snps = P.genomicSnps || [];
-            const mitoGenes = ['sod2','coq','nrf2','pgc','tfam','polg','mt-','mtnd','mtatp'];
-            const mitoSnps = snps.filter(s => mitoGenes.some(g => (s.gene||'').toLowerCase().includes(g)));
+            const mitoSnps = snps.filter(s => s.domain === 'exercise' ||
+              ['sod2','coq','nrf2','pgc','ppargc','tfam','polg','mt-','mtnd','mtatp','actn3','bdnf'].some(g => (s.gene||'').toLowerCase().includes(g)));
             const hasWgs = snps.length > 0;
             if (!hasWgs) return { color:T.w4, detail:'Not tested' };
             if (mitoSnps.length === 0) return { color:T.ok, detail:'Normal' };
