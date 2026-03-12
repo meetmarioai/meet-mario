@@ -461,6 +461,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          model: 'claude-opus-4-6',
           max_tokens: 4000,
           system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
           messages: [{ role: 'user', content }],

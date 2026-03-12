@@ -5,7 +5,7 @@ export const maxDuration = 60;
 
 export async function POST(req) {
   try {
-    const { system, messages, max_tokens = 1200 } = await req.json()
+    const { system, messages, max_tokens = 1200, model } = await req.json()
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -16,7 +16,7 @@ export async function POST(req) {
         'anthropic-beta': 'pdfs-2024-09-25',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-5-20251001',
+        model: model || 'claude-sonnet-4-6',
         max_tokens,
         system: Array.isArray(system)
           ? system
