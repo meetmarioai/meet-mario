@@ -607,7 +607,13 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:20 }}>
             <div>
               <FieldLabel>Date of birth</FieldLabel>
-              <RuledInput value={data.dob} onChange={e=>u('dob',e.target.value)} placeholder="DD/MM/YYYY"/>
+              <RuledInput value={data.dob} onChange={e=>{
+                const raw = e.target.value.replace(/\D/g,'').slice(0,8);
+                const fmt = raw.length > 4 ? raw.slice(0,2)+'/'+raw.slice(2,4)+'/'+raw.slice(4)
+                          : raw.length > 2 ? raw.slice(0,2)+'/'+raw.slice(2)
+                          : raw;
+                u('dob', fmt);
+              }} placeholder="DD/MM/YYYY" inputMode="numeric"/>
             </div>
             <div>
               <FieldLabel>Biological sex</FieldLabel>
