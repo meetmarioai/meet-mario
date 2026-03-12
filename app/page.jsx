@@ -853,6 +853,7 @@ export default function MeetMario({ patient: patientProp }) {
   const generateDiet = async (pd) => {
     if (!pd) pd = patient;
     setDietLoading(true); setDietPlan('');
+    try {
     const severe = (pd.severe||[]).join(', ') || 'none uploaded yet';
     const mild = (pd.mild||[]).join(', ') || 'none';
     const origin = pd.geographyOfOrigin || 'not specified';
@@ -921,6 +922,10 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
     } catch(err) {
       clearTimeout(dietTimeout);
       setDietPlan(err.name === 'AbortError' ? 'TIMEOUT' : 'ERROR');
+    }
+    } catch(outerErr) {
+      console.error('[generateDiet]', outerErr);
+      setDietPlan('ERROR');
     }
     setDietLoading(false);
   };
@@ -1724,6 +1729,10 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const user = session?.user || null;
       setAuthUser(user);
       if (event === 'SIGNED_IN' && user) {
+        // Clear the magic link auth hash from the URL so it doesn't re-trigger on navigation
+        if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
         setShowAuth(false);
         const profile = await loadProfile(user);
         if (profile?.name) {
@@ -3215,7 +3224,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w6, lineHeight:1.5 }}>
                   New data available — {dietPlan ? 'update your diet to reflect the latest results.' : 'generate your personalised protocol now.'}
                 </div>
-                <button onClick={()=>{ setShowDiet(true); generateDiet(patient); }} style={{
+                <button onClick={()=>{ setShowDiet(true); generateDiet(patient).catch(e => { console.error('[generateDiet]', e); setDietPlan('ERROR'); setDietLoading(false); }); }} style={{
                   background:T.rg, color:'#fff', border:'none', borderRadius:7, padding:'8px 20px', whiteSpace:'nowrap',
                   fontFamily:fonts.sans, fontSize:12, fontWeight:700, cursor:'pointer', flexShrink:0,
                 }}>
@@ -3762,7 +3771,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                   <button onClick={()=>{
                     setShowDietBasis(false);
                     setShowBES(false); setShowDiet(true);
-                    generateDiet(patient);
+                    generateDiet(patient).catch(e => { console.error('[generateDiet]', e); setDietPlan('ERROR'); setDietLoading(false); });
                   }} style={{
                     background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 32px',
                     fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer',
