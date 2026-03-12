@@ -1269,10 +1269,14 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
         }
 
         // ── PATH A: position matches found — annotate directly, no Claude ──
+        const checkedCount = Object.keys(POS_INDEX).length;
+        console.log(`[VCF] Scanned ${totalDataLines} variants. Position-matched: ${posMatchedSnps.length}/${checkedCount} clinical positions.`);
+        posMatchedSnps.forEach(s => console.log(`  ✓ ${s.gene} ${s.rsid} ${s.genotype} [${s.status}]`));
+
         if (posMatchedSnps.length > 0) {
           const deduped = [...new Map(posMatchedSnps.map(s => [s.rsid, s])).values()];
           const updatedSnps = [...(patient.genomicSnps || []).filter(s => !deduped.find(n => n.rsid === s.rsid)), ...deduped];
-          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps }; persistLabData(updated, file); return updated; });
+          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps, genomicChecked: checkedCount }; persistLabData(updated, file); return updated; });
           setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
           setDashLabSuccess(true);
           setDashLabParsing(false);
@@ -3029,7 +3033,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 { name:'CMA/CNA micronutrients', active: (P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0,         filePresent: hasFile(['cma','cna']),           detail: `${(P.cmaAllNutrients||[]).length} nutrients tested` },
                 { name:'REDOX / Spectrox',       active: P.redoxScore != null,                                                   filePresent: hasFile(['redox','spectrox']),    detail: P.redoxScore != null ? `Score: ${P.redoxScore}/100` : null },
                 { name:'Antioxidant panel',      active: (P.cmaAntioxidants||[]).length > 0,                                     filePresent: hasFile(['antioxidant']),         detail: `${(P.cmaAntioxidants||[]).length} markers` },
-                { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0,                                         filePresent: hasFile(['.vcf','.txt','.gz']),   detail: `${(P.genomicSnps||[]).length} SNPs analysed` },
+                { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0,                                         filePresent: hasFile(['.vcf','.txt','.gz']),   detail: P.genomicChecked ? `${(P.genomicSnps||[]).filter(s=>s.status!=='normal').length} variants · ${P.genomicChecked} checked` : `${(P.genomicSnps||[]).length} variants` },
                 { name:'Blood work / Other labs',active: P.customLabs?.length > 0,                                               filePresent: hasFile(['blood','lab','result']),detail: P.customLabs?.length ? `${P.customLabs.length} reports` : null },
               ];
               return tiles.map(t => {
@@ -3176,7 +3180,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                   {(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>ALCAT: {(P.severe||[]).length+(P.moderate||[]).length+(P.mild||[]).length} foods</span>}
                   {(P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>CMA: {(P.cmaAllNutrients||[]).length} nutrients</span>}
                   {P.redoxScore != null && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>REDOX: {P.redoxScore}/100</span>}
-                  {(P.genomicSnps||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>VCF: {(P.genomicSnps||[]).length} SNPs</span>}
+                  {(P.genomicSnps||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>VCF: {(P.genomicSnps||[]).filter(s=>s.status!=='normal').length} variants{P.genomicChecked ? ` / ${P.genomicChecked} checked` : ''}</span>}
                 </div>
                 {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>{fn}</div>)}
               </div>
@@ -3225,9 +3229,9 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         {/* Genomic data display */}
         {P.genomicSnps?.length > 0 && (
           <Panel>
-            <FieldLabel>{P.genomicSnps.length} genetic variants processed</FieldLabel>
+            <FieldLabel>{P.genomicSnps.filter(s=>s.status!=='normal').length} variants detected{P.genomicChecked ? ` · ${P.genomicChecked} positions checked` : ''}</FieldLabel>
             <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, lineHeight:1.7, marginBottom:16 }}>
-              Mario has analysed your WGS data across methylation, detox, inflammation, longevity, and circadian pathways. Ask Mario to explain what your variants mean for your protocol.
+              Mario has analysed your WGS across methylation, detox, inflammation, longevity, and circadian pathways. Positions not in your VCF are wild-type (standard reference). Ask Mario to explain your variants.
             </div>
             <button onClick={()=>{ setTab('mario'); setChatIn('Explain what my genetic variants mean for my protocol and what specific interventions I should make based on my SNPs.'); }} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'11px 24px', cursor:'pointer', fontFamily:fonts.sans, fontSize:13, fontWeight:600 }}>
               Ask Mario about my genetics →
