@@ -3863,21 +3863,19 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
               CROSS-REFERENCING IMMUNITY · MICRONUTRIENTS · REDOX · GENETICS
             </div>
           </Panel>
+        ) : dietPlan === 'TIMEOUT' || dietPlan === 'ERROR' ? (
+          <Panel style={{ textAlign:'center', padding:40 }}>
+            <div style={{ fontFamily:fonts.sans, fontSize:14, color:T.err, marginBottom:16 }}>
+              {dietPlan === 'TIMEOUT' ? 'Generation timed out (60s).' : 'Generation failed.'}
+            </div>
+            <button onClick={()=>generateDiet(patient)} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'12px 28px', fontFamily:fonts.sans, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+              Retry
+            </button>
+          </Panel>
         ) : (
-          {dietPlan === 'TIMEOUT' || dietPlan === 'ERROR' ? (
-            <Panel style={{ textAlign:'center', padding:40 }}>
-              <div style={{ fontFamily:fonts.sans, fontSize:14, color:T.err, marginBottom:16 }}>
-                {dietPlan === 'TIMEOUT' ? 'Generation timed out (60s).' : 'Generation failed.'}
-              </div>
-              <button onClick={()=>generateDiet(patient)} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'12px 28px', fontFamily:fonts.sans, fontSize:13, fontWeight:600, cursor:'pointer' }}>
-                Retry
-              </button>
-            </Panel>
-          ) : (
-            <Panel>
-              <pre style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.9, whiteSpace:'pre-wrap', margin:0 }}>{dietPlan}</pre>
-            </Panel>
-          )}
+          <Panel>
+            <pre style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.9, whiteSpace:'pre-wrap', margin:0 }}>{dietPlan}</pre>
+          </Panel>
         )}
         {!dietLoading && (
           <div style={{ display:'flex', gap:12, marginTop:24 }}>
