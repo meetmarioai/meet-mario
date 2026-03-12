@@ -3505,8 +3505,27 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         { label:'Immune',       color:(P.severe?.length||0)>0?T.err:T.ok,              detail:`${(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)} reactive foods` },
         { label:'Redox',        color:P.redoxScore!=null?(P.redoxScore<50?T.err:P.redoxScore<75?T.warn:T.ok):T.w4, detail:P.redoxScore!=null?`Score ${P.redoxScore}/100`:'Not tested' },
         { label:'Micronutrient',color:(P.cmaDeficiencies?.length||0)>0?T.warn:(P.cmaAdequate?.length||0)>0?T.ok:T.w4, detail:(P.cmaDeficiencies?.length||0)>0?`${P.cmaDeficiencies.length} deficient`:(P.cmaAdequate?.length||0)>0?'Adequate':'Not tested' },
-        { label:'Methylation',  color:(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length>0?T.warn:T.w4, detail:(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length>0?`${(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length} variants`:'Not tested' },
-        { label:'Mitochondrial',color:T.w4, detail:'Not tested' },
+        { label:'Methylation', ...(() => {
+            const snps = P.genomicSnps || [];
+            const methGenes = ['mthfr','mtrr','mtr','comt','mthfd'];
+            const methSnps = snps.filter(s => methGenes.some(g => (s.gene||'').toLowerCase().includes(g)));
+            const homoImpaired = methSnps.some(s => (s.status==='risk') && ['mthfr'].some(g => (s.gene||'').toLowerCase().includes(g)));
+            const hasWgs = snps.length > 0;
+            if (!hasWgs) return { color:T.w4, detail:'Not tested' };
+            if (methSnps.length === 0) return { color:T.ok, detail:'Normal' };
+            if (homoImpaired) return { color:T.err, detail:'Impaired' };
+            return { color:T.warn, detail:`Reduced · ${methSnps.length} variant${methSnps.length>1?'s':''}` };
+          })() },
+        { label:'Mitochondrial', ...(() => {
+            const snps = P.genomicSnps || [];
+            const mitoGenes = ['sod2','coq','nrf2','pgc','tfam','polg','mt-','mtnd','mtatp'];
+            const mitoSnps = snps.filter(s => mitoGenes.some(g => (s.gene||'').toLowerCase().includes(g)));
+            const hasWgs = snps.length > 0;
+            if (!hasWgs) return { color:T.w4, detail:'Not tested' };
+            if (mitoSnps.length === 0) return { color:T.ok, detail:'Normal' };
+            const hasRisk = mitoSnps.some(s => s.status === 'risk');
+            return { color:hasRisk?T.warn:T.ok, detail:`${mitoSnps.length} variant${mitoSnps.length>1?'s':''}` };
+          })() },
         { label:'Circadian',    color:T.ok, detail:'Protocol active' },
       ];
       const archiveRows = [
