@@ -1032,7 +1032,11 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
     if (!file) return;
     try {
-      // 2. Upload raw file to Supabase Storage
+      // 2. Deduplicate — skip upload if same filename + size already on record
+      const alreadyStored = (updatedPatient.uploadedLabFiles || []).some(f => f.name === file.name && f.size === file.size);
+      if (alreadyStored) { console.log('[persistLabData] duplicate file skipped:', file.name); return; }
+
+      // Upload raw file to Supabase Storage
       const path = `${authUser.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       const { error: uploadErr } = await supabase.storage
         .from('lab-files')
@@ -1273,8 +1277,9 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
               if (!line) continue;
               if (line.startsWith('#')) { lastHeaderLine = line; continue; }
               totalDataLines++;
-              const rsMatch = line.match(/rs\d+/g);
-              if (rsMatch && rsMatch.some(rs => clinicalRsIds.has(rs))) {
+              // Match rs\d+ directly OR RS=\d+ in INFO field (e.g. rs786201005 or RS=1801133)
+              const rsMatch = [...(line.match(/rs\d+/gi) || []), ...(line.match(/(?:^|[;\t])RS=(\d+)/g) || []).map(m => 'rs' + m.replace(/.*RS=/i,''))];
+              if (rsMatch.length && rsMatch.some(rs => clinicalRsIds.has(rs.toLowerCase()))) {
                 relevantLines.push(line);
                 if (relevantLines.length >= 500) { done = true; streamReader.cancel(); break; }
               }
@@ -1295,8 +1300,8 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
             if (!line.trim()) continue;
             if (line.startsWith('#')) { lastHeaderLine = line; continue; }
             totalDataLines++;
-            const rsMatch = line.match(/rs\d+/g);
-            if (rsMatch && rsMatch.some(rs => clinicalRsIds.has(rs))) {
+            const rsMatch = [...(line.match(/rs\d+/gi) || []), ...(line.match(/(?:^|[;\t])RS=(\d+)/g) || []).map(m => 'rs' + m.replace(/.*RS=/i,''))];
+            if (rsMatch.length && rsMatch.some(rs => clinicalRsIds.has(rs.toLowerCase()))) {
               relevantLines.push(line);
               if (relevantLines.length >= 500) break;
             }
@@ -1453,21 +1458,27 @@ Extract every food/substance with a reactivity level.
 - Yellow / Class 1 / MILD → "mild" array
 - Green / Class 0 / ACCEPTABLE → omit
 
-REPORT TYPE 2 — CMA / CNA (Cell Science Systems intracellular micronutrient analysis):
-This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested with its actual value.
+REPORT TYPE 2 — CMA / CNA / Spectrox (Cell Science Systems intracellular micronutrient analysis):
+This is a Cell Science Systems CMA or CNA report. It tests ~55 intracellular micronutrients.
+
+TABLE LAYOUT: The report has a table where each ROW is one nutrient. The LEFT column contains the nutrient name. The right columns show quartile ranges (1st, 2nd, 3rd, 4th quartile) with the patient's result marked — often as a filled bar, dot, or highlighted cell in one of the quartile columns. Lower quartiles (1st, 2nd) = below optimal. Upper quartiles (3rd, 4th) = adequate.
+
+The Spectrox score (Total Antioxidant Function) is a single numeric score, often shown prominently at the top or bottom.
+
+READ EVERY ROW of the nutrient table. Do NOT skip any nutrient. If a nutrient is in the 1st or 2nd quartile it is deficient/low. If in 3rd or 4th quartile it is adequate.
 
 For the summary arrays:
-- Any nutrient marked DEFICIENT, VERY LOW, or critically below range → "severe"
-- Any nutrient marked LOW, BORDERLINE, or below optimal → "moderate"
-- Any nutrient in ADEQUATE / NORMAL / within range → "mild"
+- 1st quartile / DEFICIENT / VERY LOW → "severe" AND "cma_deficiencies"
+- 2nd quartile / LOW / BORDERLINE → "moderate" AND "cma_deficiencies"
+- 3rd or 4th quartile / ADEQUATE / NORMAL → "mild" AND "cma_adequate"
 
-Also extract the FULL detailed data:
-- "cma_deficiencies": array of below-range nutrient names
-- "cma_adequate": array of in-range nutrient names
-- "cma_nutrients": array of objects for EVERY nutrient: [{"name":"vitamin d","value":32,"unit":"ng/mL","range_low":30,"range_high":100,"status":"adequate|low|deficient"}]
-- "redox_score": the REDOX / Spectrox / Total Antioxidant Function score if present (numeric)
-- "cma_antioxidants": array of antioxidant nutrients specifically: [{"name":"glutathione","value":...,"status":"adequate|low|deficient"}]
-- "cma_categories": group nutrients by category if visible: {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
+Also extract:
+- "cma_deficiencies": ALL below-optimal nutrient names (1st + 2nd quartile)
+- "cma_adequate": ALL optimal nutrient names (3rd + 4th quartile)
+- "cma_nutrients": EVERY nutrient as [{"name":"vitamin d","value":32,"unit":"ng/mL","range_low":30,"range_high":100,"status":"adequate|low|deficient"}]
+- "redox_score": the Spectrox / REDOX / Total Antioxidant Function score (numeric only)
+- "cma_antioxidants": antioxidant-specific nutrients: [{"name":"glutathione","value":...,"status":"adequate|low|deficient"}]
+- "cma_categories": {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
 
 REPORT TYPE 3 — Blood work / other:
 Extract any out-of-range markers into "moderate", normal into "mild".
@@ -1490,9 +1501,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
-      const isCMA = json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0;
-      const cmaDef = norm(json.cma_deficiencies);
-      const cmaAdeq = norm(json.cma_adequate);
+      const isCMA = json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0 || (Array.isArray(json.cma_nutrients) && json.cma_nutrients.length > 0);
+      // Fallback: derive cma_deficiencies / cma_adequate from cma_nutrients if arrays were empty
+      let cmaDef = norm(json.cma_deficiencies);
+      let cmaAdeq = norm(json.cma_adequate);
+      if (isCMA && (cmaDef.length === 0 && cmaAdeq.length === 0) && Array.isArray(json.cma_nutrients) && json.cma_nutrients.length > 0) {
+        cmaDef = json.cma_nutrients.filter(n => n.status === 'low' || n.status === 'deficient').map(n => String(n.name).toLowerCase().trim());
+        cmaAdeq = json.cma_nutrients.filter(n => n.status === 'adequate').map(n => String(n.name).toLowerCase().trim());
+      }
       const cmaNutrients = Array.isArray(json.cma_nutrients) ? json.cma_nutrients : [];
       const redoxScore = json.redox_score != null ? Number(json.redox_score) : null;
       const cmaAntioxidants = Array.isArray(json.cma_antioxidants) ? json.cma_antioxidants : [];
