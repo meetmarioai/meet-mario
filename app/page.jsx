@@ -1171,6 +1171,75 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
       // VCF genetic files — stream line-by-line to avoid OOM on large files (23andMe = 25MB, Dante = 400MB)
       if (isVCF) {
+        // ── POSITION-BASED LOOKUP — GRCh37, no chr prefix (Danteomics format) ──
+        // Danteomics VCFs have "." in ID column — no rsIDs. Match by CHROM:POS:REF:ALT instead.
+        // Also supports 23andMe (has rsIDs) via the rsID set below.
+        const POS_LOOKUP = {
+          // METHYLATION & FOLATE CYCLE
+          '1:11856378:G:A':   {rsid:'rs1801133',gene:'MTHFR',name:'C677T',domain:'methylation',   impact:'Folate conversion -35%. Use methylfolate (5-MTHF) not folic acid. Prioritise leafy greens, eggs, legumes.'},
+          '1:11854476:T:G':   {rsid:'rs1801131',gene:'MTHFR',name:'A1298C',domain:'methylation',  impact:'BH4 synthesis reduced — affects dopamine/serotonin. Supplement 5-MTHF, riboflavin B2, P5P B6.'},
+          '5:7870973:A:G':    {rsid:'rs1801394',gene:'MTRR',name:'A66G',domain:'methylation',     impact:'B12 recycling impaired. Methylcobalamin 1-2mg sublingual daily. Avoid cyanocobalamin.'},
+          '1:237048500:A:G':  {rsid:'rs1805087',gene:'MTR',name:'A2756G',domain:'methylation',    impact:'Methionine synthase activity reduced. Stack methylcobalamin + methylfolate together daily.'},
+          '22:19951271:G:A':  {rsid:'rs4680',gene:'COMT',name:'Val158Met',domain:'methylation',   impact:'Slow COMT — catecholamines clear slowly. Limit caffeine after noon. Magnesium and B2 support.'},
+          '22:19950235:C:T':  {rsid:'rs4633',gene:'COMT',name:'H62H',domain:'methylation',        impact:'COMT regulatory variant. Monitor catecholamine clearance alongside Val158Met.'},
+          '21:43053274:C:T':  {rsid:'rs234706',gene:'CBS',name:'C699T',domain:'methylation',      impact:'Transsulfuration upregulated. Limit methionine-rich foods. Molybdenum supports sulfite clearance.'},
+          '11:71784401:G:A':  {rsid:'rs12325817',gene:'FOLR1',name:'FOLR1',domain:'methylation',  impact:'Folate receptor efficiency reduced. Higher dietary folate required. Avoid methotrexate-class drugs.'},
+          '17:18019809:G:A':  {rsid:'rs1979277',gene:'SHMT1',name:'SHMT1',domain:'methylation',   impact:'Serine-to-glycine conversion reduced — folate pool disrupted. Glycine supplement, serine-rich diet.'},
+          '17:17580893:G:A':  {rsid:'rs7946',gene:'PEMT',name:'PEMT',domain:'methylation',        impact:'Choline synthesis reduced. Supplement choline 500mg, phosphatidylcholine. Egg yolks daily.'},
+          '19:49206986:G:A':  {rsid:'rs601338',gene:'FUT2',name:'W143X',domain:'nutrients',       impact:'Non-secretor — reduced B12 absorption and gut microbiome diversity. B12 sublingual preferred. Prebiotics.'},
+          '19:49208178:A:G':  {rsid:'rs602662',gene:'FUT2',name:'FUT2',domain:'nutrients',        impact:'FUT2 secretor variant — gut flora diversity affected. Probiotic supplementation beneficial.'},
+          '22:30899826:C:T':  {rsid:'rs1801198',gene:'TCN2',name:'P259R',domain:'nutrients',      impact:'B12 cellular transport reduced. Serum B12 may appear normal despite cellular deficiency. Test MMA.'},
+          // DETOX & GLUTATHIONE
+          '11:67352689:A:G':  {rsid:'rs1695',gene:'GSTP1',name:'Ile105Val',domain:'detox',        impact:'Phase II glutathione conjugation reduced. NAC 600mg, sulforaphane from broccoli sprouts. Minimise toxin exposure.'},
+          '11:67353878:C:T':  {rsid:'rs1138272',gene:'GSTP1',name:'Ala114Val',domain:'detox',     impact:'GSTP1 compound — combined with Ile105Val doubles detox burden. Glycine + glutamine supplementation.'},
+          '6:160113872:T:C':  {rsid:'rs4880',gene:'SOD2',name:'Val16Ala',domain:'detox',          impact:'Mitochondrial antioxidant capacity -30%. CoQ10 200-400mg, manganese, NAC, R-lipoic acid.'},
+          '11:34499305:C:T':  {rsid:'rs1001179',gene:'CAT',name:'CAT',domain:'detox',             impact:'Catalase activity reduced — H2O2 accumulates. Riboflavin B2, selenium, selenium-rich foods.'},
+          '15:75041917:A:C':  {rsid:'rs762551',gene:'CYP1A2',name:'CYP1A2',domain:'detox',        impact:'Slow caffeine metaboliser. Hard caffeine cutoff 13:00. Avoid chargrilled meats and grapefruit.'},
+          '10:96702047:C:T':  {rsid:'rs1799853',gene:'CYP2C9',name:'*2',domain:'detox',           impact:'CYP2C9 *2 — reduced clearance of NSAIDs and warfarin. Report to prescribing physicians.'},
+          '10:96741053:A:C':  {rsid:'rs1057910',gene:'CYP2C9',name:'*3',domain:'detox',           impact:'CYP2C9 *3 — severely reduced. NSAIDs and warfarin dosing must be reviewed by physician.'},
+          '10:96522463:G:A':  {rsid:'rs4244285',gene:'CYP2C19',name:'*2',domain:'detox',          impact:'CYP2C19 poor metaboliser — PPIs, clopidogrel, SSRIs affected. Review with physician.'},
+          // INFLAMMATION & IMMUNITY
+          '7:22766645:G:C':   {rsid:'rs1800795',gene:'IL6',name:'IL6 -174',domain:'inflammation', impact:'Elevated IL-6 baseline. Anti-inflammatory diet critical. Omega-3 3g/day, curcumin, avoid seed oils.'},
+          '6:31543031:G:A':   {rsid:'rs1800629',gene:'TNF',name:'TNF-α -308',domain:'inflammation',impact:'Higher TNF-α expression — systemic inflammation. GCR protocol is priority. Eliminate processed foods.'},
+          '2:113070456:G:A':  {rsid:'rs2241880',gene:'ATG16L1',name:'ATG16L1',domain:'inflammation',impact:'Autophagy impaired. Intermittent fasting, spermidine (wheat germ), reduce lectin load.'},
+          // LONGEVITY
+          '19:45411941:T:C':  {rsid:'rs429358',gene:'APOE',name:'ε4 allele',domain:'longevity',   impact:'APOE ε4 — elevated Alzheimer\'s + cardiovascular risk. Strict Mediterranean pattern. DHA 1g/day.'},
+          '19:45412079:C:T':  {rsid:'rs7412',gene:'APOE',name:'ε2 allele',domain:'longevity',     impact:'APOE ε2 — longevity-associated phenotype. Continue anti-inflammatory protocol. Annual lipid panel.'},
+          '6:26093141:G:A':   {rsid:'rs1800562',gene:'HFE',name:'C282Y',domain:'longevity',       impact:'HFE C282Y — haemochromatosis risk. Test ferritin + transferrin saturation. Limit red meat. No iron supplements.'},
+          '6:26091179:C:G':   {rsid:'rs1799945',gene:'HFE',name:'H63D',domain:'longevity',        impact:'HFE H63D carrier — mild iron accumulation. Monitor ferritin annually. Max 2× red meat/week.'},
+          '16:53820527:T:A':  {rsid:'rs9939609',gene:'FTO',name:'FTO',domain:'longevity',         impact:'FTO variant — appetite dysregulation. Exercise epigenetically silences FTO. Protein at every meal.'},
+          '10:114758349:C:T': {rsid:'rs7903146',gene:'TCF7L2',name:'TCF7L2',domain:'longevity',   impact:'Strongest T2D genetic risk — GLP-1 impaired. Low glycaemic diet, time-restricted eating, berberine.'},
+          '12:47844974:C:T':  {rsid:'rs2228570',gene:'VDR',name:'Fok1',domain:'longevity',        impact:'Reduced VDR sensitivity. Target 25-OH-D 80-100 nmol/L. 3000-5000 IU D3 + K2 MK-7 daily.'},
+          '12:48238757:A:G':  {rsid:'rs1544410',gene:'VDR',name:'BsmI',domain:'longevity',        impact:'VDR expression reduced. Higher D3 requirement. Test serum 25-OH-D every 6 months.'},
+          '12:48272895:A:C':  {rsid:'rs7975232',gene:'VDR',name:'ApaI',domain:'longevity',        impact:'VDR variant — immune regulation and bone density. D3 co-factors: K2, Mg, boron essential.'},
+          // NUTRIENTS
+          '16:81257926:T:C':  {rsid:'rs12934922',gene:'BCMO1',name:'R267S',domain:'nutrients',    impact:'Beta-carotene to retinol conversion -57%. Must eat preformed vitamin A: liver, cod liver oil, eggs.'},
+          '16:81294249:T:C':  {rsid:'rs7501331',gene:'BCMO1',name:'A379V',domain:'nutrients',     impact:'BCMO1 compound variant — near-zero carotenoid conversion. Preformed vitamin A non-negotiable.'},
+          '11:61597212:T:C':  {rsid:'rs174547',gene:'FADS1',name:'FADS1',domain:'nutrients',      impact:'Omega-3 desaturation reduced. Direct DHA+EPA 2-3g/day required. ALA from flax is insufficient.'},
+          '11:61512718:A:T':  {rsid:'rs174570',gene:'FADS2',name:'FADS2',domain:'nutrients',      impact:'FADS2 impaired. Marine omega-3 essential. Avoid omega-6 competition from seed oils.'},
+          '9:77404466:A:G':   {rsid:'rs2274924',gene:'TRPM6',name:'TRPM6',domain:'nutrients',     impact:'Magnesium transport reduced. Mg glycinate/malate 300-400mg. Monitor RBC Mg not serum. Avoid PPIs.'},
+          '4:72618334:C:A':   {rsid:'rs4588',gene:'GC',name:'VDBP',domain:'nutrients',            impact:'Vitamin D binding protein variant. May need higher D3 dose to achieve target serum levels.'},
+          '4:72614739:T:G':   {rsid:'rs7041',gene:'GC',name:'VDBP Gc2',domain:'nutrients',        impact:'VDBP Gc2 variant — altered free vitamin D fraction. Test free 25-OH-D if total appears adequate.'},
+          // CIRCADIAN & SLEEP
+          '22:24598203:T:C':  {rsid:'rs5751876',gene:'ADORA2A',name:'ADORA2A',domain:'circadian', impact:'High caffeine sensitivity. Maximum one coffee before 09:00. Sleep pressure builds rapidly — protect it.'},
+          '2:238319766:C:T':  {rsid:'rs57875989',gene:'PER2',name:'PER2',domain:'circadian',      impact:'Circadian phase shift variant. Strict 22:30 sleep, blackout blinds, blue light block from 20:00.'},
+          '4:56295506:C:T':   {rsid:'rs12649507',gene:'CLOCK',name:'CLOCK',domain:'circadian',    impact:'Free-running circadian drift. Morning light exposure within 30 min of waking is essential.'},
+          '1:215923198:C:T':  {rsid:'rs2287161',gene:'CRY1',name:'CRY1',domain:'circadian',       impact:'Delayed sleep phase. Melatonin 0.5mg at 21:00, morning light therapy, consistent wake time.'},
+          // ANS & NEUROLOGICAL
+          'X:43514416:T:G':   {rsid:'rs6323',gene:'MAOA',name:'MAOA',domain:'ans',                impact:'Monoamine oxidase variant — serotonin/NE clearance altered. Magnesium, P5P B6, tryptophan timing.'},
+          '5:148206461:A:G':  {rsid:'rs1042713',gene:'ADRB2',name:'Arg16Gly',domain:'ans',        impact:'Beta-2 adrenergic variant — catecholamine sensitivity altered. HRV monitoring recommended.'},
+          '11:113283459:C:T': {rsid:'rs1800497',gene:'DRD2',name:'TaqIA',domain:'ans',            impact:'Reduced D2 receptor density — reward variant. Exercise for dopamine. Avoid addictive substances.'},
+          '17:28521337:A:G':  {rsid:'rs25531',gene:'SLC6A4',name:'5-HTTLPR',domain:'ans',         impact:'Serotonin transporter variant — stress resilience. HRV coherence practice, tryptophan at dinner.'},
+          // EXERCISE & HORMESIS
+          '11:66560624:C:T':  {rsid:'rs1815739',gene:'ACTN3',name:'R577X',domain:'exercise',      impact:'Endurance phenotype (no alpha-actinin-3). Zone 2 cardio dominant. Plyometric loading less effective.'},
+          '4:23808660:C:T':   {rsid:'rs8192678',gene:'PPARGC1A',name:'Gly482Ser',domain:'exercise',impact:'Mitochondrial biogenesis reduced. Zone 2 training essential. Cold exposure: daily cold shower.'},
+          '11:27679916:C:T':  {rsid:'rs6265',gene:'BDNF',name:'Val66Met',domain:'exercise',       impact:'BDNF secretion impaired. Exercise is the primary trigger — 30 min aerobic minimum daily. No alcohol.'},
+          // SUN & SKIN
+          '16:89985844:T:C':  {rsid:'rs1805007',gene:'MC1R',name:'R151C',domain:'sun',            impact:'MC1R red hair variant — UV damage risk. SPF 50 daily, D3 supplement (cannot synthesise efficiently).'},
+          '16:89986117:C:T':  {rsid:'rs1805008',gene:'MC1R',name:'R160W',domain:'sun',            impact:'MC1R variant — pheomelanin dominant, melanoma risk. Avoid peak sun 11:00-15:00. Astaxanthin.'},
+          '15:28365618:A:G':  {rsid:'rs12913832',gene:'HERC2',name:'OCA2',domain:'sun',           impact:'Light eye/skin — higher UV sensitivity and damage risk. Daily SPF, regular dermatologist check.'},
+        };
+
         // ── STREAMING VCF READER — never loads full file into memory ──
         // Only SNPs where we can intervene via supplementation, diet, training, hormesis, circadian, or lifestyle
         const clinicalRsIds = new Set([
@@ -1266,76 +1335,108 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
           'rs12913832', // HERC2/OCA2 — eye/skin colour, UV tolerance
         ]);
 
+        // ── GT extraction helper ──
+        const extractGT = (line, ref, alt) => {
+          const cols = line.split('\t');
+          if (cols.length < 10) return { genotype: '?/?', status: 'carrier' };
+          const fmt = (cols[8] || '').split(':');
+          const smp = (cols[9] || '').split(':');
+          const gtIdx = fmt.indexOf('GT');
+          const gtRaw = (gtIdx >= 0 ? smp[gtIdx] : smp[0]) || './.';
+          const alleles = gtRaw.split(/[/|]/).map(a => a.trim());
+          const isRef = a => a === '0';
+          const isAlt = a => a !== '0' && a !== '.';
+          const allRef = alleles.every(isRef);
+          const allAlt = alleles.length > 0 && alleles.every(isAlt);
+          const status = allRef ? 'normal' : allAlt ? 'risk' : 'carrier';
+          const genotype = alleles.map(a => isRef(a) ? ref : isAlt(a) ? alt : '?').join('');
+          return { genotype, status };
+        };
+
         // ── STREAM the file line-by-line — never loads full VCF into RAM ──
-        const relevantLines = [];
+        const posMatchedSnps = []; // direct position matches (no Claude needed)
+        const rsidLines = [];      // rsID-matched lines (send to Claude as fallback)
         let lastHeaderLine = '';
         let totalDataLines = 0;
         let done = false;
+
+        const processLine = (line) => {
+          if (!line) return;
+          if (line.startsWith('#')) { lastHeaderLine = line; return; }
+          totalDataLines++;
+          const cols = line.split('\t');
+          const chrom = (cols[0] || '').replace(/^chr/i, ''); // strip chr prefix
+          const pos   = cols[1] || '';
+          const id    = cols[2] || '.';
+          const ref   = cols[3] || '';
+          const alt   = (cols[4] || '').split(',')[0]; // first ALT only
+
+          // 1. Position-based match (primary — works on Danteomics/no-rsID VCFs)
+          const posKey = `${chrom}:${pos}:${ref}:${alt}`;
+          const annotation = POS_LOOKUP[posKey];
+          if (annotation) {
+            const { genotype, status } = extractGT(line, ref, alt);
+            if (status !== 'normal') { // skip wild-type
+              posMatchedSnps.push({ ...annotation, genotype, status });
+            }
+            return;
+          }
+
+          // 2. rsID-based match (fallback — works on 23andMe and annotated VCFs)
+          const rsMatch = [...(id.match(/rs\d+/gi) || []), ...(line.match(/(?:^|[;\t])RS=(\d+)/g) || []).map(m => 'rs' + m.replace(/.*RS=/i,''))];
+          if (rsMatch.some(rs => clinicalRsIds.has(rs.toLowerCase()))) {
+            rsidLines.push(line);
+          }
+        };
 
         try {
           const streamReader = file.stream().getReader();
           const decoder = new TextDecoder();
           let lineBuffer = '';
-
           while (!done) {
             const { value, done: streamDone } = await streamReader.read();
             done = streamDone;
             lineBuffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-            // Process all complete lines in buffer
             let nlIdx;
             while ((nlIdx = lineBuffer.indexOf('\n')) >= 0) {
-              const line = lineBuffer.slice(0, nlIdx).trimEnd();
+              processLine(lineBuffer.slice(0, nlIdx).trimEnd());
               lineBuffer = lineBuffer.slice(nlIdx + 1);
-              if (!line) continue;
-              if (line.startsWith('#')) { lastHeaderLine = line; continue; }
-              totalDataLines++;
-              // Match rs\d+ directly OR RS=\d+ in INFO field (e.g. rs786201005 or RS=1801133)
-              const rsMatch = [...(line.match(/rs\d+/gi) || []), ...(line.match(/(?:^|[;\t])RS=(\d+)/g) || []).map(m => 'rs' + m.replace(/.*RS=/i,''))];
-              if (rsMatch.length && rsMatch.some(rs => clinicalRsIds.has(rs.toLowerCase()))) {
-                relevantLines.push(line);
-                if (relevantLines.length >= 500) { done = true; streamReader.cancel(); break; }
-              }
+              if (posMatchedSnps.length + rsidLines.length >= 500) { done = true; streamReader.cancel(); break; }
             }
           }
-          // Process any remaining buffered text
-          if (lineBuffer.trim() && !lineBuffer.startsWith('#')) {
-            totalDataLines++;
-            const rsMatch = lineBuffer.match(/rs\d+/g);
-            if (rsMatch && rsMatch.some(rs => clinicalRsIds.has(rs))) relevantLines.push(lineBuffer.trim());
-          }
+          if (lineBuffer.trim()) processLine(lineBuffer.trim());
         } catch (streamErr) {
-          // Fallback for browsers without stream() — read whole file (may be slow on large files)
-          console.warn('[VCF] stream() unavailable, falling back to file.text():', streamErr.message);
+          console.warn('[VCF] stream() fallback:', streamErr.message);
           const textContent = await file.text();
-          const allLines = textContent.split('\n');
-          for (const line of allLines) {
-            if (!line.trim()) continue;
-            if (line.startsWith('#')) { lastHeaderLine = line; continue; }
-            totalDataLines++;
-            const rsMatch = [...(line.match(/rs\d+/gi) || []), ...(line.match(/(?:^|[;\t])RS=(\d+)/g) || []).map(m => 'rs' + m.replace(/.*RS=/i,''))];
-            if (rsMatch.length && rsMatch.some(rs => clinicalRsIds.has(rs.toLowerCase()))) {
-              relevantLines.push(line);
-              if (relevantLines.length >= 500) break;
-            }
+          for (const line of textContent.split('\n')) {
+            processLine(line.trimEnd());
+            if (posMatchedSnps.length + rsidLines.length >= 500) break;
           }
         }
 
-        // Fallback: if no clinical matches, grab first 300 lines with any rsID
-        if (relevantLines.length === 0 && totalDataLines > 0) {
-          try {
-            const slice = await file.slice(0, 500000).text();
-            for (const line of slice.split('\n')) {
-              if (!line.trim() || line.startsWith('#')) continue;
-              if (/rs\d+/.test(line)) { relevantLines.push(line); if (relevantLines.length >= 300) break; }
-            }
-          } catch {}
+        if (totalDataLines === 0) {
+          setDashLabError('No genetic data found in this file. Is it a valid VCF?');
+          setDashLabParsing(false);
+          return;
         }
 
-        const filteredContent = [lastHeaderLine, ...relevantLines].filter(Boolean).join('\n');
-        const snpCount = relevantLines.length;
+        // ── PATH A: position matches found — annotate directly, no Claude ──
+        if (posMatchedSnps.length > 0) {
+          const deduped = [...new Map(posMatchedSnps.map(s => [s.rsid, s])).values()];
+          const updatedSnps = [...(patient.genomicSnps || []).filter(s => !deduped.find(n => n.rsid === s.rsid)), ...deduped];
+          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps }; persistLabData(updated, file); return updated; });
+          setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+          setDashLabSuccess(true);
+          setDashLabParsing(false);
+          return;
+        }
 
-        if (snpCount === 0 && totalDataLines === 0) {
-          setDashLabError('No genetic data found in this file. Is it a valid VCF?');
+        // ── PATH B: only rsID matches — send to Claude for annotation ──
+        const filteredContent = [lastHeaderLine, ...rsidLines].filter(Boolean).join('\n');
+        const snpCount = rsidLines.length;
+
+        if (snpCount === 0) {
+          setDashLabError('No clinically relevant variants found. VCF has no rsIDs and no position matches — ensure GRCh37 reference.');
           setDashLabParsing(false);
           return;
         }
@@ -1345,25 +1446,12 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 4000,
-            system: 'You are a clinical genomics analyst specialising in actionable SNPs. Extract variants from VCF/genetic files and return structured JSON. ONLY include variants where a specific intervention exists (supplementation, diet, training type, hormesis protocol, circadian adjustment, or lifestyle change). Discard benign/normal variants and anything without a clear clinical action.',
-            messages: [{ role: 'user', content: `This is genetic data (VCF or similar format) with ${snpCount} pre-filtered lines out of ${totalDataLines} total variants.
+            system: 'You are a clinical genomics analyst. Extract variants from VCF data and return structured JSON. Only include variants where a specific intervention exists.',
+            messages: [{ role: 'user', content: `Genetic data: ${snpCount} pre-filtered lines out of ${totalDataLines} total variants.
 
-TASK: For each variant, extract:
-- rsid (e.g. rs1801133) — from ID column or anywhere in the line
-- gene (e.g. MTHFR) — infer from rsID if not in file
-- genotype (e.g. CT, TT, CC) — from GT field, ALT/REF, or genotype columns
-- status: "risk" (homozygous variant), "carrier" (heterozygous), or "normal" (wild type)
-- domain: one of "methylation", "detox", "inflammation", "longevity", "nutrients", "circadian", "ans" (autonomic nervous system), "exercise", "sun"
-- impact: one sentence — MUST state the specific intervention (e.g. "Supplement methylfolate 400-800mcg, prioritise dark leafy greens" or "Avoid HIIT in Phase 1, zone 2 cardio preferred" or "Hard caffeine cutoff 10:00, melatonin onset delayed")
-
-RULES:
-- ONLY include variants where genotype differs from wild-type reference OR where even carrier status is clinically relevant
-- Skip variants with status "normal" UNLESS the normal status itself is clinically useful (e.g. fast COMT = can tolerate polyphenols freely)
-- The data may use tabs, spaces, or commas as delimiters
-- If genotype cannot be determined, still include the variant with genotype "unknown" if the rsID is clinically important
-
-Return ONLY this JSON (no markdown, no explanation):
-{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","domain":"methylation","impact":"Folate cycle ~35% reduced. Supplement methylfolate 400mcg, prioritise dark leafy greens, avoid folic acid."}]}
+For each variant extract: rsid, gene, genotype (e.g. CT), status ("risk"=homozygous alt, "carrier"=heterozygous, "normal"=ref/ref), domain (methylation/detox/inflammation/longevity/nutrients/circadian/ans/exercise/sun), impact (one sentence with specific intervention).
+Skip normal/wild-type. Return ONLY JSON:
+{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","domain":"methylation","impact":"Supplement methylfolate 400mcg, avoid folic acid."}]}
 
 Data:
 ${filteredContent.slice(0, 30000)}` }],
@@ -1376,22 +1464,14 @@ ${filteredContent.slice(0, 30000)}` }],
         let json = {};
         const cleanText = text.replace(/```json|```/g, '').trim();
         try { json = JSON.parse(cleanText); } catch {
-          // Find the outermost JSON object containing "snps"
-          const start = cleanText.indexOf('{"snps"');
-          const start2 = cleanText.indexOf('{ "snps"');
-          const idx = start >= 0 ? start : start2;
+          const idx = Math.max(cleanText.indexOf('{"snps"'), cleanText.indexOf('{ "snps"'));
           if (idx >= 0) {
-            let depth = 0; let end = idx;
+            let depth = 0, end = idx;
             for (let i = idx; i < cleanText.length; i++) {
               if (cleanText[i] === '{') depth++;
               else if (cleanText[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
             }
             try { json = JSON.parse(cleanText.slice(idx, end)); } catch {}
-          }
-          // Last resort — try to find any JSON with snps array
-          if (!json.snps) {
-            const m = cleanText.match(/\{[\s\S]*"snps"\s*:\s*\[[\s\S]*\]\s*[\s\S]*\}/);
-            if (m) try { json = JSON.parse(m[0]); } catch {}
           }
         }
         if (json.snps?.length) {
@@ -1399,12 +1479,7 @@ ${filteredContent.slice(0, 30000)}` }],
           setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps }; persistLabData(updated, file); return updated; });
         }
         setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-        const hasData = (json.snps?.length || 0) > 0;
-        if (hasData) {
-          setDashLabSuccess(true);
-        } else {
-          setDashLabError('No clinically relevant SNPs found in this VCF file');
-        }
+        if ((json.snps?.length || 0) > 0) { setDashLabSuccess(true); } else { setDashLabError('No clinically relevant SNPs found in this VCF file'); }
         setDashLabParsing(false);
         return;
       }
