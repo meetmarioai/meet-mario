@@ -98,10 +98,12 @@ async function fileToBase64(file) {
 }
 
 async function callClaude(messages, system, extra = {}) {
+  const { signal: sig, ...bodyExtra } = extra;
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, system, messages, ...extra }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system, messages, ...bodyExtra }),
+    signal: sig,
   });
   const d = await res.json();
   return (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
@@ -903,14 +905,22 @@ Meals every 3 hours. Nothing after 21:30.
 Mon: grains/starch | Tue: soup | Wed: legumes (day 22+, skip during detox) | Thu: white protein | Fri: vegetarian | Sat: fish | Sun: red meat
 
 Generate all 21 days. Format: Day number, then each meal as **Meal Name** followed by a one-line description. End each day with a Clinical Note citing specific patient data. Keep it warm and human — this is their roadmap to feeling like themselves again.`;
+    const dietAbort = new AbortController();
+    const dietTimeout = setTimeout(() => dietAbort.abort(), 60000);
     try {
       const res = await fetch('/api/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:4000, system:buildMarioSystemPrompt(pd), messages:[{role:'user',content:prompt}] })
+        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:4000, system:buildMarioSystemPrompt(pd), messages:[{role:'user',content:prompt}] }),
+        signal: dietAbort.signal,
       });
+      clearTimeout(dietTimeout);
       const d = await res.json();
+      if (d.error) throw new Error(d.error);
       setDietPlan((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
-    } catch { setDietPlan('Generation failed. Use the Generate tab to create your meal plan.'); }
+    } catch(err) {
+      clearTimeout(dietTimeout);
+      setDietPlan(err.name === 'AbortError' ? 'TIMEOUT' : 'ERROR');
+    }
     setDietLoading(false);
   };
   const [tab, setTab] = useState('today');
@@ -970,6 +980,8 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const [chatMsgs, setChatMsgs] = useState([]);
   const [chatIn, setChatIn] = useState('');
   const [chatLoad, setChatLoad] = useState(false);
+  const [chatLoadSec, setChatLoadSec] = useState(0);
+  const chatAbortRef = useRef(null);
   const chatEndRef = useRef(null);
   const labFileRef = useRef(null);
   const labFileAddRef = useRef(null);
@@ -1747,6 +1759,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           setShowLanding(false);
           setShowOnboarding(false);
           setShowAuth(false);
+          loadChatHistory(user.id);
         } else {
           // Profile not found — could be a page reload after camera/app switch on Android.
           // A signed-in user has ALREADY completed onboarding at some point.
@@ -1795,6 +1808,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           }
           setShowLanding(false);
           setShowOnboarding(false);
+          loadChatHistory(user.id);
         } else {
           // Signed-in user with no profile found — could be a transient load failure.
           // Don't force onboarding: stay on landing so they can choose.
@@ -1806,6 +1820,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         setShowAuth(true);
         setShowLanding(false);
         setPatient({});
+        setChatMsgs([]);
       }
     });
     return () => { subscription.unsubscribe(); clearTimeout(authTimeout); };
@@ -1822,6 +1837,18 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
   // Scroll chat
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [chatMsgs]);
+  useEffect(() => {
+    if (!chatLoad) { setChatLoadSec(0); return; }
+    const t = setInterval(() => setChatLoadSec(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [chatLoad]);
+
+  // Auto-generate rotation when opening Meals tab if ALCAT mild data present but rotation empty
+  useEffect(() => {
+    if (tab === 'rotation' && (patient.mild?.length > 0) && !patient.rotation?.[1]) {
+      buildRotationFromAlcat(patient);
+    }
+  }, [tab]);
 
   // Monitor interval
   useEffect(() => {
@@ -1877,6 +1904,49 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     setRecipeLoading(false);
   };
 
+  const buildRotationFromAlcat = async (pd) => {
+    const mild = (pd || patient).mild || [];
+    if (!mild.length) return;
+    // Categorize mild foods using keyword matching
+    const catMap = { protein:[], veg:[], fruit:[], grains:[], misc:[] };
+    const proteinKw = ['beef','chicken','salmon','lamb','turkey','tuna','cod','shrimp','pork','duck','venison','trout','mackerel','sardine','halibut','herring','bass','tilapia','crab','lobster','scallop','mussel','clam','egg'];
+    const vegKw = ['broccoli','cauliflower','spinach','kale','carrot','zucchini','cucumber','celery','asparagus','beet','bok choy','cabbage','leek','onion','garlic','tomato','eggplant','pepper','sweet potato','squash','artichoke','arugula','fennel','lettuce','radish','turnip','parsnip','rutabaga','yam','chard','collard','watercress','endive','radicchio','cassava','taro'];
+    const fruitKw = ['apple','banana','mango','pineapple','papaya','melon','berry','blueberry','strawberry','raspberry','cherry','grape','orange','lemon','lime','grapefruit','pear','peach','plum','apricot','fig','date','watermelon','kiwi','pomegranate','persimmon','guava','lychee','passion','dragon'];
+    const grainKw = ['rice','quinoa','millet','buckwheat','amaranth','oat','wheat','corn','tapioca','sorghum','teff','potato','bread','pasta','noodle','flour','starch'];
+    mild.forEach(food => {
+      const f = food.toLowerCase();
+      if (proteinKw.some(k => f.includes(k))) catMap.protein.push(food);
+      else if (vegKw.some(k => f.includes(k))) catMap.veg.push(food);
+      else if (fruitKw.some(k => f.includes(k))) catMap.fruit.push(food);
+      else if (grainKw.some(k => f.includes(k))) catMap.grains.push(food);
+      else catMap.misc.push(food);
+    });
+    // Distribute each category across 4 days (round-robin)
+    const rotation = { 1:{protein:[],veg:[],fruit:[],grains:[],misc:[]}, 2:{protein:[],veg:[],fruit:[],grains:[],misc:[]}, 3:{protein:[],veg:[],fruit:[],grains:[],misc:[]}, 4:{protein:[],veg:[],fruit:[],grains:[],misc:[]} };
+    Object.entries(catMap).forEach(([cat, foods]) => {
+      foods.forEach((food, idx) => {
+        rotation[(idx % 4) + 1][cat].push(food);
+      });
+    });
+    // Remove empty cats
+    for (let d = 1; d <= 4; d++) {
+      Object.keys(rotation[d]).forEach(cat => {
+        if (!rotation[d][cat].length) delete rotation[d][cat];
+      });
+    }
+    setPatient(p => ({ ...p, rotation }));
+    // Save to Supabase
+    ;(async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) return;
+        const { data: existing } = await supabase.from('profiles').select('patient_data').eq('id', user.id).single();
+        const pd2 = existing?.patient_data ? (typeof existing.patient_data === 'string' ? JSON.parse(existing.patient_data) : existing.patient_data) : {};
+        await supabase.from('profiles').update({ patient_data: { ...pd2, rotation } }).eq('id', user.id);
+      } catch {}
+    })();
+  };
+
   const buildGroceryList = async () => {
     if (groceryLoad) return; setGroceryLoad(true); setGroceryList(null);
     const rot = patient.rotation || {};
@@ -1911,13 +1981,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     return parts.length ? `\n\n[PATIENT DATA — cite specific values in your response]\n${parts.join('\n')}` : '';
   };
 
-  const sendChat = async () => {
-    if (!chatIn.trim() || chatLoad) return;
-    const userMsg = chatIn.trim();
-    const msgs = [...chatMsgs, { role:'user', content: userMsg }];
-    setChatMsgs(msgs); setChatIn(''); setChatLoad(true);
+  const sendChat = async (retryMsg) => {
+    const userMsg = retryMsg || chatIn.trim();
+    if (!userMsg || chatLoad) return;
+    const msgs = [...chatMsgs.filter(m => !m.isError), { role:'user', content: userMsg }];
+    setChatMsgs(msgs); if (!retryMsg) setChatIn(''); setChatLoad(true);
+    const controller = new AbortController();
+    chatAbortRef.current = controller;
     try {
-      // Inject patient data context into the first user message so Claude always has it
       const contextNote = buildPatientContext();
       const apiMsgs = msgs.map((m, i) => {
         if (i === msgs.length - 1 && m.role === 'user' && contextNote) {
@@ -1925,10 +1996,52 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         }
         return m;
       });
-      const r = await callClaude(apiMsgs, buildMarioSystemPrompt(patient), { max_tokens: 2000 });
-      setChatMsgs([...msgs, { role:'assistant', content:r }]);
-    } catch { setChatMsgs(m => [...m, { role:'assistant', content:'Connection error. Please try again.' }]); }
+      const r = await callClaude(apiMsgs, buildMarioSystemPrompt(patient), { max_tokens: 2000, signal: controller.signal });
+      const finalMsgs = [...msgs, { role:'assistant', content:r }];
+      setChatMsgs(finalMsgs);
+      // Save to Supabase in background
+      ;(async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user?.id) return;
+          await supabase.from('chat_messages').insert([
+            { user_id: user.id, role: 'user', content: userMsg },
+            { user_id: user.id, role: 'assistant', content: r },
+          ]);
+        } catch {}
+      })();
+    } catch(err) {
+      if (err.name === 'AbortError') {
+        setChatMsgs(msgs.slice(0, -1)); // remove last user msg on cancel
+      } else {
+        setChatMsgs([...msgs, { role:'assistant', content:'', isError: true, retryMsg: userMsg }]);
+      }
+    }
     setChatLoad(false);
+    chatAbortRef.current = null;
+  };
+
+  const loadChatHistory = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('role, content')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true })
+        .limit(50);
+      if (!error && data?.length) {
+        setChatMsgs(data.map(m => ({ role: m.role, content: m.content })));
+      }
+    } catch {} // table may not exist yet
+  };
+
+  const clearChatHistory = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return;
+      await supabase.from('chat_messages').delete().eq('user_id', user.id);
+    } catch {}
+    setChatMsgs([]);
   };
 
   const runPlateCheck = async () => {
@@ -1949,7 +2062,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       }
       const res = await fetch('/api/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:600, system:buildMarioSystemPrompt(patient), messages:[{ role:'user', content }] })
+        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:600, system:buildMarioSystemPrompt(patient), messages:[{ role:'user', content }] })
       });
       const d = await res.json();
       setPlateResult((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
@@ -2015,7 +2128,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const msgs = [{ role:'user', content }];
       const res = await fetch('/api/chat', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:400, system:sys, messages:msgs })
+        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:400, system:sys, messages:msgs })
       });
       const d = await res.json();
       const analysis = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
@@ -2039,10 +2152,12 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
   const setP = (d,k,p) => { setProteins(prev=>({...prev,[`${d}-${k}`]:p})); setPicker(null); };
 
   const BOTTOM_TABS = [
-    { id:'today', label:'Today', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> },
-    { id:'mario', label:'Mario', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
-    { id:'me',    label:'Me',    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
+    { id:'today',    label:'Today', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> },
+    { id:'mario',    label:'Mario', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
+    { id:'rotation', label:'Meals', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2"/><path d="M18 15V2"/><path d="M15 2c0 4.8 6 4.8 6 9.6a5.98 5.98 0 0 1-6 5.4"/><path d="M21 22v-7"/><path d="M18 22v-7"/></svg> },
+    { id:'me',       label:'Me',    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
   ];
+  const MEALS_GROUP = new Set(['rotation','meals','generate','grocery']);
 
   const P = patient;
   const ROT = patient.rotation || {};
@@ -2200,7 +2315,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
               </div>
             )}
             {monTimeline.length > 0 && (
-              <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20 }}>
+              <div style={{ display:'flex',flexDirection:'column',gap:10,marginBottom:20 }}>
                 {[
                   { key:'hr',label:'Heart Rate',unit:'bpm',color:T.err,range:[50,140] },
                   { key:'hrv',label:'HRV',unit:'ms',color:T.rg,range:[20,100] },
@@ -2209,18 +2324,18 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 ].map(m=>{
                   const vals = monTimeline.map(p=>p[m.key]);
                   const latest = vals[vals.length-1];
-                  const h=60,w=220,lo=m.range[0],hi=m.range[1];
-                  const pts = vals.map((v,i)=>`${(i/(vals.length-1))*w},${h-(((v-lo)/(hi-lo))*h*0.8+h*0.1)}`).join(' ');
+                  const h=50,lo=m.range[0],hi=m.range[1];
+                  const pts = vals.map((v,i)=>`${(i/(vals.length-1||1))*100}%,${h-(((v-lo)/(hi-lo))*h*0.8+h*0.1)}`).join(' ');
                   return (
-                    <Panel key={m.key} style={{ marginBottom:0 }}>
-                      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8 }}>
-                        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase' }}>{m.label}</div>
-                        <div style={{ fontFamily:fonts.mono,fontSize:16,color:m.color,fontWeight:400 }}>{latest}<span style={{ fontSize:11,color:T.w4,marginLeft:3 }}>{m.unit}</span></div>
+                    <div key={m.key} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:16 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:2 }}>{m.label}</div>
+                        <div style={{ fontFamily:fonts.mono,fontSize:20,color:m.color,fontWeight:400,lineHeight:1 }}>{latest}<span style={{ fontSize:11,color:T.w4,marginLeft:3 }}>{m.unit}</span></div>
                       </div>
-                      <svg width={w} height={h} style={{ display:'block' }}>
-                        <polyline points={pts} fill="none" stroke={m.color} strokeWidth={1.5} strokeLinejoin="round"/>
+                      <svg width="120" height={h} style={{ display:'block',flexShrink:0 }}>
+                        <polyline points={vals.map((v,i)=>`${(i/(vals.length-1||1))*120},${h-(((v-lo)/(hi-lo))*h*0.8+h*0.1)}`).join(' ')} fill="none" stroke={m.color} strokeWidth={1.5} strokeLinejoin="round"/>
                       </svg>
-                    </Panel>
+                    </div>
                   );
                 })}
               </div>
@@ -2319,7 +2434,19 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
               </Panel>
             ))}
           </div>
-        ) : <EmptyState title="Rotation not yet loaded" sub="Your 4-day rotation is generated from your ALCAT results. Upload your results to unlock this view."/>}
+        ) : P.mild?.length > 0 ? (
+          <Panel style={{ textAlign:'center', padding:32 }}>
+            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:16 }}>
+              {P.mild.length} mild foods detected — generating your 4-day rotation…
+            </div>
+            <div style={{ display:'flex',gap:8,justifyContent:'center',marginBottom:16 }}>
+              {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+            </div>
+            <button onClick={()=>buildRotationFromAlcat(patient)} style={{ background:T.rg,color:'#fff',border:'none',borderRadius:9,padding:'10px 24px',cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600 }}>
+              Build Rotation
+            </button>
+          </Panel>
+        ) : <EmptyState title="No ALCAT mild foods found" sub="Upload your ALCAT results to generate your 4-day rotation calendar."/>}
       </div>
     );
 
@@ -2566,6 +2693,11 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     // ── MARIO (full-screen AI companion) ──
     if (tab === 'mario') return (
       <div style={{ display:'flex',flexDirection:'column',height:'100%',minHeight:'calc(100dvh - 164px)' }}>
+        {chatMsgs.length > 0 && (
+          <div style={{ display:'flex',justifyContent:'flex-end',padding:'6px 20px 0',flexShrink:0 }}>
+            <button onClick={()=>{ if(window.confirm('Clear all chat history?')) clearChatHistory(); }} style={{ background:'none',border:'none',cursor:'pointer',fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.1em' }}>CLEAR HISTORY</button>
+          </div>
+        )}
         <div style={{ flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:'20px 20px 16px' }}>
         {chatMsgs.length === 0 && (
           <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'20px 18px',marginBottom:16 }}>
@@ -2642,21 +2774,45 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             </div>
           </div>
         )}
-        {chatMsgs.map((m,i)=>(
+        {chatMsgs.map((m,i)=> m.isError ? (
+          <div key={i} style={{ display:'flex',justifyContent:'flex-start',marginBottom:10 }}>
+            <div style={{ background:`${T.err}08`,border:`1px solid ${T.err}25`,borderRadius:'16px 16px 16px 4px',padding:'12px 16px',maxWidth:'82%' }}>
+              <div style={{ fontSize:12,color:T.err,fontFamily:fonts.sans,marginBottom:8 }}>Mario couldn't respond — connection error.</div>
+              <button onClick={()=>sendChat(m.retryMsg)} style={{ background:T.rg,color:'#fff',border:'none',borderRadius:7,padding:'7px 16px',cursor:'pointer',fontSize:12,fontFamily:fonts.sans }}>Retry</button>
+            </div>
+          </div>
+        ) : (
           <div key={i} style={{ display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start',marginBottom:10 }}>
             <div style={{ maxWidth:'82%',background:m.role==='user'?T.rg:T.w1,border:`1px solid ${m.role==='user'?T.rg:T.w3}`,borderRadius:m.role==='user'?'16px 16px 4px 16px':'16px 16px 16px 4px',padding:'12px 16px',fontSize:13,color:m.role==='user'?'#fff':T.w6,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>
               {m.content.split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
             </div>
           </div>
         ))}
-        {chatLoad && <div style={{ display:'flex',justifyContent:'flex-start',marginBottom:10 }}><div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:'16px 16px 16px 4px',padding:'12px 16px',fontSize:13,color:T.w4,fontFamily:fonts.mono }}>…</div></div>}
+        {chatLoad && (() => {
+          const phrases = ['Cross-referencing your ALCAT results…','Checking your reactive food profile…','Applying GCR framework…','Building your personalised response…'];
+          const phraseIdx = Math.floor(chatLoadSec / 3.5) % phrases.length;
+          const isLong = chatLoadSec >= 30;
+          return (
+            <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-start',marginBottom:10,gap:6 }}>
+              <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:'16px 16px 16px 4px',padding:'12px 16px',display:'flex',gap:5,alignItems:'center' }}>
+                {[0,1,2].map(i=><div key={i} style={{ width:7,height:7,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+              </div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:isLong?T.warn:T.w4,letterSpacing:'0.1em',paddingLeft:4 }}>
+                {isLong ? 'This is taking longer than usual — still working…' : phrases[phraseIdx]}
+              </div>
+            </div>
+          );
+        })()}
         <div ref={chatEndRef}/>
         </div>
         <div style={{ padding:'12px 20px 20px',background:T.w,borderTop:`1px solid ${T.w2}`,flexShrink:0 }}>
           <div style={{ display:'flex',gap:8,alignItems:'center' }}>
-            <input value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}}} placeholder="Ask Mario anything…" style={{ flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:22,padding:'11px 18px',fontSize:13,fontFamily:fonts.sans,color:T.w7,outline:'none' }}/>
-            <button onClick={sendChat} disabled={!chatIn.trim()||chatLoad} style={{ width:42,height:42,borderRadius:'50%',border:'none',background:chatIn.trim()?T.rg:T.w3,cursor:chatIn.trim()?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'background .15s' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            <input value={chatIn} onChange={e=>setChatIn(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendChat();}}} placeholder="Ask Mario anything…" style={{ flex:1,background:T.w1,border:`1px solid ${T.w3}`,borderRadius:22,padding:'11px 18px',fontSize:13,fontFamily:fonts.sans,color:T.w7,outline:'none' }} disabled={chatLoad}/>
+            <button onClick={chatLoad ? ()=>{chatAbortRef.current?.abort();setChatLoad(false);} : sendChat} disabled={!chatLoad && !chatIn.trim()} style={{ width:42,height:42,borderRadius:'50%',border:'none',background:chatLoad?T.err:chatIn.trim()?T.rg:T.w3,cursor:(chatLoad||chatIn.trim())?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,transition:'background .15s' }}>
+              {chatLoad
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              }
             </button>
           </div>
         </div>
@@ -3144,62 +3300,17 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         </Panel>
 
         {/* Genomic data display */}
-        {P.genomicSnps?.length > 0 && (() => {
-          const domainLabels = {
-            methylation: 'Methylation & Folate Cycle',
-            detox: 'Detoxification & Glutathione',
-            inflammation: 'Inflammation & Immunity',
-            longevity: 'Longevity Pathways',
-            nutrients: 'Nutrient Metabolism',
-            circadian: 'Circadian & Sleep',
-            ans: 'Autonomic Nervous System',
-            exercise: 'Exercise & Hormesis',
-            sun: 'Sun & UV Response',
-          };
-          const domainColors = {
-            methylation: '#8B5CF6', detox: '#10B981', inflammation: '#EF4444',
-            longevity: '#F59E0B', nutrients: '#3B82F6', circadian: '#6366F1',
-            ans: '#EC4899', exercise: '#F97316', sun: '#EAB308',
-          };
-          const grouped = {};
-          P.genomicSnps.forEach(snp => {
-            const d = snp.domain || 'other';
-            if (!grouped[d]) grouped[d] = [];
-            grouped[d].push(snp);
-          });
-          const domains = Object.keys(domainLabels).filter(d => grouped[d]?.length);
-          // Also include ungrouped
-          if (grouped['other']?.length) domains.push('other');
-          return (
-            <Panel>
-              <FieldLabel>Actionable genomic variants — {P.genomicSnps.length} SNPs</FieldLabel>
-              <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:16, lineHeight:1.5 }}>
-                Only variants with a specific intervention — supplementation, diet, training, hormesis, circadian, or lifestyle adjustment.
-              </div>
-              {domains.map(domain => (
-                <div key={domain} style={{ marginBottom:16 }}>
-                  <div style={{ fontFamily:fonts.mono, fontSize:10, color:domainColors[domain]||T.w5, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:8, paddingBottom:4, borderBottom:`1px solid ${(domainColors[domain]||T.w5)}25` }}>
-                    {domainLabels[domain] || 'Other'} · {grouped[domain].length}
-                  </div>
-                  {grouped[domain].map((snp, i) => {
-                    const statusCol = snp.status === 'risk' ? T.err : snp.status === 'carrier' ? T.warn : T.ok;
-                    return (
-                      <div key={i} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom:`1px solid ${T.w2}`, fontSize:12, fontFamily:fonts.sans, alignItems:'flex-start' }}>
-                        <div style={{ minWidth:70 }}>
-                          <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.rg2 }}>{snp.rsid}</div>
-                          <div style={{ fontFamily:fonts.mono, fontSize:10, color:statusCol, textTransform:'uppercase' }}>{snp.status}</div>
-                        </div>
-                        <div style={{ minWidth:55, fontFamily:fonts.sans, fontSize:11, color:T.w6, fontWeight:500 }}>{snp.gene}</div>
-                        <div style={{ minWidth:30, fontFamily:fonts.mono, fontSize:11, color:T.w5, textAlign:'center' }}>{snp.genotype}</div>
-                        <div style={{ flex:1, fontSize:11, color:T.w5, lineHeight:1.4 }}>{snp.impact}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-            </Panel>
-          );
-        })()}
+        {P.genomicSnps?.length > 0 && (
+          <Panel>
+            <FieldLabel>{P.genomicSnps.length} genetic variants processed</FieldLabel>
+            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, lineHeight:1.7, marginBottom:16 }}>
+              Mario has analysed your WGS data across methylation, detox, inflammation, longevity, and circadian pathways. Ask Mario to explain what your variants mean for your protocol.
+            </div>
+            <button onClick={()=>{ setTab('mario'); setChatIn('Explain what my genetic variants mean for my protocol and what specific interventions I should make based on my SNPs.'); }} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'11px 24px', cursor:'pointer', fontFamily:fonts.sans, fontSize:13, fontWeight:600 }}>
+              Ask Mario about my genetics →
+            </button>
+          </Panel>
+        )}
 
         {/* Files on record */}
         {uploadedLabFiles.length > 0 && (
@@ -3391,7 +3502,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         return true;
       }) || PHASES[0];
       const subsystems = [
-        { label:'Immune',       color:(P.severe?.length||0)>0?T.err:T.ok,              detail:`${(P.severe?.length||0)+(P.moderate?.length||0)} reactive foods` },
+        { label:'Immune',       color:(P.severe?.length||0)>0?T.err:T.ok,              detail:`${(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0)} reactive foods` },
         { label:'Redox',        color:P.redoxScore!=null?(P.redoxScore<50?T.err:P.redoxScore<75?T.warn:T.ok):T.w4, detail:P.redoxScore!=null?`Score ${P.redoxScore}/100`:'Not tested' },
         { label:'Micronutrient',color:(P.cmaDeficiencies?.length||0)>0?T.warn:(P.cmaAdequate?.length||0)>0?T.ok:T.w4, detail:(P.cmaDeficiencies?.length||0)>0?`${P.cmaDeficiencies.length} deficient`:(P.cmaAdequate?.length||0)>0?'Adequate':'Not tested' },
         { label:'Methylation',  color:(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length>0?T.warn:T.w4, detail:(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length>0?`${(P.genomicSnps||[]).filter(s=>s.domain==='methylation').length} variants`:'Not tested' },
@@ -3753,9 +3864,20 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             </div>
           </Panel>
         ) : (
-          <Panel>
-            <pre style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.9, whiteSpace:'pre-wrap', margin:0 }}>{dietPlan}</pre>
-          </Panel>
+          {dietPlan === 'TIMEOUT' || dietPlan === 'ERROR' ? (
+            <Panel style={{ textAlign:'center', padding:40 }}>
+              <div style={{ fontFamily:fonts.sans, fontSize:14, color:T.err, marginBottom:16 }}>
+                {dietPlan === 'TIMEOUT' ? 'Generation timed out (60s).' : 'Generation failed.'}
+              </div>
+              <button onClick={()=>generateDiet(patient)} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'12px 28px', fontFamily:fonts.sans, fontSize:13, fontWeight:600, cursor:'pointer' }}>
+                Retry
+              </button>
+            </Panel>
+          ) : (
+            <Panel>
+              <pre style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.9, whiteSpace:'pre-wrap', margin:0 }}>{dietPlan}</pre>
+            </Panel>
+          )}
         )}
         {!dietLoading && (
           <div style={{ display:'flex', gap:12, marginTop:24 }}>
@@ -3851,12 +3973,15 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       {/* Bottom navigation */}
       <div style={{ paddingBottom:'env(safe-area-inset-bottom,0px)',background:'rgba(247,244,240,0.96)',backdropFilter:'blur(24px)',WebkitBackdropFilter:'blur(24px)',borderTop:`1px solid ${T.w2}`,zIndex:100,flexShrink:0 }}>
         <div style={{ height:58,display:'flex',alignItems:'center',justifyContent:'space-around' }}>
-          {BOTTOM_TABS.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:tab===t.id?T.rg2:T.w4,transition:'color .15s',WebkitTapHighlightColor:'transparent' }}>
-              {t.icon}
-              <span style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:tab===t.id?600:400 }}>{t.label}</span>
-            </button>
-          ))}
+          {BOTTOM_TABS.map(t=>{
+            const active = t.id === 'rotation' ? MEALS_GROUP.has(tab) : tab === t.id;
+            return (
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{ flex:1,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,background:'none',border:'none',cursor:'pointer',color:active?T.rg2:T.w4,transition:'color .15s',WebkitTapHighlightColor:'transparent' }}>
+                {t.icon}
+                <span style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.1em',textTransform:'uppercase',fontWeight:active?600:400 }}>{t.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>
