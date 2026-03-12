@@ -1,7 +1,8 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react";
 import { buildMarioSystemPrompt } from "../lib/marioSystemPrompt";
-import { POS_INDEX, CLINICAL_RSID_SET } from "../lib/clinicalSNPs";
+import { POS_INDEX, CLINICAL_RSID_SET, RSID_INDEX } from "../lib/clinicalSNPs";
+import WelcomeAvatar from "../components/WelcomeAvatar";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -108,6 +109,40 @@ async function callClaude(messages, system, extra = {}) {
   });
   const d = await res.json();
   return (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
+}
+
+// Like callClaude but returns { text, showContactButton } — used in the chat UI
+async function callClaudeRich(messages, system, extra = {}) {
+  const { signal: sig, ...bodyExtra } = extra;
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, system, messages, ...bodyExtra }),
+    signal: sig,
+  });
+  const d = await res.json();
+  return {
+    text: (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'),
+    showContactButton: d.showContactButton || false,
+  };
+}
+
+// Re-enrich genomicSnps that were stored before annotation fields were added (missing gene/interpretations)
+function enrichGenomicSnps(snps) {
+  if (!snps?.length) return snps || [];
+  return snps.map(s => {
+    if (s.gene && s.het_interpretation) return s; // already fully annotated
+    const annotation = RSID_INDEX[s.rsid];
+    if (!annotation) return s;
+    return { ...annotation, ...s, gene: annotation.gene || s.gene, het_interpretation: s.het_interpretation || annotation.het_interpretation, hom_interpretation: s.hom_interpretation || annotation.hom_interpretation, functional_impact: s.functional_impact || annotation.functional_impact, domain: s.domain || annotation.domain };
+  });
+}
+
+// Extract plain text from a message content field (string or Claude API content block array)
+function getMessageText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) return content.filter(b => b.type === 'text').map(b => b.text).join('');
+  return '';
 }
 
 // Dante Labs stub
@@ -355,7 +390,7 @@ function AuthScreen({ onAuthed }) {
   );
 }
 
-function Onboarding({ onComplete }) {
+function Onboarding({ onComplete, onPatientUpdate }) {
   const [step, setStep] = useState(0);
   const [data, setData] = useState({
     name:'', dob:'', sex:'', hormonalStatus:'',
@@ -438,12 +473,16 @@ function Onboarding({ onComplete }) {
         fileBlock,
         { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
 
-REPORT TYPE 1 — ALCAT (food immune reactivity):
-Extract every food/substance with a reactivity level.
-- Red / Class 3-4 / SEVERE → "severe" array
-- Orange / Class 2 / MODERATE → "moderate" array
-- Yellow / Class 1 / MILD → "mild" array
-- Green / Class 0 / ACCEPTABLE → omit
+REPORT TYPE 1 — ALCAT (Cell Science Systems food immune reactivity panel):
+This is a Cell Science Systems ALCAT report. The layout has THREE SEPARATE reactivity columns side by side. You MUST extract all three columns independently — do NOT merge them.
+
+COLUMN LAYOUT (left to right):
+1. SEVERE column (far left) — foods highlighted in RED or dark red background. These are Class 3-4 reactions. → "severe" array
+2. MODERATE column (middle) — foods highlighted in ORANGE or amber background. These are Class 2 reactions. → "moderate" array
+3. MILD column (right) — foods highlighted in YELLOW or light yellow background. These are Class 1 reactions. → "mild" array
+4. ACCEPTABLE / GREEN — omit entirely
+
+CRITICAL: The SEVERE column is on the FAR LEFT and is often the smallest column with the fewest items. Do NOT skip it. Do NOT merge SEVERE foods into the MODERATE column. Extract every single food name from all three columns as three distinct arrays.
 
 REPORT TYPE 2 — CMA / CNA (Cell Science Systems intracellular micronutrient analysis):
 This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested.
@@ -550,10 +589,17 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           if (profRow?.patient_data) {
             const pd = typeof profRow.patient_data === 'string' ? JSON.parse(profRow.patient_data) : profRow.patient_data;
             pd.alcat_severe = finalSevere; pd.alcat_moderate = finalModerate; pd.alcat_mild = finalMild;
+            pd.severe = finalSevere; pd.moderate = finalModerate; pd.mild = finalMild;
             await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
           }
           console.log('[Lab upload] Saved to DB:', reportType, finalSevere.length + finalModerate.length + finalMild.length, 'items');
         } catch(dbErr) { console.error('[Lab upload] DB save error:', dbErr); }
+
+        // Update live React state immediately so dashboard reflects without a reload
+        if (onPatientUpdate && (finalSevere.length > 0 || finalModerate.length > 0 || finalMild.length > 0)) {
+          onPatientUpdate({ severe: finalSevere, moderate: finalModerate, mild: finalMild,
+            alcat_severe: finalSevere, alcat_moderate: finalModerate, alcat_mild: finalMild });
+        }
       })();
       // ───────────────────────────────────────────────────────────────────────
     } catch(err) {
@@ -840,6 +886,7 @@ export default function MeetMario({ patient: patientProp }) {
   const [patient, setPatient] = useState(patientProp || {});
   const [showLanding, setShowLanding] = useState(!patientProp?.name);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const [authUser, setAuthUser] = useState(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
@@ -994,6 +1041,18 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const plateFileRef = useRef(null);
   const gutFileRef = useRef(null);
   const suppLabelRef = useRef(null);
+  const labelFileRef = useRef(null);
+
+  // LabelCheck FAB
+  const [fabOpen, setFabOpen] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [labelPhoto, setLabelPhoto] = useState(null);
+  const [labelPhotoB64, setLabelPhotoB64] = useState(null);
+  const [labelResult, setLabelResult] = useState(null);
+  const [labelLoad, setLabelLoad] = useState(false);
+  const [labelAlt, setLabelAlt] = useState(null);
+  const [labelAltLoad, setLabelAltLoad] = useState(false);
+  const [scanHistory, setScanHistory] = useState([]);
 
   // Outcomes
   const [outcomes, setOutcomes] = useState({ baseline:null, checkins:[] });
@@ -1082,6 +1141,20 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
       }, { onConflict: 'id' });
       try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(updatedPd)); } catch {}
     } catch (e) { console.error('[persistLabData] file upload error:', e); }
+  };
+
+  const deleteLabFile = async (fileName) => {
+    const updatedFiles = uploadedLabFiles.filter(f => f.name !== fileName);
+    setUploadedLabFiles(updatedFiles);
+    setDashLabFiles(prev => prev.filter(fn => fn !== fileName));
+    setPatient(p => {
+      const updated = { ...p, uploadedLabFiles: updatedFiles };
+      if (authUser?.id) {
+        supabase.from('profiles').upsert({ id: authUser.id, patient_data: JSON.stringify(updated), updated_at: new Date().toISOString() }, { onConflict: 'id' }).catch(e => console.error('[deleteLabFile]', e));
+        try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(updated)); } catch {}
+      }
+      return updated;
+    });
   };
 
   const dashParseFile = async (file, isAdditional = false) => {
@@ -1395,12 +1468,16 @@ ${filteredContent.slice(0, 30000)}` }],
             fileBlock,
             { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
 
-REPORT TYPE 1 — ALCAT (food immune reactivity):
-Extract every food/substance with a reactivity level.
-- Red / Class 3-4 / SEVERE → "severe" array
-- Orange / Class 2 / MODERATE → "moderate" array
-- Yellow / Class 1 / MILD → "mild" array
-- Green / Class 0 / ACCEPTABLE → omit
+REPORT TYPE 1 — ALCAT (Cell Science Systems food immune reactivity panel):
+This is a Cell Science Systems ALCAT report. The layout has THREE SEPARATE reactivity columns side by side. You MUST extract all three columns independently — do NOT merge them.
+
+COLUMN LAYOUT (left to right):
+1. SEVERE column (far left) — foods highlighted in RED or dark red background. These are Class 3-4 reactions. → "severe" array
+2. MODERATE column (middle) — foods highlighted in ORANGE or amber background. These are Class 2 reactions. → "moderate" array
+3. MILD column (right) — foods highlighted in YELLOW or light yellow background. These are Class 1 reactions. → "mild" array
+4. ACCEPTABLE / GREEN — omit entirely
+
+CRITICAL: The SEVERE column is on the FAR LEFT and is often the smallest column with the fewest items. Do NOT skip it. Do NOT merge SEVERE foods into the MODERATE column. Extract every single food name from all three columns as three distinct arrays.
 
 REPORT TYPE 2 — CMA / CNA / Spectrox (Cell Science Systems intracellular micronutrient analysis):
 This is a Cell Science Systems CMA or CNA report. It tests ~55 intracellular micronutrients.
@@ -1544,6 +1621,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             pd.severe = pd.alcat_severe; pd.moderate = pd.alcat_moderate || []; pd.mild = pd.alcat_mild || [];
           }
           console.log('[profile] from sessionStorage');
+          if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
           return pd;
         }
       }
@@ -1590,6 +1668,8 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             pd.moderate = pd.alcat_moderate || [];
             pd.mild = pd.alcat_mild || [];
           }
+          // Re-enrich genomicSnps in case stored before full annotation was added
+          if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
           // Cache to sessionStorage for next time
           try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
           return pd;
@@ -1667,6 +1747,13 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     return null;
   };
 
+  // Show welcome screen for first-time visitors
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem('mm_welcome_seen')) setShowWelcome(true);
+    } catch {}
+  }, []);
+
   // Auth state on mount
   useEffect(() => {
     // Safety timeout — never stay stuck on LOADING
@@ -1684,8 +1771,9 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           // Returning user — hydrate patient and go straight to dashboard
           setPatient(p => ({ ...p, ...profile, profileComplete: true }));
           if (profile.uploadedLabFiles?.length) {
-            setUploadedLabFiles(profile.uploadedLabFiles);
-            setDashLabFiles(profile.uploadedLabFiles.map(f => f.name));
+            const dedupedFiles = profile.uploadedLabFiles.filter((f,i,arr)=>arr.findIndex(g=>g.name===f.name)===i);
+            setUploadedLabFiles(dedupedFiles);
+            setDashLabFiles(dedupedFiles.map(f => f.name));
             setDashLabSuccess(true);
           }
           setShowLanding(false);
@@ -1738,8 +1826,9 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         if (profile?.name) {
           setPatient(p => ({ ...p, ...profile, profileComplete: true }));
           if (profile.uploadedLabFiles?.length) {
-            setUploadedLabFiles(profile.uploadedLabFiles);
-            setDashLabFiles(profile.uploadedLabFiles.map(f => f.name));
+            const dedupedFiles = profile.uploadedLabFiles.filter((f,i,arr)=>arr.findIndex(g=>g.name===f.name)===i);
+            setUploadedLabFiles(dedupedFiles);
+            setDashLabFiles(dedupedFiles.map(f => f.name));
             setDashLabSuccess(true);
           }
           setShowLanding(false);
@@ -1827,7 +1916,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     const pInstr = eatPat === 'standard' ? 'Standard 6 meals every 3h.' : ep?.detail || 'Intermittent fasting protocol.';
     const severe = (patient.severe||[]).join(', ');
     const cmaD = (patient.cmaDeficiencies||[]).join(', ');
-    const snpNotes = (patient.genomicSnps||[]).filter(s=>s.status!=='normal').slice(0,20).map(s=>`${s.gene} ${s.rsid} [${s.status}]: ${s.impact}`).join('; ');
+    const snpNotes = (patient.genomicSnps||[]).filter(s=>s&&s.status!=='normal').slice(0,20).map(s=>`${s.gene} ${s.rsid} [${s.status}]: ${s.impact}`).join('; ');
     const prompt = `Generate a ${mealScope === 'full_day' ? 'full day' : mealScope} menu in ${cu} style.\nHARD RULES: Day ${rotDay} foods only. Avoid: ${severe}. No sugars/yeast/vinegar. No seed oils. CPF every main meal. Fruit only with protein/fat in snacks.\nDay ${rotDay}:\n${foods}\n${pInstr}${cmaD ? `\nCMA deficiencies to correct: ${cmaD}` : ''}${patient.redoxScore!=null ? `\nREDOX: ${patient.redoxScore}/100` : ''}${snpNotes ? `\nKey genetic variants: ${snpNotes}` : ''}\nFormat: **Dish Name** then one sentence description citing which gene/nutrient it targets. End with a Clinical Notes paragraph referencing specific SNPs, CMA values, and ALCAT exclusions that drove the choices.`;
     try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setGenResult(r); } catch { setGenResult('Error. Please try again.'); }
     setGenLoad(false);
@@ -1835,8 +1924,27 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
   const fetchRecipeSteps = async (day, mealKey, protein, base, sides) => {
     setRecipeLoading(true); setRecipeSteps(null);
-    const prompt = `Write a step-by-step recipe:\nDish: ${protein} — ${base}${sides ? ' · ' + sides : ''}\nALCAT Day ${day} rotation. No seed oils. Avoid: ${(patient.severe||[]).join(', ')}. 1 person.\n\nFormat:\nPREP TIME: X min | COOK TIME: X min | SERVES: 1\n\nINGREDIENTS:\n- [ingredient with amount]\n\nSTEPS:\n1. [step]\n(max 8 steps)\n\nCLINICAL NOTE: One sentence on ALCAT relevance.`;
-    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setRecipeSteps(r); } catch { setRecipeSteps('Error loading recipe.'); }
+    const severe = (patient.severe||[]).join(', ') || 'none';
+    const cmaD = (patient.cmaDeficiencies||[]).slice(0,5).join(', ') || 'none on file';
+    const keySnps = (patient.genomicSnps||[]).filter(s=>s&&s.gene).slice(0,6).map(s=>`${s.gene} [${s.status==='risk'?'homozygous':'carrier'}]`).join(', ') || 'none on file';
+    const prompt = `Write a beautiful recipe card for this dish. You are a chef who is also a clinician. Food is pleasure, medicine, and ritual simultaneously.
+
+Dish: ${protein} — ${base}${sides ? ' with ' + sides : ''}
+Patient rotation: Day ${day}. Protocol day ${patient.dayInProtocol||1}.
+Avoid (ALCAT reactive): ${severe}
+CMA deficiencies to correct: ${cmaD}
+Key genetic variants: ${keySnps}
+No seed oils. Ghee, olive oil, coconut oil only. 1 serving.
+
+Return this EXACT format — use these exact labels, no markdown asterisks, no bullet dashes:
+
+DISH NAME: [a beautiful descriptive name — not "Chicken Day 1" but "Herb-Roasted Chicken Thighs with Golden Root Vegetables and Thyme Ghee"]
+TAGLINE: [one sensory sentence — describe texture, aroma, warmth — make the patient want to cook this right now]
+PREP: [X min] | COOK: [X min] | DIFFICULTY: [Easy / Medium]
+WHY THIS WORKS FOR YOU: [2 sentences connecting this specific dish to this patient's ALCAT exclusions, CMA deficiencies, or genetic variants — cite the data]
+WHAT YOUR CELLS GET: [3-6 nutrients as a dot-separated list — e.g. "Omega-3 · Magnesium · Vitamin D · B12"]
+INSTRUCTIONS: [4-6 flowing prose paragraphs — warm, confident chef voice — not numbered steps, not bullet points — tell the story of cooking this dish]`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient), { max_tokens:1200 }); setRecipeSteps(r); } catch { setRecipeSteps('Error loading recipe.'); }
     setRecipeLoading(false);
   };
 
@@ -1891,8 +1999,22 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const r = rot[d] || {};
       return `Day ${d}: Grains: ${(r.grains||[]).slice(0,3).join(', ')} | Veg: ${(r.veg||[]).slice(0,5).join(', ')} | Protein: ${(r.protein||[]).slice(0,3).join(', ')} | Fruit: ${(r.fruit||[]).slice(0,3).join(', ')} | Misc: ${(r.misc||[]).slice(0,3).join(', ')}`;
     }).join('\n');
-    const prompt = `Generate a structured weekly grocery list for the ALCAT rotation protocol.\nRotation days: ${days.join(', ')}\n${allFoodsList}\nRules: No seed oils. Avoid: ${(patient.severe||[]).join(', ')}. No sugar/yeast. No dairy. Organic where possible. Wild-caught fish only.\n\nFormat:\n**FISH & PROTEIN**\n**VEGETABLES**\n**FRUITS**\n**GRAINS & STARCHES**\n**OILS & FATS**\n**HERBS & SPICES**\n**STORE NOTES** (2-3 sentences)`;
-    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient)); setGroceryList(r); } catch { setGroceryList('Error generating list.'); }
+    const prompt = `Generate a beautiful, practical grocery list for the MediBalans ALCAT rotation protocol. Each item gets one short note — practical wisdom, not clinical jargon.
+
+Rotation days selected: ${days.join(', ')}
+${allFoodsList}
+Avoid (ALCAT reactive): ${(patient.severe||[]).join(', ') || 'none on file'}
+No seed oils (sunflower, canola, vegetable oil). No dairy. No yeast. No sugar. No oats. Wild-caught fish only. Organic where possible.
+
+Format each section with a header line "SECTION: [name]" then each item as "ITEM: [food name] — [one short note, warm and practical]"
+Use these sections in order: FISH & PROTEIN, VEGETABLES, FRUITS, HERBS & AROMATICS, OILS & FATS, PANTRY, STORE NOTES
+Under STORE NOTES write 2 practical sentences about where to shop or what to look for.
+
+Keep notes sensory and practical — not clinical. Examples:
+"Wild salmon fillet — the omega-3 ratio in wild-caught is meaningfully better than farmed"
+"Dark leafy spinach — choose the darkest leaves you can find, the magnesium density is highest there"
+"Ghee — clarified butter, all milk solids removed — safe for dairy exclusion, perfect smoke point for roasting"`;
+    try { const r = await callClaude([{ role:'user',content:prompt }], buildMarioSystemPrompt(patient), { max_tokens:1500 }); setGroceryList(r); } catch { setGroceryList('Error generating list.'); }
     setGroceryLoad(false);
   };
 
@@ -1932,8 +2054,8 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         }
         return m;
       });
-      const r = await callClaude(apiMsgs, buildMarioSystemPrompt(patient), { max_tokens: 2000, signal: controller.signal });
-      const finalMsgs = [...msgs, { role:'assistant', content:r }];
+      const { text: r, showContactButton } = await callClaudeRich(apiMsgs, buildMarioSystemPrompt(patient), { signal: controller.signal });
+      const finalMsgs = [...msgs, { role:'assistant', content:r, showContactButton }];
       setChatMsgs(finalMsgs);
       // Save to Supabase in background
       ;(async () => {
@@ -2004,6 +2126,62 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       setPlateResult((d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(''));
     } catch { setPlateResult('Error. Please try again.'); }
     setPlateLoad(false);
+  };
+
+  const runLabelCheck = async (b64, mtype) => {
+    if (!b64) return;
+    setLabelLoad(true); setLabelResult(null); setLabelAlt(null);
+    const severe = (patient.severe||[]);
+    const moderate = (patient.moderate||[]);
+    const mild = (patient.mild||[]);
+    const allReactive = [...severe, ...moderate, ...mild].map(f => f.toLowerCase());
+    try {
+      const content = [
+        { type:'image', source:{ type:'base64', media_type: mtype || 'image/jpeg', data:b64 }},
+        { type:'text', text:`You are analysing a product ingredient label photo for a patient on the MediBalans ALCAT elimination protocol.
+
+PATIENT REACTIVE FOODS:
+SEVERE (9-month exclusion): ${severe.length ? severe.join(', ') : 'none on file'}
+MODERATE (6-month exclusion): ${moderate.length ? moderate.join(', ') : 'none on file'}
+MILD (excluded first 90 days, then 4-day rotation): ${mild.length ? mild.join(', ') : 'none on file'}
+
+UNIVERSAL EXCLUSIONS (regardless of ALCAT): sunflower oil, canola oil, rapeseed oil, soybean oil, vegetable oil, seed oils, dairy, yeast, sugar, oats, grapes, fermented ingredients, vinegar (except apple cider)
+
+PACKING FLUID RULE: If this is canned fish, identify the packing fluid. Water = always safe. Olive oil = safe only if olive is not reactive for this patient. Seed oils = never safe.
+
+Read the full ingredient list from the label. Then respond with ONLY this JSON (no markdown, no explanation):
+{"verdict":"PASS|FAIL|REVIEW","product":"product name from label","flags":[{"ingredient":"name","reason":"SEVERE reactive / MODERATE reactive / SEED OIL / UNIVERSAL EXCLUSION"}],"safe_highlights":["ingredient1","ingredient2"],"mario_line":"one warm personal sentence about this product for this patient","suggestion":"if FAIL or REVIEW: one specific safe alternative product they could buy instead"}` }
+      ];
+      const res = await fetch('/api/chat', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ model:'claude-sonnet-4-6', max_tokens:600, system:'You extract ingredient data from product labels and cross-reference against patient food reactive profiles. Return only valid JSON.', messages:[{ role:'user', content }] })
+      });
+      const d = await res.json();
+      const text = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+      let json;
+      try { json = JSON.parse(text.replace(/```json|```/g,'').trim()); }
+      catch { const m = text.match(/\{[\s\S]*?\}/); if(m) try { json = JSON.parse(m[0]); } catch {} }
+      if (json) {
+        setLabelResult(json);
+        const entry = { ts: new Date().toISOString(), product: json.product || 'Unknown product', verdict: json.verdict, flags: json.flags||[], photo: b64 };
+        setScanHistory(prev => [entry, ...prev].slice(0, 50));
+      } else {
+        setLabelResult({ verdict:'REVIEW', product:'Unknown', flags:[], safe_highlights:[], mario_line:'Could not fully read the label — try a clearer photo with better lighting.', suggestion:'' });
+      }
+    } catch { setLabelResult({ verdict:'REVIEW', product:'Error', flags:[], safe_highlights:[], mario_line:'Something went wrong. Try again.', suggestion:'' }); }
+    setLabelLoad(false);
+  };
+
+  const getLabelAlternative = async (flags, product) => {
+    if (!flags?.length) return;
+    setLabelAltLoad(true);
+    const badIngredients = flags.map(f=>f.ingredient).join(', ');
+    const severe = (patient.severe||[]).join(', ') || 'none';
+    try {
+      const r = await callClaude([{ role:'user', content:`A patient just scanned "${product}" and it contains reactive ingredients: ${badIngredients}. Their severe reactors: ${severe}. Suggest one specific safe alternative product they could buy instead — be practical, name a real product or brand category. Two sentences max.` }], buildMarioSystemPrompt(patient));
+      setLabelAlt(r);
+    } catch { setLabelAlt('Try water-packed canned mackerel — it is always protocol-safe and one of the most nutrient-complete options available.'); }
+    setLabelAltLoad(false);
   };
 
   const scanSuppLabel = async (file) => {
@@ -2094,6 +2272,12 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
     { id:'me',       label:'Me',    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
   ];
   const MEALS_GROUP = new Set(['rotation','meals','generate','grocery']);
+  const DAY_THEMES = {
+    1: { name:'The Sea',    color:'#1A7A8C', bg:'#1A7A8C14', border:'#1A7A8C35', intention:'Today you nourish your mitochondria' },
+    2: { name:'The Earth',  color:'#8B6914', bg:'#8B691414', border:'#8B691435', intention:'Today you rebuild your gut lining' },
+    3: { name:'The Garden', color:'#3A7A4A', bg:'#3A7A4A14', border:'#3A7A4A35', intention:'Today you activate cellular repair' },
+    4: { name:'The Land',   color:'#7A3030', bg:'#7A303014', border:'#7A303035', intention:'Today you restore your mineral reserves' },
+  };
 
   const P = patient;
   const ROT = patient.rotation || {};
@@ -2354,33 +2538,39 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       <div>
         <Eyebrow>4-day food rotation</Eyebrow>
         <SectionTitle>Rotation<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Calendar</em></SectionTitle>
-        <div style={{ display:'flex',gap:8,marginBottom:28 }}>
-          {[1,2,3,4].map(d=>(
-            <button key={d} onClick={()=>setRotDay(d)} style={{ flex:1,background:rotDay===d?T.rg:T.w1,border:`1px solid ${rotDay===d?T.rg:T.w3}`,borderRadius:9,padding:'12px 8px',cursor:'pointer',color:rotDay===d?'#fff':T.w5,fontFamily:fonts.mono,fontSize:11,fontWeight:rotDay===d?500:400,transition:'all .18s' }}>Day {d}</button>
-          ))}
+        {/* Day theme selector */}
+        <div style={{ display:'flex',gap:6,marginBottom:16 }}>
+          {[1,2,3,4].map(d=>{ const th=DAY_THEMES[d]; const active=rotDay===d; return (
+            <button key={d} onClick={()=>setRotDay(d)} style={{ flex:1,background:active?th.bg:T.w1,border:`1px solid ${active?th.border:T.w3}`,borderRadius:10,padding:'10px 6px',cursor:'pointer',transition:'all .18s',textAlign:'center' }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:9,color:active?th.color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:2 }}>Day {d}</div>
+              <div style={{ fontFamily:fonts.serif,fontSize:12,color:active?th.color:T.w5,fontStyle:'italic' }}>{th.name}</div>
+            </button>
+          );})}
         </div>
+        {/* Daily intention */}
+        {(() => { const th=DAY_THEMES[rotDay]; return (
+          <div style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:10,padding:'10px 14px',marginBottom:20 }}>
+            <div style={{ fontFamily:fonts.sans,fontSize:12,color:th.color,fontStyle:'italic' }}>{th.intention}</div>
+          </div>
+        );})()}
         {ROT[rotDay] && Object.keys(ROT[rotDay]).length > 0 ? (
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:12 }}>
-            {Object.entries(ROT[rotDay]).map(([cat,items])=>(
-              <Panel key={cat} style={{ marginBottom:0 }}>
-                <FieldLabel>{cat}</FieldLabel>
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
+            {Object.entries(ROT[rotDay]).map(([cat,items])=>{ const th=DAY_THEMES[rotDay]; return (
+              <div key={cat} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:'12px' }}>
+                <div style={{ fontFamily:fonts.mono,fontSize:9,color:th.color,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:8 }}>{cat}</div>
                 <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-                  {items.map(f=><span key={f} style={{ fontSize:12,color:T.w6,fontFamily:fonts.sans,background:T.w,border:`1px solid ${T.w3}`,borderRadius:4,padding:'3px 8px' }}>{f}</span>)}
+                  {items.map(f=><span key={f} style={{ fontSize:11,color:T.w6,fontFamily:fonts.sans,background:T.w,border:`1px solid ${th.border}`,borderRadius:4,padding:'3px 8px' }}>{f}</span>)}
                 </div>
-              </Panel>
-            ))}
+              </div>
+            );})}
           </div>
         ) : P.mild?.length > 0 ? (
           <Panel style={{ textAlign:'center', padding:32 }}>
-            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:16 }}>
-              {P.mild.length} mild foods detected — generating your 4-day rotation…
-            </div>
+            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:16 }}>{P.mild.length} mild foods detected — generating your 4-day rotation…</div>
             <div style={{ display:'flex',gap:8,justifyContent:'center',marginBottom:16 }}>
               {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
             </div>
-            <button onClick={()=>buildRotationFromAlcat(patient)} style={{ background:T.rg,color:'#fff',border:'none',borderRadius:9,padding:'10px 24px',cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600 }}>
-              Build Rotation
-            </button>
+            <button onClick={()=>buildRotationFromAlcat(patient)} style={{ background:T.rg,color:'#fff',border:'none',borderRadius:9,padding:'10px 24px',cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600 }}>Build Rotation</button>
           </Panel>
         ) : <EmptyState title="No ALCAT mild foods found" sub="Upload your ALCAT results to generate your 4-day rotation calendar."/>}
       </div>
@@ -2391,11 +2581,19 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       <div>
         <Eyebrow>Daily meal planner</Eyebrow>
         <SectionTitle>Meal<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Plans</em></SectionTitle>
-        <div style={{ display:'flex',gap:8,marginBottom:28 }}>
-          {[1,2,3,4].map(d=>(
-            <button key={d} onClick={()=>{setRotDay(d);setRecipeSteps(null);setActiveRecipe(null);}} style={{ flex:1,background:rotDay===d?T.rg:T.w1,border:`1px solid ${rotDay===d?T.rg:T.w3}`,borderRadius:9,padding:'12px 8px',cursor:'pointer',color:rotDay===d?'#fff':T.w5,fontFamily:fonts.mono,fontSize:11,fontWeight:rotDay===d?500:400,transition:'all .18s' }}>Day {d}</button>
-          ))}
+        <div style={{ display:'flex',gap:6,marginBottom:12 }}>
+          {[1,2,3,4].map(d=>{ const th=DAY_THEMES[d]; const active=rotDay===d; return (
+            <button key={d} onClick={()=>{setRotDay(d);setRecipeSteps(null);setActiveRecipe(null);}} style={{ flex:1,background:active?th.bg:T.w1,border:`1px solid ${active?th.border:T.w3}`,borderRadius:10,padding:'10px 6px',cursor:'pointer',transition:'all .18s',textAlign:'center' }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:9,color:active?th.color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:2 }}>Day {d}</div>
+              <div style={{ fontFamily:fonts.serif,fontSize:12,color:active?th.color:T.w5,fontStyle:'italic' }}>{th.name}</div>
+            </button>
+          );})}
         </div>
+        {(() => { const th=DAY_THEMES[rotDay]; return (
+          <div style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:10,padding:'10px 14px',marginBottom:20 }}>
+            <div style={{ fontFamily:fonts.sans,fontSize:12,color:th.color,fontStyle:'italic' }}>{th.intention}</div>
+          </div>
+        );})()}
         {MEALS_DATA[rotDay] ? (
           Object.entries(MEALS_DATA[rotDay]).map(([mealKey, meal])=>{
             const prot = getP(rotDay, mealKey);
@@ -2428,9 +2626,59 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                       {active ? 'Hide recipe' : 'Get recipe steps'}
                     </button>
                     {active && (
-                      <div style={{ marginTop:12,fontSize:11.5,color:T.w6,lineHeight:1.8,fontFamily:fonts.sans,fontWeight:300 }}>
-                        {recipeLoading ? <span style={{ color:T.w4,fontFamily:fonts.mono,fontSize:10 }}>Loading recipe…</span>
-                          : recipeSteps?.split('\n').map((l,i)=>l.trim()?<div key={i} style={{ marginBottom:4 }}>{l}</div>:null)}
+                      <div style={{ marginTop:14 }}>
+                        {recipeLoading ? (
+                          <div style={{ display:'flex',gap:6,alignItems:'center',padding:'12px 0' }}>
+                            {[0,1,2].map(i=><div key={i} style={{ width:6,height:6,borderRadius:'50%',background:T.rg,opacity:0.6,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+                            <span style={{ color:T.w4,fontFamily:fonts.mono,fontSize:10,marginLeft:4 }}>Crafting your recipe…</span>
+                          </div>
+                        ) : recipeSteps ? (() => {
+                          const lines = recipeSteps.split('\n');
+                          const get = (prefix) => { const l = lines.find(l=>l.startsWith(prefix+':')); return l ? l.slice(prefix.length+1).trim() : null; };
+                          const dishName = get('DISH NAME');
+                          const tagline = get('TAGLINE');
+                          const prep = get('PREP');
+                          const why = get('WHY THIS WORKS FOR YOU');
+                          const cells = get('WHAT YOUR CELLS GET');
+                          const instrIdx = lines.findIndex(l=>l.startsWith('INSTRUCTIONS:'));
+                          const instructions = instrIdx >= 0 ? lines.slice(instrIdx+1).filter(l=>l.trim()).join('\n\n') : null;
+                          const th = DAY_THEMES[rotDay];
+                          return (
+                            <div style={{ borderTop:`1px solid ${T.w3}`,paddingTop:16 }}>
+                              {dishName && <div style={{ fontFamily:fonts.serif,fontSize:18,color:T.w7,lineHeight:1.3,marginBottom:6 }}>{dishName}</div>}
+                              {tagline && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4,fontStyle:'italic',marginBottom:14,lineHeight:1.5 }}>{tagline}</div>}
+                              {prep && (
+                                <div style={{ display:'flex',gap:6,flexWrap:'wrap',marginBottom:14 }}>
+                                  {prep.split('|').map((p,i)=>(
+                                    <span key={i} style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:6,padding:'3px 10px',fontFamily:fonts.mono,fontSize:10,color:th.color }}>{p.trim()}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {why && (
+                                <div style={{ background:`${T.ok}0A`,border:`1px solid ${T.ok}25`,borderRadius:9,padding:'10px 14px',marginBottom:12 }}>
+                                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.ok,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:5 }}>Why this works for you</div>
+                                  <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w6,lineHeight:1.7 }}>{why}</div>
+                                </div>
+                              )}
+                              {cells && (
+                                <div style={{ marginBottom:14 }}>
+                                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>What your cells get</div>
+                                  <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                                    {cells.split('·').map((c,i)=>c.trim()?<span key={i} style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:5,padding:'3px 9px',fontFamily:fonts.sans,fontSize:11,color:th.color }}>{c.trim()}</span>:null)}
+                                  </div>
+                                </div>
+                              )}
+                              {instructions && (
+                                <div>
+                                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:10 }}>Method</div>
+                                  {instructions.split('\n\n').map((para,i)=>(
+                                    <div key={i} style={{ fontFamily:fonts.sans,fontSize:12.5,color:T.w6,lineHeight:1.8,marginBottom:12,fontWeight:300 }}>{para}</div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })() : null}
                       </div>
                     )}
                   </div>
@@ -2541,11 +2789,28 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         {groceryList && <>
           <Panel>
             <FieldLabel>Your list</FieldLabel>
-            <div style={{ fontSize:12.5,color:T.w6,lineHeight:1.9,fontFamily:fonts.sans,fontWeight:300 }}>
+            <div>
               {groceryList.split('\n').map((l,i)=>{
-                if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2,letterSpacing:'0.18em',textTransform:'uppercase',marginTop:16,marginBottom:6 }}>{l.replace(/\*\*/g,'')}</div>;
-                if(l.startsWith('- '))return<div key={i} style={{ display:'flex',gap:8,alignItems:'flex-start',marginBottom:2 }}><span style={{ color:T.rg,flexShrink:0 }}>·</span><span>{l.slice(2)}</span></div>;
-                return l.trim()?<div key={i} style={{ fontSize:11,color:T.w4 }}>{l}</div>:null;
+                if(l.startsWith('SECTION:'))return(
+                  <div key={i} style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.18em',textTransform:'uppercase',marginTop:20,marginBottom:8,paddingBottom:4,borderBottom:`1px solid ${T.w3}` }}>{l.slice(8).trim()}</div>
+                );
+                if(l.startsWith('ITEM:')){
+                  const body=l.slice(5).trim();
+                  const [food,...noteParts]=body.split('—');
+                  const note=noteParts.join('—').trim();
+                  return(
+                    <div key={i} style={{ display:'flex',gap:10,alignItems:'flex-start',marginBottom:8,paddingLeft:2 }}>
+                      <span style={{ color:T.rg,flexShrink:0,marginTop:2,fontSize:14 }}>·</span>
+                      <div>
+                        <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w7,fontWeight:500 }}>{food.trim()}</div>
+                        {note && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w4,fontStyle:'italic',marginTop:2,lineHeight:1.5 }}>{note}</div>}
+                      </div>
+                    </div>
+                  );
+                }
+                if(l.startsWith('- '))return<div key={i} style={{ display:'flex',gap:8,alignItems:'flex-start',marginBottom:4 }}><span style={{ color:T.rg,flexShrink:0 }}>·</span><span style={{ fontFamily:fonts.sans,fontSize:13,color:T.w6 }}>{l.slice(2)}</span></div>;
+                if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.18em',textTransform:'uppercase',marginTop:20,marginBottom:8 }}>{l.replace(/\*\*/g,'')}</div>;
+                return l.trim()?<div key={i} style={{ fontSize:11,color:T.w4,fontFamily:fonts.sans,marginBottom:2 }}>{l}</div>:null;
               })}
             </div>
           </Panel>
@@ -2556,7 +2821,11 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 <button key={s.name} onClick={()=>setGroceryStore(i)} style={{ background:groceryStore===i?T.rgBg:T.w1,border:`1px solid ${groceryStore===i?T.rg:T.w3}`,borderRadius:8,padding:'8px 14px',cursor:'pointer',marginRight:8,marginBottom:8,fontSize:11.5,fontFamily:fonts.sans,color:groceryStore===i?T.rg2:T.w5,fontWeight:groceryStore===i?500:400 }}>{s.name}</button>
               ))}
             </div>
-            {groceryList.split('\n').filter(l=>l.startsWith('- ')).map(l=>l.slice(2).trim().split('(')[0].trim()).filter(Boolean).slice(0,16).map((item,i)=>(
+            {groceryList.split('\n').map(l=>{
+                if(l.startsWith('ITEM:'))return l.slice(5).split('—')[0].trim();
+                if(l.startsWith('- '))return l.slice(2).trim().split('(')[0].trim();
+                return null;
+              }).filter(Boolean).slice(0,16).map((item,i)=>(
               <a key={i} href={stores[groceryStore].search + encodeURIComponent(item)} target="_blank" rel="noopener noreferrer" style={{ display:'inline-flex',alignItems:'center',gap:6,background:T.w,border:`1px solid ${T.w3}`,borderRadius:6,padding:'5px 12px',margin:'0 6px 6px 0',textDecoration:'none',fontSize:11.5,color:T.w6,fontFamily:fonts.sans,transition:'all .15s' }}>
                 {item}
                 <span style={{ fontSize:11,color:T.rg,fontFamily:fonts.mono }}>search</span>
@@ -2718,10 +2987,21 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             </div>
           </div>
         ) : (
-          <div key={i} style={{ display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start',marginBottom:10 }}>
+          <div key={i} style={{ display:'flex',flexDirection:'column',alignItems:m.role==='user'?'flex-end':'flex-start',marginBottom:10 }}>
             <div style={{ maxWidth:'82%',background:m.role==='user'?T.rg:T.w1,border:`1px solid ${m.role==='user'?T.rg:T.w3}`,borderRadius:m.role==='user'?'16px 16px 4px 16px':'16px 16px 16px 4px',padding:'12px 16px',fontSize:13,color:m.role==='user'?'#fff':T.w6,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>
-              {m.content.split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
+              {getMessageText(m.content).split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
             </div>
+            {m.showContactButton && m.role === 'assistant' && (
+              <div style={{ maxWidth:'82%',marginTop:6,background:'#F9F4EE',border:'1px solid #DDD0C4',borderRadius:12,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8 }}>
+                <div style={{ fontFamily:fonts.sans,fontSize:12,color:'#7A6555',lineHeight:1.5 }}>Dr. Mario can answer this from your full clinical file.</div>
+                <button
+                  onClick={() => window.location.href = 'mailto:marios.anthis@medibalans.com?subject=Question%20from%20Meet%20Mario&body=Hi%20Dr.%20Mario%2C%20I%20had%20a%20question%20that%20Mario%20could%20not%20answer%20from%20my%20current%20data%3A%20'}
+                  style={{ background:T.rg,color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',fontFamily:fonts.sans,fontSize:12,fontWeight:600,cursor:'pointer',alignSelf:'flex-start' }}
+                >
+                  Message Dr. Mario
+                </button>
+              </div>
+            )}
           </div>
         ))}
         {chatLoad && (() => {
@@ -3042,7 +3322,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 { name:'CMA/CNA micronutrients', active: (P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0,         filePresent: hasFile(['cma','cna']),           detail: `${(P.cmaAllNutrients||[]).length} nutrients tested` },
                 { name:'REDOX / Spectrox',       active: P.redoxScore != null,                                                   filePresent: hasFile(['redox','spectrox']),    detail: P.redoxScore != null ? `Score: ${P.redoxScore}/100` : null },
                 { name:'Antioxidant panel',      active: (P.cmaAntioxidants||[]).length > 0,                                     filePresent: hasFile(['antioxidant']),         detail: `${(P.cmaAntioxidants||[]).length} markers` },
-                { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0,                                         filePresent: hasFile(['.vcf','.txt','.gz']),   detail: P.genomicChecked ? `${(P.genomicSnps||[]).filter(s=>s.status!=='normal').length} variants · ${P.genomicChecked} checked` : `${(P.genomicSnps||[]).length} variants` },
+                { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0,                                         filePresent: hasFile(['.vcf','.txt','.gz']),   detail: P.genomicChecked ? `${(P.genomicSnps||[]).filter(s=>s&&s.status!=='normal').length} variants · ${P.genomicChecked} checked` : `${(P.genomicSnps||[]).length} variants` },
                 { name:'Blood work / Other labs',active: P.customLabs?.length > 0,                                               filePresent: hasFile(['blood','lab','result']),detail: P.customLabs?.length ? `${P.customLabs.length} reports` : null },
               ];
               return tiles.map(t => {
@@ -3189,9 +3469,14 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                   {(P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>ALCAT: {(P.severe||[]).length+(P.moderate||[]).length+(P.mild||[]).length} foods</span>}
                   {(P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>CMA: {(P.cmaAllNutrients||[]).length} nutrients</span>}
                   {P.redoxScore != null && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>REDOX: {P.redoxScore}/100</span>}
-                  {(P.genomicSnps||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>VCF: {(P.genomicSnps||[]).filter(s=>s.status!=='normal').length} variants{P.genomicChecked ? ` / ${P.genomicChecked} checked` : ''}</span>}
+                  {(P.genomicSnps||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>VCF: {(P.genomicSnps||[]).filter(s=>s&&s.status!=='normal').length} variants{P.genomicChecked ? ` / ${P.genomicChecked} checked` : ''}</span>}
                 </div>
-                {dashLabFiles.map(fn => <div key={fn} style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4 }}>{fn}</div>)}
+                {dashLabFiles.map(fn => (
+                  <div key={fn} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:fonts.mono, fontSize:11, color:T.w4, marginBottom:2 }}>
+                    <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1, marginRight:8 }}>{fn}</span>
+                    <button onClick={() => deleteLabFile(fn)} style={{ background:'none', border:'none', cursor:'pointer', color:T.err, fontSize:14, lineHeight:1, padding:'0 2px', flexShrink:0 }}>×</button>
+                  </div>
+                ))}
               </div>
             ) : (
               <div>
@@ -3238,7 +3523,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         {/* Genomic data display */}
         {P.genomicSnps?.length > 0 && (
           <Panel>
-            <FieldLabel>{P.genomicSnps.filter(s=>s.status!=='normal').length} variants detected{P.genomicChecked ? ` · ${P.genomicChecked} positions checked` : ''}</FieldLabel>
+            <FieldLabel>{P.genomicSnps.filter(s=>s&&s.status!=='normal').length} variants detected{P.genomicChecked ? ` · ${P.genomicChecked} positions checked` : ''}</FieldLabel>
             <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, lineHeight:1.7, marginBottom:16 }}>
               Mario has analysed your WGS across methylation, detox, inflammation, longevity, and circadian pathways. Positions not in your VCF are wild-type (standard reference). Ask Mario to explain your variants.
             </div>
@@ -3293,6 +3578,47 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
             ))}
           </div>
         </Panel>
+      </div>
+    );
+
+    // ── SCAN HISTORY ──
+    if (tab === 'scans') return (
+      <div>
+        <Eyebrow>Label scan history</Eyebrow>
+        <SectionTitle>Scan<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>History</em></SectionTitle>
+        {scanHistory.length === 0 ? (
+          <Panel>
+            <EmptyState title="No scans yet" sub="Tap the camera button on any screen and scan a product label — your history appears here."/>
+            <div style={{ textAlign:'center',marginTop:8 }}>
+              <button onClick={()=>{ setFabOpen(false); setShowLabelModal(true); }} style={{ background:T.rg,border:'none',borderRadius:10,padding:'12px 28px',cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600,color:'#fff' }}>
+                Scan your first label
+              </button>
+            </div>
+          </Panel>
+        ) : (
+          <>
+            <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4,marginBottom:12 }}>{scanHistory.length} product{scanHistory.length!==1?'s':''} checked</div>
+            {scanHistory.map((s,i)=>{
+              const isPass = s.verdict==='PASS';
+              const isFail = s.verdict==='FAIL';
+              const col = isFail?T.err:isPass?'#4A7C59':'#8B6914';
+              return (
+                <Panel key={i} style={{ marginBottom:10 }}>
+                  <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontFamily:fonts.sans,fontSize:13,fontWeight:500,color:T.w7,marginBottom:4 }}>{s.product||'Unknown product'}</div>
+                      {s.flags?.length>0 && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.err,marginBottom:4 }}>{s.flags.map(f=>f.ingredient).join(', ')}</div>}
+                      <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.1em' }}>{new Date(s.ts).toLocaleDateString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</div>
+                    </div>
+                    <div style={{ background:`${col}12`,border:`1px solid ${col}30`,borderRadius:8,padding:'4px 10px',marginLeft:12,flexShrink:0 }}>
+                      <span style={{ fontFamily:fonts.mono,fontSize:9,color:col,letterSpacing:'0.12em' }}>{s.verdict}</span>
+                    </div>
+                  </div>
+                </Panel>
+              );
+            })}
+          </>
+        )}
       </div>
     );
 
@@ -3471,6 +3797,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         { label:'Supplements & Medications', detail:'Current formulation · Interactions',   goTab:'meds',     count:(medSupp||medRx)?'On file':'Add' },
         { label:'Outcomes & Progress',       detail:'Symptoms · Energy · Measurements',     goTab:'outcomes', count:(outcomes.checkins?.length||0)>0?`${outcomes.checkins.length} check-ins`:'Start' },
         { label:'Generate Protocol',         detail:'Meal plan · Rotation · Grocery list',  goTab:'generate', count:'Generate' },
+        { label:'Label Scan History',        detail:'Products checked against your profile', goTab:'scans',    count:scanHistory.length>0?`${scanHistory.length} scans`:'Tap camera' },
       ];
       return (
         <div>
@@ -3530,6 +3857,15 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
     return null;
   };
+
+  // ── WELCOME AVATAR ────────────────────────────────────────────────────────────
+  if (showWelcome) return (
+    <WelcomeAvatar
+      patient={patient}
+      onComplete={() => { setShowWelcome(false); setShowOnboarding(true); }}
+      onSkip={() => { setShowWelcome(false); setShowOnboarding(true); }}
+    />
+  );
 
   // ── LANDING ───────────────────────────────────────────────────────────────────
   // Auth check loading
@@ -3612,7 +3948,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
 
   // ── ONBOARDING ────────────────────────────────────────────────────────────────
   if (showOnboarding) return (
-    <Onboarding onComplete={async (data)=>{
+    <Onboarding onPatientUpdate={(updates) => setPatient(p => ({ ...p, ...updates }))} onComplete={async (data)=>{
       setPatient(data);
       setShowOnboarding(false);
       // Save profile to Supabase + sessionStorage so returning users skip onboarding
@@ -3632,6 +3968,9 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         alcat_severe: data.alcat_severe || [],
         alcat_moderate: data.alcat_moderate || [],
         alcat_mild: data.alcat_mild || [],
+        severe: data.alcat_severe || [],
+        moderate: data.alcat_moderate || [],
+        mild: data.alcat_mild || [],
       };
       // Immediate sessionStorage save — works regardless of Supabase RLS
       if (authUser?.id) {
@@ -3912,6 +4251,139 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       <div style={{ flex:1,overflowY:'auto',WebkitOverflowScrolling:'touch',padding:tab==='mario'?'0':'20px 20px 24px' }} onClick={()=>picker&&setPicker(null)}>
         {tabContent()}
       </div>
+
+      {/* Hidden LabelCheck file input */}
+      <input ref={labelFileRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }}
+        onChange={e=>{ const f=e.target.files[0]; if(f){ setLabelPhoto(URL.createObjectURL(f)); fileToBase64(f).then(b64=>{ setLabelPhotoB64(b64); setShowLabelModal(true); setFabOpen(false); runLabelCheck(b64, f.type||'image/jpeg'); }); } e.target.value=''; }}/>
+
+      {/* FAB action sheet overlay */}
+      {fabOpen && (
+        <div style={{ position:'fixed',inset:0,zIndex:800,background:'rgba(28,20,16,0.38)',backdropFilter:'blur(6px)' }} onClick={()=>setFabOpen(false)}>
+          <div style={{ position:'fixed',bottom:136,right:20,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10 }} onClick={e=>e.stopPropagation()}>
+            {[
+              { icon:'🏷️', label:'Scan a label', action:()=>{ labelFileRef.current?.click(); } },
+              { icon:'🍽️', label:'Check my plate', action:()=>{ setFabOpen(false); setTab('plate'); } },
+              { icon:'💩', label:'Log gut health', action:()=>{ setFabOpen(false); setTab('gut'); } },
+            ].map(item=>(
+              <button key={item.label} onClick={item.action} style={{ display:'flex',alignItems:'center',gap:10,background:'rgba(247,244,240,0.97)',border:`1px solid ${T.w3}`,borderRadius:24,padding:'10px 18px 10px 14px',cursor:'pointer',boxShadow:'0 4px 20px rgba(28,20,16,0.16)',fontFamily:fonts.sans,fontSize:13,fontWeight:500,color:T.w7,backdropFilter:'blur(12px)',WebkitBackdropFilter:'blur(12px)' }}>
+                <span style={{ fontSize:18 }}>{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Button */}
+      {!showLabelModal && (
+        <button onClick={()=>setFabOpen(o=>!o)} style={{ position:'fixed',bottom:72,right:20,width:52,height:52,borderRadius:'50%',border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 4px 16px rgba(0,0,0,0.18)`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:500,transition:'transform .15s',transform:fabOpen?'rotate(45deg)':'rotate(0deg)' }}>
+          {fabOpen
+            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          }
+        </button>
+      )}
+
+      {/* LabelCheck modal */}
+      {showLabelModal && (
+        <div style={{ position:'fixed',inset:0,zIndex:1200,background:'rgba(28,20,16,0.55)',backdropFilter:'blur(10px)',display:'flex',alignItems:'flex-end' }}>
+          <div style={{ width:'100%',background:T.w,borderRadius:'20px 20px 0 0',boxShadow:'0 -8px 40px rgba(28,20,16,0.22)',paddingBottom:'env(safe-area-inset-bottom,0px)',maxHeight:'88dvh',overflowY:'auto' }}>
+            <div style={{ width:36,height:4,borderRadius:2,background:T.w3,margin:'12px auto 8px' }}/>
+            <div style={{ padding:'0 20px 28px' }}>
+              {/* Header */}
+              <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16 }}>
+                <div style={{ fontFamily:fonts.mono,fontSize:10,letterSpacing:'0.18em',color:T.rg2,textTransform:'uppercase' }}>Label Check</div>
+                <button onClick={()=>{ setShowLabelModal(false); setLabelPhoto(null); setLabelPhotoB64(null); setLabelResult(null); setLabelAlt(null); }} style={{ background:'none',border:'none',cursor:'pointer',color:T.w4,fontFamily:fonts.sans,fontSize:13 }}>Close</button>
+              </div>
+
+              {labelPhoto && <img src={labelPhoto} alt="label" style={{ width:'100%',maxHeight:180,objectFit:'cover',borderRadius:10,marginBottom:16 }}/>}
+
+              {labelLoad ? (
+                <div style={{ textAlign:'center',padding:'32px 0' }}>
+                  <div style={{ display:'flex',gap:8,justifyContent:'center',marginBottom:12 }}>
+                    {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
+                  </div>
+                  <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em' }}>READING LABEL · CROSS-REFERENCING YOUR PROFILE</div>
+                </div>
+              ) : labelResult ? (() => {
+                const verdict = labelResult.verdict;
+                const isPass = verdict === 'PASS';
+                const isFail = verdict === 'FAIL';
+                const verdictColor = isFail ? T.rg : isPass ? '#4A7C59' : '#8B6914';
+                const verdictBg = isFail ? `${T.rg}10` : isPass ? '#4A7C5910' : '#8B691410';
+                const verdictBorder = isFail ? `${T.rg}30` : isPass ? '#4A7C5930' : '#8B691430';
+                return (
+                  <>
+                    {/* Verdict banner */}
+                    <div style={{ background:verdictBg,border:`1px solid ${verdictBorder}`,borderRadius:14,padding:'16px 18px',marginBottom:14 }}>
+                      <div style={{ fontFamily:fonts.serif,fontSize:22,fontWeight:500,color:verdictColor,marginBottom:4 }}>
+                        {isPass ? '✓ Good for you' : isFail ? '✗ Not for you' : '⚠ Check this'}
+                      </div>
+                      {labelResult.product && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5 }}>{labelResult.product}</div>}
+                    </div>
+
+                    {/* Flags */}
+                    {labelResult.flags?.length > 0 && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.16em',color:T.err,textTransform:'uppercase',marginBottom:8 }}>Reactive ingredients</div>
+                        {labelResult.flags.map((f,i)=>(
+                          <div key={i} style={{ display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:`1px solid ${T.w2}` }}>
+                            <span style={{ fontFamily:fonts.sans,fontSize:13,color:T.w7,textTransform:'capitalize' }}>{f.ingredient}</span>
+                            <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.err,letterSpacing:'0.1em',background:`${T.err}10`,padding:'2px 8px',borderRadius:4 }}>{f.reason}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Safe highlights */}
+                    {labelResult.safe_highlights?.length > 0 && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontFamily:fonts.mono,fontSize:9,letterSpacing:'0.16em',color:'#4A7C59',textTransform:'uppercase',marginBottom:8 }}>Protocol-safe ingredients</div>
+                        <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+                          {labelResult.safe_highlights.map((s,i)=>(
+                            <span key={i} style={{ fontFamily:fonts.sans,fontSize:11,color:'#4A7C59',background:'#4A7C5910',border:'1px solid #4A7C5930',borderRadius:6,padding:'3px 10px',textTransform:'capitalize' }}>{s}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Mario's verdict */}
+                    {labelResult.mario_line && (
+                      <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:12,padding:'14px 16px',marginBottom:14,fontFamily:fonts.sans,fontSize:13,color:T.w6,lineHeight:1.65,fontWeight:300 }}>
+                        {labelResult.mario_line}
+                      </div>
+                    )}
+
+                    {/* Alternative */}
+                    {(isFail || verdict==='REVIEW') && (
+                      <div style={{ marginBottom:8 }}>
+                        {labelAlt ? (
+                          <div style={{ background:`${T.rg}08`,border:`1px solid ${T.rg}25`,borderRadius:10,padding:'12px 14px',fontFamily:fonts.sans,fontSize:12,color:T.w6,lineHeight:1.6,marginBottom:10 }}>{labelAlt}</div>
+                        ) : (
+                          <button onClick={()=>getLabelAlternative(labelResult.flags, labelResult.product)} disabled={labelAltLoad} style={{ width:'100%',background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:10,padding:'12px',cursor:labelAltLoad?'default':'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600,color:T.rg2 }}>
+                            {labelAltLoad ? 'Finding alternative…' : 'Find a safe alternative →'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Scan again */}
+                    <button onClick={()=>labelFileRef.current?.click()} style={{ width:'100%',background:T.rg,border:'none',borderRadius:12,padding:'13px',cursor:'pointer',fontFamily:fonts.sans,fontSize:14,fontWeight:600,color:'#fff',marginTop:4 }}>
+                      Scan another label
+                    </button>
+                  </>
+                );
+              })() : (
+                <div style={{ textAlign:'center',padding:'32px 0' }}>
+                  <button onClick={()=>labelFileRef.current?.click()} style={{ background:T.rg,border:'none',borderRadius:12,padding:'14px 32px',cursor:'pointer',fontFamily:fonts.sans,fontSize:14,fontWeight:600,color:'#fff' }}>
+                    Take label photo
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Emergency strip — only outside mario tab */}
       {tab !== 'mario' && (

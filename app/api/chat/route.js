@@ -32,7 +32,17 @@ export async function POST(req) {
       return Response.json({ error: data?.error?.message || 'API error', content: [] }, { status: 500 })
     }
 
-    return Response.json({ content: data.content || [] })
+    const content = data.content || []
+    const responseText = content.filter(b => b.type === 'text').map(b => b.text).join('').toLowerCase()
+    const uncertaintyPhrases = [
+      "i'm not certain", "i'm not sure", "i don't have enough",
+      "i cannot confirm", "unclear from your data", "you may want to verify",
+      "i would recommend checking", "send this question directly to dr. mario",
+      "message button below",
+    ]
+    const showContactButton = uncertaintyPhrases.some(p => responseText.includes(p))
+
+    return Response.json({ content, showContactButton })
   } catch (err) {
     console.error('[/api/chat]', err.message)
     return Response.json({ error: err.message, content: [] }, { status: 500 })

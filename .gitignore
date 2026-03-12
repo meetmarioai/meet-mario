@@ -32,3 +32,15 @@ out/
 
 # OS
 .DS_Store
+
+# Claude Code — never commit (may contain API keys in allowed commands)
+.claude/
+
+# Patch scripts
+patch_*.py
+
+# Build artifacts
+app.zip
+
+# Supabase temp
+supabase/.temp/
