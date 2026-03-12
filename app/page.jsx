@@ -516,75 +516,43 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         setLabParseError('API returned OK but 0 foods extracted. Raw: ' + text.slice(0, 150));
       }
 
-      // ── Save to Supabase alcat_results ──────────────────────────────────────
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
-      if (hasResults && currentUser?.id) {
+      // ── Show results immediately, save to Supabase in background ────────────
+      setLabParsed(true);
+      setLabParsing(false);
+
+      ;(async () => {
         try {
-          // Detect report type from filename
+          const { data: { user: currentUser } } = await supabase.auth.getUser();
+          if (!hasResults || !currentUser?.id) return;
+
           const fn = file.name.toLowerCase();
           const reportType = fn.includes('cna') || fn.includes('cma') ? 'CMA'
-            : fn.includes('alc') || fn.includes('alcat') ? 'ALCAT'
-            : 'LAB';
-
-          // Merge with any existing results if isAdditional
-          const finalSevere = isAdditional
-            ? [...new Set([...(data.alcat_severe||[]), ...newSevere])]
-            : newSevere;
-          const finalModerate = isAdditional
-            ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])]
-            : newModerate;
-          const finalMild = isAdditional
-            ? [...new Set([...(data.alcat_mild||[]), ...newMild])]
-            : newMild;
+            : fn.includes('alc') || fn.includes('alcat') ? 'ALCAT' : 'LAB';
+          const finalSevere   = isAdditional ? [...new Set([...(data.alcat_severe||[]),   ...newSevere])]   : newSevere;
+          const finalModerate = isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
+          const finalMild     = isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
 
           await supabase.from('alcat_results').upsert({
-            patient_id: currentUser.id,
-            severe: finalSevere,
-            moderate: finalModerate,
-            mild: finalMild,
-            test_date: new Date().toISOString().split('T')[0],
-            lab_id: file.name,
-            raw_report_url: reportType,
-            created_at: new Date().toISOString(),
+            patient_id: currentUser.id, severe: finalSevere, moderate: finalModerate, mild: finalMild,
+            test_date: new Date().toISOString().split('T')[0], lab_id: file.name,
+            raw_report_url: reportType, created_at: new Date().toISOString(),
           }, { onConflict: 'patient_id' });
 
-          // Also update onboarding_intake reactive lists
           await supabase.from('onboarding_intake').upsert({
-            user_id: currentUser.id,
-            alcat_severe: finalSevere,
-            alcat_moderate: finalModerate,
-            alcat_mild: finalMild,
-            updated_at: new Date().toISOString(),
+            user_id: currentUser.id, alcat_severe: finalSevere, alcat_moderate: finalModerate,
+            alcat_mild: finalMild, updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
 
-          // And profiles.patient_data
-          const { data: profRow } = await supabase
-            .from('profiles')
-            .select('patient_data')
-            .eq('id', currentUser.id)
-            .single();
+          const { data: profRow } = await supabase.from('profiles').select('patient_data').eq('id', currentUser.id).single();
           if (profRow?.patient_data) {
-            const pd = typeof profRow.patient_data === 'string'
-              ? JSON.parse(profRow.patient_data) : profRow.patient_data;
-            pd.alcat_severe = finalSevere;
-            pd.alcat_moderate = finalModerate;
-            pd.alcat_mild = finalMild;
-            await supabase.from('profiles').upsert({
-              id: currentUser.id,
-              patient_data: JSON.stringify(pd),
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'id' });
+            const pd = typeof profRow.patient_data === 'string' ? JSON.parse(profRow.patient_data) : profRow.patient_data;
+            pd.alcat_severe = finalSevere; pd.alcat_moderate = finalModerate; pd.alcat_mild = finalMild;
+            await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
           }
-
           console.log('[Lab upload] Saved to DB:', reportType, finalSevere.length + finalModerate.length + finalMild.length, 'items');
-        } catch(dbErr) {
-          console.error('[Lab upload] DB save error:', dbErr);
-          // Non-fatal — user can still continue
-        }
-      }
+        } catch(dbErr) { console.error('[Lab upload] DB save error:', dbErr); }
+      })();
       // ───────────────────────────────────────────────────────────────────────
-
-      setLabParsed(true);
     } catch(err) {
       console.error('Lab parse error:', err);
       setLabParseError(err.message || 'Unknown error');
