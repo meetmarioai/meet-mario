@@ -431,35 +431,132 @@ function Onboarding({ onComplete, onPatientUpdate }) {
 
     console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| detectedType:', detectedType, '| size:', (file.size/1024).toFixed(0)+'KB');
 
-    // ── VCF (Variant Call Format) — plain text, send as text block ────────────
+    // ── VCF — position-based matching against clinicalSNPs (same as dashboard) ──
     if (isVCF) {
       try {
-        const rawText = await file.text();
-        const truncated = rawText.length > 120000 ? rawText.slice(0, 120000) + '\n...[truncated]' : rawText;
-        const res = await fetch('/api/chat', {
+        const posMatchedSnps = [];
+        const rsidLines = [];
+        let lastHeaderLine = '';
+        let totalDataLines = 0;
+        let vcfDone = false;
+
+        const extractGT = (line, ref, alt) => {
+          const cols = line.split('\t');
+          if (cols.length < 10) return { genotype: '?/?', status: 'carrier' };
+          const fmt = (cols[8] || '').split(':');
+          const smp = (cols[9] || '').split(':');
+          const gtIdx = fmt.indexOf('GT');
+          const gtRaw = (gtIdx >= 0 ? smp[gtIdx] : smp[0]) || './.';
+          const alleles = gtRaw.split(/[/|]/).map(a => a.trim());
+          const isRef = a => a === '0';
+          const isAlt = a => a !== '0' && a !== '.';
+          const allRef = alleles.every(isRef);
+          const allAlt = alleles.length > 0 && alleles.every(isAlt);
+          const status = allRef ? 'normal' : allAlt ? 'risk' : 'carrier';
+          const genotype = alleles.map(a => isRef(a) ? ref : isAlt(a) ? alt : '?').join('');
+          return { genotype, status };
+        };
+
+        const processVCFLine = (line) => {
+          if (!line) return;
+          if (line.startsWith('#')) { lastHeaderLine = line; return; }
+          totalDataLines++;
+          const cols = line.split('\t');
+          const chrom = (cols[0] || '').replace(/^chr/i, '');
+          const pos   = cols[1] || '';
+          const id    = cols[2] || '.';
+          const ref   = cols[3] || '';
+          const alt   = (cols[4] || '').split(',')[0];
+          const posKey = `${chrom}:${pos}:${ref}:${alt}`;
+          const annotation = POS_INDEX[posKey];
+          if (annotation) {
+            const { genotype, status } = extractGT(line, ref, alt);
+            if (status !== 'normal') {
+              const impact = status === 'risk'
+                ? (annotation.hom_interpretation || annotation.functional_impact || '')
+                : (annotation.het_interpretation || annotation.functional_impact || '');
+              posMatchedSnps.push({ ...annotation, genotype, status, impact });
+            }
+            return;
+          }
+          const rsMatch = [...(id.match(/rs\d+/gi) || [])];
+          if (rsMatch.some(rs => CLINICAL_RSID_SET.has(rs.toLowerCase()))) rsidLines.push(line);
+        };
+
+        try {
+          const reader = file.stream().getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          while (!vcfDone) {
+            const { value, done: sd } = await reader.read();
+            vcfDone = sd;
+            buf += decoder.decode(value || new Uint8Array(), { stream: !vcfDone });
+            let ni;
+            while ((ni = buf.indexOf('\n')) >= 0) {
+              processVCFLine(buf.slice(0, ni).trimEnd());
+              buf = buf.slice(ni + 1);
+              if (posMatchedSnps.length + rsidLines.length >= 500) { vcfDone = true; reader.cancel(); break; }
+            }
+          }
+          if (buf.trim()) processVCFLine(buf.trim());
+        } catch (streamErr) {
+          console.warn('[VCF onboarding] stream fallback:', streamErr.message);
+          const txt = await file.text();
+          for (const line of txt.split('\n')) {
+            processVCFLine(line.trimEnd());
+            if (posMatchedSnps.length + rsidLines.length >= 500) break;
+          }
+        }
+
+        console.log(`[VCF onboarding] Scanned ${totalDataLines} variants. Pos-matched: ${posMatchedSnps.length}. rsID candidates: ${rsidLines.length}.`);
+
+        if (totalDataLines === 0) {
+          setLabParseError('No genetic data found. Is this a valid VCF file?');
+          setLabParsing(false);
+          return;
+        }
+
+        if (posMatchedSnps.length > 0) {
+          const deduped = [...new Map(posMatchedSnps.map(s => [s.rsid, s])).values()];
+          const enriched = typeof enrichGenomicSnps === 'function' ? enrichGenomicSnps(deduped) : deduped;
+          u('genomicSnps', enriched);
+          u('genomicChecked', Object.keys(POS_INDEX).length);
+          setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+          setLabParsed(true);
+          setLabParsing(false);
+          return;
+        }
+
+        if (rsidLines.length === 0) {
+          setLabParseError('No clinically relevant variants found. Ensure GRCh37 reference genome.');
+          setLabParsing(false);
+          return;
+        }
+
+        // rsID fallback — send matched lines to Claude for annotation
+        const filteredContent = [lastHeaderLine, ...rsidLines].filter(Boolean).join('\n');
+        const vcfRes = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             max_tokens: 4000,
-            system: 'You extract structured data from genomic VCF files. Return only valid JSON, nothing else.',
-            messages: [{ role: 'user', content: [
-              { type: 'text', text: `This is a genomic VCF (Variant Call Format) file.\n\nFile contents:\n\`\`\`\n${truncated}\n\`\`\`\n\nReturn ONLY this JSON (no markdown):\n{"report_type":"VCF","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}\n\nPathogenic/likely pathogenic → "severe", variant of uncertain significance → "moderate", benign/likely benign → "mild". Use gene+variant notation. Lowercase.` }
-            ]}],
+            system: 'You are a clinical genomics analyst. Return only valid JSON.',
+            messages: [{ role: 'user', content: `${rsidLines.length} VCF lines matched clinical rsIDs. Annotate each.\n\nReturn: {"snps":[{"rsid":"rs...","gene":"GENE","status":"risk|carrier","impact":"...","domain":"...","intervention":"..."}]}\n\nVCF data:\n${filteredContent.slice(0, 80000)}` }],
           }),
         });
-        if (!res.ok) { const t = await res.text(); throw new Error('API returned ' + res.status + ': ' + t.slice(0,200)); }
-        const d = await res.json();
-        if (d.error) throw new Error(d.error);
-        const text = (Array.isArray(d.content) ? d.content : []).filter(b=>b.type==='text').map(b=>b.text).join('');
-        let json = { severe:[], moderate:[], mild:[] };
-        try { json = JSON.parse(text.replace(/```json|```/g,'').trim()); } catch { const m = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/); if(m) try { json=JSON.parse(m[0]); } catch {} }
-        const norm = arr => (Array.isArray(arr)?arr:[]).map(f=>String(f).toLowerCase().trim()).filter(Boolean);
-        u('alcat_severe', norm(json.severe));
-        u('alcat_moderate', norm(json.moderate));
-        u('alcat_mild', norm(json.mild));
-        u('alcat_raw', text);
-        setLabFiles(prev => [...prev.filter(f=>f!==file.name), file.name]);
-        setLabParsed(true);
+        if (!vcfRes.ok) throw new Error('API returned ' + vcfRes.status);
+        const vcfD = await vcfRes.json();
+        if (vcfD.error) throw new Error(vcfD.error);
+        const vcfText = (Array.isArray(vcfD.content) ? vcfD.content : []).filter(b => b.type === 'text').map(b => b.text).join('');
+        let vcfJson = { snps: [] };
+        try { vcfJson = JSON.parse(vcfText.replace(/```json|```/g, '').trim()); } catch {}
+        if (vcfJson.snps?.length > 0) {
+          u('genomicSnps', vcfJson.snps);
+          setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+          setLabParsed(true);
+        } else {
+          setLabParseError('No clinically relevant variants found in this VCF.');
+        }
       } catch(err) {
         console.error('[Lab parse VCF]', err.message);
         setLabParseError(err.message);
@@ -551,68 +648,102 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const newModerate = norm(json.moderate);
       const newMild = norm(json.mild);
 
-      // Extract redox score if this is a REDOX report
-      if (detectedType === 'redox' && json.redox_score != null) {
-        setLastRedoxScore(Number(json.redox_score));
-      }
-
-      if (isAdditional) {
-        u('alcat_severe', [...new Set([...(data.alcat_severe||[]), ...newSevere])]);
-        u('alcat_moderate', [...new Set([...(data.alcat_moderate||[]), ...newModerate])]);
-        u('alcat_mild', [...new Set([...(data.alcat_mild||[]), ...newMild])]);
+      // ── Route results based on file type — CMA nutrients must NOT go into alcat arrays ──
+      if (detectedType === 'micronutrient') {
+        // CMA/CNA — route to cma fields only
+        const cmaDef = norm(json.cma_deficiencies).length > 0
+          ? norm(json.cma_deficiencies)
+          : [...newSevere, ...newModerate];
+        const cmaAdeq = norm(json.cma_adequate).length > 0 ? norm(json.cma_adequate) : newMild;
+        u('cmaDeficiencies', [...new Set([...(data.cmaDeficiencies||[]), ...cmaDef])]);
+        u('cmaAdequate',     [...new Set([...(data.cmaAdequate||[]),     ...cmaAdeq])]);
+        if (json.redox_score != null) u('redoxScore', Number(json.redox_score));
+        console.log('[Lab parse CMA] Deficiencies:', cmaDef.length, '| Adequate:', cmaAdeq.length, '| RedoxScore:', json.redox_score);
+      } else if (detectedType === 'redox') {
+        // REDOX — store score only
+        if (json.redox_score != null) u('redoxScore', Number(json.redox_score));
+        console.log('[Lab parse REDOX] Score:', json.redox_score);
       } else {
-        u('alcat_severe', newSevere);
-        u('alcat_moderate', newModerate);
-        u('alcat_mild', newMild);
+        // ALCAT or unknown — route to alcat arrays
+        if (isAdditional) {
+          u('alcat_severe',   [...new Set([...(data.alcat_severe||[]),   ...newSevere])]);
+          u('alcat_moderate', [...new Set([...(data.alcat_moderate||[]), ...newModerate])]);
+          u('alcat_mild',     [...new Set([...(data.alcat_mild||[]),     ...newMild])]);
+        } else {
+          u('alcat_severe',   newSevere);
+          u('alcat_moderate', newModerate);
+          u('alcat_mild',     newMild);
+        }
+        console.log('[Lab parse ALCAT] Severe:', newSevere.length, '| Moderate:', newModerate.length, '| Mild:', newMild.length);
       }
       u('alcat_raw', text);
       setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
 
-      const hasResults = newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0;
-      console.log('[Lab parse] Results:', { severe: newSevere.length, moderate: newModerate.length, mild: newMild.length });
+      const hasResults = newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0
+        || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0;
       if (!hasResults) {
-        setLabParseError('API returned OK but 0 foods extracted. Raw: ' + text.slice(0, 150));
+        setLabParseError('API returned OK but 0 items extracted. Raw: ' + text.slice(0, 150));
       }
 
       // ── Show results immediately, save to Supabase in background ────────────
       setLabParsed(true);
       setLabParsing(false);
 
+      // Compute finals (outside IIFE so they're in scope for onPatientUpdate)
+      const finalSevere   = detectedType === 'micronutrient' ? [] : isAdditional ? [...new Set([...(data.alcat_severe||[]),   ...newSevere])]   : newSevere;
+      const finalModerate = detectedType === 'micronutrient' ? [] : isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
+      const finalMild     = detectedType === 'micronutrient' ? [] : isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
+
+      console.log('[Lab upload] Finals computed:', { severe: finalSevere.length, moderate: finalModerate.length, mild: finalMild.length, isAdditional, detectedType });
+
       ;(async () => {
         try {
-          const { data: { user: currentUser } } = await supabase.auth.getUser();
-          if (!hasResults || !currentUser?.id) return;
+          const { data: { user: currentUser }, error: authErr } = await supabase.auth.getUser();
+          console.log('[Lab upload] Auth user:', currentUser?.id || 'NONE', authErr?.message || '');
+          if (!currentUser?.id) { console.error('[Lab upload] No user — aborting save'); return; }
+          if (!hasResults) { console.warn('[Lab upload] 0 results — skipping Supabase save'); return; }
 
           const fn = file.name.toLowerCase();
           const reportType = fn.includes('cna') || fn.includes('cma') ? 'CMA'
             : fn.includes('alc') || fn.includes('alcat') ? 'ALCAT' : 'LAB';
-          const finalSevere   = isAdditional ? [...new Set([...(data.alcat_severe||[]),   ...newSevere])]   : newSevere;
-          const finalModerate = isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
-          const finalMild     = isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
 
-          await supabase.from('alcat_results').upsert({
+          // 1. alcat_results
+          const { error: alcatErr } = await supabase.from('alcat_results').upsert({
             patient_id: currentUser.id, severe: finalSevere, moderate: finalModerate, mild: finalMild,
             test_date: new Date().toISOString().split('T')[0], lab_id: file.name,
             raw_report_url: reportType, created_at: new Date().toISOString(),
           }, { onConflict: 'patient_id' });
+          console.log('[Lab upload] alcat_results upsert:', alcatErr ? `ERROR: ${alcatErr.message} (${alcatErr.code})` : 'OK');
 
-          await supabase.from('onboarding_intake').upsert({
+          // 2. onboarding_intake
+          const { error: intakeErr } = await supabase.from('onboarding_intake').upsert({
             user_id: currentUser.id, alcat_severe: finalSevere, alcat_moderate: finalModerate,
             alcat_mild: finalMild, updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
+          console.log('[Lab upload] onboarding_intake upsert:', intakeErr ? `ERROR: ${intakeErr.message} (${intakeErr.code})` : 'OK');
 
-          const { data: profRow } = await supabase.from('profiles').select('patient_data').eq('id', currentUser.id).single();
+          // 3. profiles.patient_data — merge and save
+          const { data: profRow, error: profReadErr } = await supabase.from('profiles').select('patient_data').eq('id', currentUser.id).single();
+          console.log('[Lab upload] profiles read:', profReadErr ? `ERROR: ${profReadErr.message}` : `OK, has data: ${!!profRow?.patient_data}`);
           if (profRow?.patient_data) {
             const pd = typeof profRow.patient_data === 'string' ? JSON.parse(profRow.patient_data) : profRow.patient_data;
             pd.alcat_severe = finalSevere; pd.alcat_moderate = finalModerate; pd.alcat_mild = finalMild;
             pd.severe = finalSevere; pd.moderate = finalModerate; pd.mild = finalMild;
-            await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
+            const { error: profWriteErr } = await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
+            console.log('[Lab upload] profiles write:', profWriteErr ? `ERROR: ${profWriteErr.message} (${profWriteErr.code})` : 'OK');
           }
-          console.log('[Lab upload] Saved to DB:', reportType, finalSevere.length + finalModerate.length + finalMild.length, 'items');
-        } catch(dbErr) { console.error('[Lab upload] DB save error:', dbErr); }
 
-        // Update live React state immediately so dashboard reflects without a reload
+          // Also clear sessionStorage so next loadProfile goes fresh from Supabase
+          try { sessionStorage.removeItem('mm_profile_' + currentUser.id); } catch {}
+
+          console.log('[Lab upload] ✅ All saves done:', reportType, finalSevere.length, 'severe /', finalModerate.length, 'moderate /', finalMild.length, 'mild');
+        } catch(dbErr) {
+          console.error('[Lab upload] ❌ Unexpected DB error:', dbErr.message, dbErr);
+        }
+
+        // Update live React state immediately
         if (onPatientUpdate && (finalSevere.length > 0 || finalModerate.length > 0 || finalMild.length > 0)) {
+          console.log('[Lab upload] Calling onPatientUpdate with', finalSevere.length + finalModerate.length + finalMild.length, 'items');
           onPatientUpdate({ severe: finalSevere, moderate: finalModerate, mild: finalMild,
             alcat_severe: finalSevere, alcat_moderate: finalModerate, alcat_mild: finalMild });
         }
@@ -1425,7 +1556,42 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
         // ── PATH A: position matches found — annotate directly, no Claude ──
         const checkedCount = Object.keys(POS_INDEX).length;
-        console.log(`[VCF] Scanned ${totalDataLines} variants. Position-matched: ${posMatchedSnps.length}/${checkedCount} clinical positions.`);
+        console.log(`[VCF] Scanned ${totalDataLines} variants. Position-matched: ${posMatchedSnps.length}/${checkedCount} clinical positions. rsID-matched: ${rsidLines.length}.`);
+
+        // ── DEBUG: log sample posKeys to verify format matches POS_INDEX ──
+        {
+          const sampleKeys = [];
+          const sampleLines = [];
+          let debugCount = 0;
+          const debugReader = file.stream().getReader();
+          const debugDecoder = new TextDecoder();
+          let debugBuf = '';
+          let debugDone = false;
+          try {
+            while (!debugDone && debugCount < 20) {
+              const { value, done: sd } = await debugReader.read();
+              debugDone = sd;
+              debugBuf += debugDecoder.decode(value || new Uint8Array(), { stream: !sd });
+              let ni;
+              while ((ni = debugBuf.indexOf('\n')) >= 0 && debugCount < 20) {
+                const ln = debugBuf.slice(0, ni).trimEnd();
+                debugBuf = debugBuf.slice(ni + 1);
+                if (!ln || ln.startsWith('#')) continue;
+                const c = ln.split('\t');
+                const chrom = (c[0]||'').replace(/^chr/i,'');
+                const pos = c[1]||''; const ref = c[3]||''; const alt = (c[4]||'').split(',')[0];
+                sampleKeys.push(`${chrom}:${pos}:${ref}:${alt}`);
+                sampleLines.push(ln.slice(0, 120));
+                debugCount++;
+              }
+            }
+          } catch {} finally { try { debugReader.cancel(); } catch {} }
+          console.log('[VCF DEBUG] First data lines (raw):', sampleLines);
+          console.log('[VCF DEBUG] Sample posKeys generated:', sampleKeys);
+          const firstPosKey = Object.keys(POS_INDEX)[0];
+          console.log('[VCF DEBUG] First POS_INDEX key:', firstPosKey, '| matches any sample:', sampleKeys.includes(firstPosKey));
+          console.log('[VCF DEBUG] rsID candidates found:', rsidLines.slice(0, 5).map(l => l.split('\t').slice(0,5).join('\t')));
+        }
         posMatchedSnps.forEach(s => console.log(`  ✓ ${s.gene} ${s.rsid} ${s.genotype} [${s.status}]`));
 
         if (posMatchedSnps.length > 0) {
@@ -1717,6 +1883,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const { data: row, error } = profileRes;
       const { data: alcat } = alcatRes;
 
+      console.log('[profile] Supabase row:', { error: error?.message || null, onboarding_complete: row?.onboarding_complete, has_patient_data: !!row?.patient_data, full_name: row?.full_name });
       if (!error && row?.onboarding_complete && row?.patient_data) {
         let pd = typeof row.patient_data === 'string' ? JSON.parse(row.patient_data) : row.patient_data;
         if (!pd?.name && row?.full_name) { if (pd) pd.name = row.full_name; else pd = { name: row.full_name }; }
@@ -1724,12 +1891,21 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           pd = mergeAlcat(pd, alcat);
           if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
           try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
-          console.log('[profile] Supabase — severe:', pd.severe?.length || 0, '| cma:', pd.cmaDeficiencies?.length || 0, '| redox:', pd.redoxScore ?? 'null', '| snps:', pd.genomicSnps?.length || 0);
+          console.log('[profile] Loaded — severe:', pd.severe?.length || 0, '| cma:', pd.cmaDeficiencies?.length || 0, '| redox:', pd.redoxScore ?? 'null', '| snps:', pd.genomicSnps?.length || 0);
           return pd;
+        } else {
+          console.warn('[profile] patient_data has no name field — falling through');
         }
+      } else if (error) {
+        console.error('[profile] Supabase query error:', error.message);
+      } else if (!row?.onboarding_complete) {
+        console.warn('[profile] onboarding_complete is false/null — user not fully onboarded yet');
+      } else if (!row?.patient_data) {
+        console.warn('[profile] patient_data is null/empty in profiles table');
       }
       if (!error && row?.full_name) {
         const pd = mergeAlcat({ name: row.full_name }, alcat);
+        console.log('[profile] Fallback to full_name only:', row.full_name);
         return pd;
       }
     } catch (e) { console.error('[profile] Supabase primary failed:', e); }
@@ -1990,46 +2166,57 @@ INSTRUCTIONS: [4-6 flowing prose paragraphs — warm, confident chef voice — n
   };
 
   const buildRotationFromAlcat = async (pd) => {
-    const mild = (pd || patient).mild || [];
-    if (!mild.length) return;
-    // Categorize mild foods using keyword matching
+    const src = pd || patient;
+    const reactiveSet = new Set([
+      ...(src.severe||[]).map(f => f.toLowerCase()),
+      ...(src.moderate||[]).map(f => f.toLowerCase()),
+      ...(src.mild||[]).map(f => f.toLowerCase()),
+      ...(src.alcat_severe||[]).map(f => f.toLowerCase()),
+      ...(src.alcat_moderate||[]).map(f => f.toLowerCase()),
+      ...(src.alcat_mild||[]).map(f => f.toLowerCase()),
+    ]);
+    if (reactiveSet.size === 0) return; // No ALCAT data yet
+
+    // Master list of common ALCAT-testable foods — safe foods = this list minus reactive
+    const MASTER = {
+      protein: ['lamb','chicken','turkey','salmon','cod','sardine','mackerel','trout','halibut','herring','tuna','duck','venison','rabbit','ostrich','bison','scallop','shrimp','mussel','clam','crab','lobster'],
+      veg: ['broccoli','cauliflower','spinach','kale','carrot','zucchini','cucumber','celery','asparagus','beet','cabbage','leek','garlic','eggplant','sweet potato','squash','artichoke','arugula','fennel','lettuce','radish','parsnip','chard','cassava','bok choy','collard greens','watercress','turnip','yam','taro','okra','rutabaga'],
+      fruit: ['apple','blueberry','strawberry','raspberry','cherry','pear','peach','plum','apricot','fig','watermelon','kiwi','pomegranate','mango','papaya','pineapple','lemon','lime','grapefruit','date','guava'],
+      grains: ['rice','quinoa','millet','buckwheat','amaranth','tapioca','sorghum','teff','potato','sweet potato'],
+      misc: ['sunflower seeds','pumpkin seeds','flaxseed','hemp seeds','almonds','walnuts','pecans','brazil nuts','macadamia','coconut','avocado','olive oil','coconut oil','ghee','green tea','chamomile'],
+    };
+
     const catMap = { protein:[], veg:[], fruit:[], grains:[], misc:[] };
-    const proteinKw = ['beef','chicken','salmon','lamb','turkey','tuna','cod','shrimp','pork','duck','venison','trout','mackerel','sardine','halibut','herring','bass','tilapia','crab','lobster','scallop','mussel','clam','egg'];
-    const vegKw = ['broccoli','cauliflower','spinach','kale','carrot','zucchini','cucumber','celery','asparagus','beet','bok choy','cabbage','leek','onion','garlic','tomato','eggplant','pepper','sweet potato','squash','artichoke','arugula','fennel','lettuce','radish','turnip','parsnip','rutabaga','yam','chard','collard','watercress','endive','radicchio','cassava','taro'];
-    const fruitKw = ['apple','banana','mango','pineapple','papaya','melon','berry','blueberry','strawberry','raspberry','cherry','grape','orange','lemon','lime','grapefruit','pear','peach','plum','apricot','fig','date','watermelon','kiwi','pomegranate','persimmon','guava','lychee','passion','dragon'];
-    const grainKw = ['rice','quinoa','millet','buckwheat','amaranth','oat','wheat','corn','tapioca','sorghum','teff','potato','bread','pasta','noodle','flour','starch'];
-    mild.forEach(food => {
-      const f = food.toLowerCase();
-      if (proteinKw.some(k => f.includes(k))) catMap.protein.push(food);
-      else if (vegKw.some(k => f.includes(k))) catMap.veg.push(food);
-      else if (fruitKw.some(k => f.includes(k))) catMap.fruit.push(food);
-      else if (grainKw.some(k => f.includes(k))) catMap.grains.push(food);
-      else catMap.misc.push(food);
+    Object.entries(MASTER).forEach(([cat, foods]) => {
+      foods.forEach(food => {
+        if (!reactiveSet.has(food.toLowerCase())) catMap[cat].push(food);
+      });
     });
-    // Distribute each category across 4 days (round-robin)
+
+    // Distribute safe foods across 4 days (round-robin per category)
     const rotation = { 1:{protein:[],veg:[],fruit:[],grains:[],misc:[]}, 2:{protein:[],veg:[],fruit:[],grains:[],misc:[]}, 3:{protein:[],veg:[],fruit:[],grains:[],misc:[]}, 4:{protein:[],veg:[],fruit:[],grains:[],misc:[]} };
     Object.entries(catMap).forEach(([cat, foods]) => {
-      foods.forEach((food, idx) => {
-        rotation[(idx % 4) + 1][cat].push(food);
-      });
+      foods.forEach((food, idx) => { rotation[(idx % 4) + 1][cat].push(food); });
     });
     // Remove empty cats
     for (let d = 1; d <= 4; d++) {
-      Object.keys(rotation[d]).forEach(cat => {
-        if (!rotation[d][cat].length) delete rotation[d][cat];
-      });
+      Object.keys(rotation[d]).forEach(cat => { if (!rotation[d][cat].length) delete rotation[d][cat]; });
     }
+
+    console.log('[buildRotation] Reactive:', reactiveSet.size, '| Safe protein:', catMap.protein.length, '| veg:', catMap.veg.length, '| fruit:', catMap.fruit.length);
     setPatient(p => ({ ...p, rotation }));
-    // Save to Supabase
+
+    // Persist to Supabase
     ;(async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user?.id) return;
         const { data: existing } = await supabase.from('profiles').select('patient_data').eq('id', user.id).single();
         const pd2 = existing?.patient_data ? (typeof existing.patient_data === 'string' ? JSON.parse(existing.patient_data) : existing.patient_data) : {};
-        await supabase.from('profiles').update({ patient_data: { ...pd2, rotation } }).eq('id', user.id);
-      } catch {}
+        await supabase.from('profiles').upsert({ id: user.id, patient_data: JSON.stringify({ ...pd2, rotation }), updated_at: new Date().toISOString() }, { onConflict: 'id' });
+      } catch (e) { console.error('[buildRotation] save error:', e); }
     })();
+    return rotation;
   };
 
   const buildGroceryList = async () => {
@@ -3677,6 +3864,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         return true;
       }) || PHASES[0];
       const hasAlcat = (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0;
+      console.log('[Today] patient fields — severe:', P.severe?.length||0, '| moderate:', P.moderate?.length||0, '| mild:', P.mild?.length||0, '| alcat_severe:', P.alcat_severe?.length||0, '| cma:', P.cmaDeficiencies?.length||0, '| redox:', P.redoxScore??'null', '| snps:', P.genomicSnps?.length||0, '| hasAlcat:', hasAlcat);
       const hasCMA = (P.cmaDeficiencies?.length||0) > 0;
       const todayRotDay = protocolDay > 0 ? ((protocolDay % 4) || 4) : rotDay;
       const todayFoods = ROT[todayRotDay] || null;
@@ -4012,12 +4200,24 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         severe: data.alcat_severe || [],
         moderate: data.alcat_moderate || [],
         mild: data.alcat_mild || [],
+        // CMA/micronutrient fields
+        cmaDeficiencies: data.cmaDeficiencies || [],
+        cmaAdequate: data.cmaAdequate || [],
+        cmaAllNutrients: data.cmaAllNutrients || [],
+        cmaNutrients: data.cmaNutrients || [],
+        redoxScore: data.redoxScore ?? null,
+        // Genomic fields
+        genomicSnps: data.genomicSnps || [],
+        genomicChecked: data.genomicChecked || 0,
+        // Rotation calendar
+        rotation: data.rotation || { 1:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 2:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 3:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 4:{grains:[],veg:[],fruit:[],protein:[],misc:[]} },
       };
       // Immediate sessionStorage save — works regardless of Supabase RLS
       if (authUser?.id) {
         try { sessionStorage.setItem('mm_profile_' + authUser.id, JSON.stringify(profilePayload)); } catch {}
       }
       if (authUser?.id) {
+        console.log('[save] Saving profile for', authUser.id, '| name:', data.name, '| alcat_severe:', (data.alcat_severe||[]).length, '| cmaDeficiencies:', (data.cmaDeficiencies||[]).length, '| genomicSnps:', (data.genomicSnps||[]).length);
         // Save to profiles table (primary)
         try {
           const { error: profileErr } = await supabase.from('profiles').upsert({
@@ -4027,8 +4227,8 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             patient_data: JSON.stringify(profilePayload),
             updated_at: new Date().toISOString(),
           }, { onConflict: 'id' });
-          if (profileErr) console.error('[save] profiles upsert error:', profileErr.message);
-          else console.log('[save] profiles saved OK');
+          if (profileErr) console.error('[save] profiles upsert error:', profileErr.message, profileErr.code);
+          else console.log('[save] profiles saved OK — payload size:', JSON.stringify(profilePayload).length);
         } catch(e) { console.error('[save] profiles exception:', e); }
         // Save to onboarding_intake (backup)
         try {
@@ -4057,6 +4257,18 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
       } else {
         console.warn('[save] No authUser — onboarding data NOT saved to database');
       }
+      // ── Auto-generate rotation calendar if ALCAT data present ──
+      const hasAlcatData = (data.alcat_severe?.length || 0) + (data.alcat_moderate?.length || 0) + (data.alcat_mild?.length || 0) > 0;
+      if (hasAlcatData) {
+        buildRotationFromAlcat(data);
+        console.log('[onComplete] Auto-building rotation from', (data.alcat_severe?.length||0) + (data.alcat_moderate?.length||0) + (data.alcat_mild?.length||0), 'reactive foods');
+      }
+
+      // ── Auto-generate 21-day protocol if ALCAT data present ──
+      if (hasAlcatData) {
+        generateDiet(data).catch(e => { console.error('[onComplete] Auto-generateDiet error:', e); setDietPlan('ERROR'); setDietLoading(false); });
+      }
+
       let score = 20;
       if (data.symptoms?.length >= 5) score += 25;
       else if (data.symptoms?.length >= 3) score += 15;

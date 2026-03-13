@@ -18,27 +18,19 @@ export const WELCOME_SCRIPTS = {
   // ── PRIMARY WELCOME — plays on first app open ──────────────────────────
   // This is the one. The first thing a new user sees.
   //
-  welcome: `Welcome to Meet Mario.
+  welcome: `Your body is the most sophisticated system ever built. Four hundred trillion cells. Five hundred million years of evolution. A molecular intelligence that knows exactly what it needs — and has been trying to tell you.
 
-My name is Mario Anthis. I am a physician, and I have spent the last fifteen years trying to answer one question. Why do intelligent, health-conscious people still feel terrible?
+But somewhere along the way, we stopped listening. We replaced real food with processed calories. We silenced the signals with medication. And we accepted fatigue, brain fog, and inflammation as normal. They are not normal. They are your biology asking for help.
 
-The answer, in most cases, is not what you expect. It is not a missing diagnosis. It is not stress. It is not in your head. It is in your immune system — reacting silently to foods you eat every single day.
+Meet Mario exists because I believe medicine should translate, not guess. Every person who walks through our doors — or opens this app — deserves to know what their cells are actually saying. Not what a blood test approximates. What the cell itself contains, what the immune system is reacting to, and what the DNA has been shaping since before you were born.
 
-Your body has been trying to tell you this for years. The bloating after meals. The brain fog that comes and goes. The fatigue that sleep does not fix. These are not random symptoms. They are signals. And they follow a pattern that, once you see it, changes everything.
+This platform connects those layers for the first time. Your immune reactivity. Your cellular nutrition. Your genetic architecture. And from that data, a protocol — precise, personalised, built for your biology alone.
 
-This platform was built to translate those signals into a language you can act on. Here is what it does.
+We have done this for twenty-five thousand patients. And we have seen what happens when the immune system is finally heard. Energy returns. Clarity returns. The body remembers what it was designed to do.
 
-First, it builds a profile of your biology. Your immune reactivity, your cellular nutrition, your genetic architecture. Not one test — a complete picture.
+This is not a diet app. This is not a wellness trend. This is precision medicine — made accessible to everyone, everywhere.
 
-Second, it gives you a protocol. Not a generic diet. A precise, personalised elimination sequence based on your own data — designed to lower your immune burden in twenty-one days.
-
-Third, it tracks your progress. Every meal, every symptom, every change — mapped over time so you can see your body responding.
-
-And fourth — me. I am here, inside this app, whenever you need to understand what your results mean, what to eat tomorrow, or why you feel worse before you feel better.
-
-This is precision medicine. Not guesswork. Not trends. Your biology, translated.
-
-Let us begin.`,
+Welcome to Meet Mario. Let us begin.`,
 
 
   // ── RETURNING USER — plays after first results are uploaded ─────────────
