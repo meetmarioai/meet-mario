@@ -178,6 +178,131 @@ function stripMarkdown(text) {
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'); // [link text](url) → link text
 }
 
+// ── MEAL PATTERN ENGINE ────────────────────────────────────────────────────────
+function computeMealPatterns(responses, lifestyleLogs, genomicSnps, allReactors = []) {
+  if (!responses || responses.length < 7) return { patterns: [], discrepancies: [] };
+  const snpRisk = rsid => (genomicSnps||[]).some(s => s.rsid === rsid && s.status !== 'normal');
+  const avgField = (arr, key) => arr.length ? arr.reduce((s,r)=>s+(r[key]||0),0)/arr.length : null;
+  const bloatNum = b => ({none:0,mild:1,moderate:2,severe:3}[(b||'').toLowerCase()] ?? 0);
+  const moodNum  = m => ({stable:3,irritable:1,low:0,anxious:1}[(m||'').toLowerCase()] ?? 1);
+  const skinNum  = s => ({normal:0,flushed:1,itchy:2,rash:3}[(s||'').toLowerCase()] ?? 0);
+  const patterns = []; const discrepancies = [];
+
+  // 1. Fasting & energy_30min
+  const fb = { lt12:[], b12_14:[], b14_16:[], gt16:[] };
+  responses.forEach(r => {
+    const h = r.lifestyle?.fastingHoursBefore ?? 0;
+    const k = h < 12 ? 'lt12' : h < 14 ? 'b12_14' : h < 16 ? 'b14_16' : 'gt16';
+    if (r.energy_30min != null) fb[k].push(r);
+  });
+  const fa = Object.entries(fb).map(([k,rs])=>({ k, avg:avgField(rs,'energy_30min'), n:rs.length })).filter(x=>x.n>0);
+  if (fa.length >= 2) {
+    const mx = Math.max(...fa.map(x=>x.avg??0)), mn = Math.min(...fa.map(x=>x.avg??10));
+    if (mx - mn > 1.5) {
+      const best = fa.find(x=>x.avg===mx);
+      const lbl = { lt12:'under 12 hours', b12_14:'12–14 hours', b14_16:'14–16 hours', gt16:'16+ hours' };
+      patterns.push({ type:'fasting', impact:'positive', delta:Math.round((mx-mn)*10)/10,
+        summary:`Energy is ${Math.round((mx-mn)*10)/10} points higher after ${lbl[best.k]} fasting.`,
+        genomicContext: snpRisk('rs2241880') ? 'Your ATG16L1 variant means deeper autophagy before eating directly improves gut barrier function at mealtime.' : null });
+    }
+  }
+
+  // 2. Movement & bloating
+  const mb = { none:[], gt120:[], b60_120:[], lt60:[] };
+  responses.forEach(r => {
+    const m = r.lifestyle?.lastMovementMinsBefore;
+    const k = m==null ? 'none' : m>120 ? 'gt120' : m>60 ? 'b60_120' : 'lt60';
+    mb[k].push(r);
+  });
+  const ma = Object.entries(mb).map(([k,rs])=>({ k, avg:rs.length?rs.reduce((s,r)=>s+bloatNum(r.bloating),0)/rs.length:null, n:rs.length })).filter(x=>x.n>0);
+  if (ma.length >= 2) {
+    const mx = Math.max(...ma.map(x=>x.avg??0)), mn = Math.min(...ma.map(x=>x.avg??3));
+    if (mx - mn > 0.5) patterns.push({ type:'movement', impact:'positive', delta:Math.round((mx-mn)*10)/10,
+      summary:`Bloating is ${Math.round((mx-mn)*10)/10} severity points lower when you move within 60 minutes before eating.`,
+      genomicContext: snpRisk('rs2241880') ? 'Your ATG16L1 variant means pre-meal movement directly supports gut motility and barrier integrity.' : null });
+  }
+
+  // 3. Sleep quality & mood
+  const sb = { poor:[], fair:[], good:[], excellent:[] };
+  responses.forEach(r => {
+    const q = r.lifestyle?.sleepQualityLastNight; if (q==null) return;
+    sb[q<5?'poor':q<7?'fair':q<9?'good':'excellent'].push(r);
+  });
+  const sa = Object.entries(sb).map(([k,rs])=>({ k, avg:rs.length?rs.reduce((s,r)=>s+moodNum(r.mood),0)/rs.length:null, n:rs.length })).filter(x=>x.n>0);
+  if (sa.length >= 2) {
+    const mx = Math.max(...sa.map(x=>x.avg??0)), mn = Math.min(...sa.map(x=>x.avg??3));
+    if (mx - mn > 1) patterns.push({ type:'sleep', impact:'positive', delta:Math.round((mx-mn)*10)/10,
+      summary:'Your mood after meals is noticeably more stable after nights with better sleep quality.',
+      genomicContext: (snpRisk('rs1801260')||snpRisk('rs2304672')) ? 'Your CLOCK variant makes circadian sleep timing the single most powerful mood stabiliser in your protocol.' : null });
+  }
+
+  // 4. Cold exposure & energy_2hr
+  const cy = responses.filter(r=>r.lifestyle?.coldExposureToday && r.energy_2hr!=null);
+  const cn = responses.filter(r=>!r.lifestyle?.coldExposureToday && r.energy_2hr!=null);
+  if (cy.length >= 2 && cn.length >= 2) {
+    const dy = avgField(cy,'energy_2hr'), dn = avgField(cn,'energy_2hr');
+    if (Math.abs(dy-dn) > 1) patterns.push({ type:'cold', impact:dy>dn?'positive':'negative', delta:Math.round(Math.abs(dy-dn)*10)/10,
+      summary:`Your 2-hour energy after meals is ${Math.round(Math.abs(dy-dn)*10)/10} points ${dy>dn?'higher':'lower'} on cold exposure days.`,
+      genomicContext: snpRisk('rs4680') ? 'For your COMT slow-metaboliser variant, cold exposure primes norepinephrine clearance that sustains post-meal energy stability.' : null });
+  }
+
+  // 5. Breathwork & bloating
+  const by = responses.filter(r=>r.lifestyle?.breathworkBeforeMeal);
+  const bn = responses.filter(r=>!r.lifestyle?.breathworkBeforeMeal);
+  if (by.length >= 2 && bn.length >= 2) {
+    const dy = by.reduce((s,r)=>s+bloatNum(r.bloating),0)/by.length;
+    const dn = bn.reduce((s,r)=>s+bloatNum(r.bloating),0)/bn.length;
+    if (Math.abs(dy-dn) > 0.5) patterns.push({ type:'breathwork', impact:dy<dn?'positive':'negative', delta:Math.round(Math.abs(dy-dn)*10)/10,
+      summary:`Bloating is ${Math.round(Math.abs(dy-dn)*10)/10} severity points ${dy<dn?'lower':'higher'} when you do breathwork before eating.`,
+      genomicContext: null });
+  }
+
+  // 6. Polyphenol & skin
+  const pb = { low:[], mid:[], high:[] };
+  responses.forEach(r => {
+    const p = r.lifestyle?.polyphenolServingsToday ?? 0;
+    pb[p<=2?'low':p<=4?'mid':'high'].push(r);
+  });
+  const pa = Object.entries(pb).map(([k,rs])=>({ k, avg:rs.length?rs.reduce((s,r)=>s+skinNum(r.skin),0)/rs.length:null, n:rs.length })).filter(x=>x.n>0);
+  if (pa.length >= 2) {
+    const mx = Math.max(...pa.map(x=>x.avg??0)), mn = Math.min(...pa.map(x=>x.avg??3));
+    if (mx - mn > 0.5) patterns.push({ type:'polyphenol', impact:'positive', delta:Math.round((mx-mn)*10)/10,
+      summary:'Skin reactivity is lower on days with more polyphenol-rich foods.',
+      genomicContext: snpRisk('rs1695') ? 'Your GSTP1 variant means polyphenols directly support Phase II glutathione conjugation — keeping reactive compounds from reaching the skin.' : null });
+  }
+
+  // 7. Hidden exposure
+  responses.forEach(r => {
+    const foods = (r.lifestyle?.foods||[]).map(f=>(f||'').toLowerCase());
+    const noKnownReactive = !foods.some(f=>allReactors.some(rf=>(rf||'').toLowerCase().includes(f)||f.includes((rf||'').toLowerCase())));
+    if (bloatNum(r.bloating)>=2 && (r.energy_30min??10)<=4 && r.mood!=='stable' && noKnownReactive)
+      patterns.push({ type:'hidden_exposure', impact:'alert', delta:0, mealId:r.id,
+        summary:`Response on ${(r.timestamp||'').slice(0,10)||'this meal'} is consistent with hidden reactive food exposure. The logged foods are all on your green list — check ingredient labels for hidden reactive ingredients.`,
+        genomicContext: null });
+  });
+
+  // 8–11. Wearable discrepancies
+  responses.forEach(r => {
+    if (!r.wearable) return;
+    const w = r.wearable;
+    if (w.hrv_pre_meal && w.hrv_post_meal && r.bloating === 'none') {
+      const drop = (w.hrv_pre_meal - w.hrv_post_meal) / w.hrv_pre_meal;
+      if (drop > 0.15) discrepancies.push({ type:'discrepancy', subtype:'hrv',
+        subjective:'No bloating reported', objective:`HRV dropped ${Math.round(drop*100)}% post-meal`,
+        message:'Your HRV suggests a stress response your body registered even though you did not feel bloating. This can indicate subclinical immune activation that accumulates silently.', genomicContext:null });
+    }
+    if (w.deep_sleep_minutes!=null && (r.lifestyle?.sleepQualityLastNight??0)>=8 && w.deep_sleep_minutes<30) {
+      discrepancies.push({ type:'discrepancy', subtype:'sleep',
+        subjective:`Sleep quality logged ${r.lifestyle.sleepQualityLastNight}/10`, objective:`Deep sleep only ${w.deep_sleep_minutes} minutes`,
+        message:'Your perception of sleep quality does not match your deep sleep duration. Your body may have adapted to fragmented sleep.',
+        genomicContext:(snpRisk('rs1801260')||snpRisk('rs2304672'))?'Your CLOCK variant makes this gap worth addressing.':null });
+    }
+  });
+
+  patterns.sort((a,b)=>(b.delta||0)-(a.delta||0));
+  return { patterns, discrepancies };
+}
+
 // Dante Labs stub
 const danteStub = { projectId: 'prjWem9WBYg200IIAG', ready: false };
 // VitaminLab stub
@@ -1335,6 +1460,20 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const [breathPhase, setBreathPhase] = useState('idle'); // idle|inhale|hold|exhale
   const [breathRound, setBreathRound] = useState(0);
 
+  // Meal Response Tracker
+  const [mealResponses, setMealResponses] = useState([]);
+  const [mrFormOpen, setMrFormOpen] = useState(false);
+  const [mrFormState, setMrFormState] = useState({ energy_30min:5, energy_2hr:null, energy_4hr:null, bloating:'', brainClarity:'', skin:'', mood:'', digestion:[], notes:'' });
+  const [mrFormMeta, setMrFormMeta] = useState({ mealId:'', mealType:'meal', foods:[], timestamp:'' });
+  const [mrHistoryOpen, setMrHistoryOpen] = useState(false);
+  const [mrExpandedId, setMrExpandedId] = useState(null);
+
+  // Wearable
+  const [wearableEntries, setWearableEntries] = useState([]);
+  const [wearableSource, setWearableSource] = useState('');
+  const [wearableManualForm, setWearableManualForm] = useState({ resting_hr:'', hrv:'', total_sleep:'', deep_sleep:'', readiness:'' });
+  const [wearableSaved, setWearableSaved] = useState(false);
+
   // GutCheck
   const [gutLogs, setGutLogs] = useState([]);
   const [gutType, setGutType] = useState(null);
@@ -1430,6 +1569,91 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
       }
       return updated;
     });
+  };
+
+  const saveMealResponse = async (formData, meta) => {
+    const today = new Date().toISOString().split('T')[0];
+    const id = `mr_${today}_${(meta.mealType||'meal').replace(/\s+/g,'_')}`;
+    // Layer A — lifestyle context (silent, auto-attached)
+    const todayLogs = lifestyleLogs.filter(l => l.date === today);
+    const prevMeal = [...mealResponses].sort((a,b)=>b.timestamp?.localeCompare(a.timestamp||'')||0)[0];
+    const fastingHours = prevMeal?.timestamp ? Math.round((Date.now()-new Date(prevMeal.timestamp).getTime())/3600000*10)/10 : null;
+    const lastCircadian = [...lifestyleLogs].filter(l=>l.type==='circadian').sort((a,b)=>(b.date||'').localeCompare(a.date||'')||0)[0];
+    const lastBreathwork = todayLogs.filter(l=>l.type==='breathwork').sort((a,b)=>(b.time||'').localeCompare(a.time||'')||0)[0];
+    const breathBeforeMeal = lastBreathwork?.time ? (() => {
+      const now = new Date(); const bwTime = new Date(`${today}T${lastBreathwork.time}:00`);
+      return (now.getTime()-bwTime.getTime())/60000 < 60;
+    })() : false;
+    const rotD = (patient.dayInProtocol||1) > 0 ? ((( patient.dayInProtocol||1) % 4) || 4) : 1;
+    const lifestyle = {
+      fastingHoursBefore: fastingHours,
+      lastMovementMinsBefore: null,
+      sleepQualityLastNight: lastCircadian?.sleepQuality || null,
+      coldExposureToday: todayLogs.some(l=>l.type==='cold'),
+      breathworkBeforeMeal: breathBeforeMeal,
+      polyphenolServingsToday: todayLogs.find(l=>l.type==='polyphenol')?.servings || 0,
+      saunaToday: todayLogs.some(l=>l.type==='sauna'),
+      rotationDay: rotD,
+      phase: patient.phase || 1,
+      foods: meta.foods || [],
+    };
+    // Layer B — wearable context
+    const todayWearable = wearableEntries.find(e=>e.date===today);
+    const wearable = todayWearable ? {
+      hrv_pre_meal: todayWearable.hrv || null, hrv_post_meal: null,
+      resting_hr_today: todayWearable.resting_hr || null,
+      deep_sleep_minutes: todayWearable.deep_sleep || null,
+      total_sleep_minutes: todayWearable.total_sleep || null,
+      readiness_score: todayWearable.readiness || null,
+    } : null;
+    const response = {
+      id, timestamp: meta.timestamp || new Date().toISOString().slice(0,16),
+      mealType: meta.mealType || 'meal',
+      energy_30min: formData.energy_30min ?? null,
+      energy_2hr: formData.energy_2hr ?? null,
+      energy_4hr: formData.energy_4hr ?? null,
+      bloating: formData.bloating || '',
+      brainClarity: formData.brainClarity || '',
+      skin: formData.skin || '',
+      mood: formData.mood || '',
+      digestion: formData.digestion || [],
+      notes: formData.notes || '',
+      lifestyle, wearable,
+      createdAt: new Date().toISOString(),
+    };
+    console.log('[saveMealResponse] lifestyle context:', lifestyle, '| wearable:', wearable ? 'attached' : 'none');
+    const updated = [...mealResponses.filter(r=>r.id!==id), response];
+    setMealResponses(updated);
+    setMrFormOpen(false);
+    setMrFormState({ energy_30min:5, energy_2hr:null, energy_4hr:null, bloating:'', brainClarity:'', skin:'', mood:'', digestion:[], notes:'' });
+    if (authUser?.id) {
+      const pd = { ...patient, mealResponses: updated };
+      setPatient(pd);
+      await supabase.from('profiles').upsert({ id:authUser.id, patient_data:JSON.stringify(pd), updated_at:new Date().toISOString() }, { onConflict:'id' });
+      try { sessionStorage.setItem('mm_profile_'+authUser.id, JSON.stringify(pd)); } catch {}
+    }
+  };
+
+  const saveWearableEntry = async () => {
+    const today = new Date().toISOString().split('T')[0];
+    const entry = {
+      date: today, source: 'manual',
+      resting_hr: wearableManualForm.resting_hr ? Number(wearableManualForm.resting_hr) : null,
+      hrv: wearableManualForm.hrv ? Number(wearableManualForm.hrv) : null,
+      total_sleep: wearableManualForm.total_sleep ? Number(wearableManualForm.total_sleep) : null,
+      deep_sleep: wearableManualForm.deep_sleep ? Number(wearableManualForm.deep_sleep) : null,
+      readiness: wearableManualForm.readiness ? Number(wearableManualForm.readiness) : null,
+    };
+    const updated = [...wearableEntries.filter(e=>e.date!==today), entry];
+    setWearableEntries(updated);
+    setWearableSaved(true);
+    setTimeout(()=>setWearableSaved(false), 2500);
+    if (authUser?.id) {
+      const pd = { ...patient, wearableEntries: updated, wearableSource };
+      setPatient(pd);
+      await supabase.from('profiles').upsert({ id:authUser.id, patient_data:JSON.stringify(pd), updated_at:new Date().toISOString() }, { onConflict:'id' });
+      try { sessionStorage.setItem('mm_profile_'+authUser.id, JSON.stringify(pd)); } catch {}
+    }
   };
 
   const dashParseFile = async (file, isAdditional = false) => {
@@ -1973,6 +2197,14 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
     return () => clearTimeout(t);
   }, [breathTimerActive, breathPhase, breathRound]);
 
+  useEffect(() => {
+    if (patient.mealResponses?.length) setMealResponses(patient.mealResponses);
+  }, [patient.mealResponses]);
+  useEffect(() => {
+    if (patient.wearableEntries?.length) setWearableEntries(patient.wearableEntries);
+    if (patient.wearableSource) setWearableSource(patient.wearableSource);
+  }, [patient.wearableEntries, patient.wearableSource]);
+
   // Geo detection on mount
   useEffect(() => {
     fetch('https://ipapi.co/json/').then(r=>r.json()).then(d=>{
@@ -2206,7 +2438,9 @@ Keep notes sensory and practical — not clinical. Examples:
         let cs=0; const dc=new Date(); while(lifestyleLogs.some(l=>l.type==='cold'&&l.date===dc.toISOString().split('T')[0])){cs++;dc.setDate(dc.getDate()-1);}
         return { coldStreak:cs, saunaThisWeek:days('sauna'), avgFastHours:avg(wl.filter(l=>l.type==='fasting'&&l.totalHours),'totalHours'), avgSleepQuality:avg(wl.filter(l=>l.type==='circadian'&&l.sleepQuality),'sleepQuality'), movementDaysThisWeek:days('movement'), breathworkDaysThisWeek:days('breathwork'), avgPolyphenolServings:avg(wl.filter(l=>l.type==='polyphenol'&&l.servings),'servings') };
       })() : null;
-      const systemPrompt = buildMarioSystemPrompt({ ...patient, lifestyleSummary });
+      const allReactors = [...(patient.severe||[]),...(patient.moderate||[]),...(patient.mild||[])];
+      const { patterns: mealPatterns, discrepancies: mealDiscrepancies } = computeMealPatterns(mealResponses, lifestyleLogs, patient.genomicSnps||[], allReactors);
+      const systemPrompt = buildMarioSystemPrompt({ ...patient, lifestyleSummary, mealPatterns, mealDiscrepancies });
       const totalChars = systemPrompt.length + apiMsgs.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0), 0);
       console.log('[sendChat] messages:', apiMsgs.length, '| system chars:', systemPrompt.length, '| total chars:', totalChars, '| ~tokens:', Math.round(totalChars / 4));
       const { text: r, showContactButton } = await callClaudeRich(apiMsgs, systemPrompt, { signal: controller.signal });
@@ -2844,6 +3078,68 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             );
           })
         ) : <EmptyState title="Meal plans not loaded" sub="Meal plans are generated from your ALCAT rotation data. Upload your results to unlock this tab."/>}
+
+        <div style={{ marginTop:8,marginBottom:4 }}>
+          <button onClick={()=>{ const todayStr=new Date().toISOString().split('T')[0]; setMrFormMeta({ mealId:`meals_${todayStr}_day${rotDay}`, mealType:`Day ${rotDay} rotation`, foods:Object.values(MEALS_DATA[rotDay]||{}).flatMap(m=>[m.base,...(m.sides||[])]).filter(Boolean), timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ width:'100%',background:T.w1,border:`1px solid ${T.rg}40`,borderRadius:12,padding:'14px 18px',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:14 }}>
+            <div style={{ width:36,height:36,borderRadius:10,background:T.rgBg,border:`1px solid ${T.rg}30`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </div>
+            <div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:2 }}>POST-MEAL RESPONSE</div>
+              <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w6 }}>Log how you felt after this meal</div>
+            </div>
+          </button>
+        </div>
+
+        {mealResponses.length > 0 && (
+          <div style={{ marginTop:20 }}>
+            <button onClick={()=>setMrHistoryOpen(o=>!o)} style={{ width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',background:'none',border:'none',cursor:'pointer',padding:'4px 0',marginBottom:mrHistoryOpen?14:0 }}>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase' }}>MEAL RESPONSE HISTORY ({mealResponses.length})</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.w4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform:mrHistoryOpen?'rotate(180deg)':'none',transition:'transform .2s' }}><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            {mrHistoryOpen && (() => {
+              const DOT_SCORE = r => [
+                r.energy_30min >= 7 ? T.ok : r.energy_30min >= 4 ? T.warn : T.err,
+                ({none:T.ok,mild:T.warn,moderate:T.err,severe:T.err})[r.bloating] || T.w3,
+                ({clear:T.ok,foggy:T.warn,headache:T.err})[r.brainClarity] || T.w3,
+                ({normal:T.ok,flushed:T.warn,itchy:T.err,rash:T.err})[r.skin] || T.w3,
+                ({stable:T.ok,irritable:T.warn,low:T.err,anxious:T.warn})[r.mood] || T.w3,
+                (r.digestion||[]).every(d=>d==='normal') ? T.ok : (r.digestion||[]).length > 0 ? T.warn : T.w3,
+              ];
+              return [...mealResponses].sort((a,b)=>b.timestamp?.localeCompare(a.timestamp||'')||0).slice(0,7).map(r => {
+                const dots = DOT_SCORE(r);
+                const isHidden = (computeMealPatterns([r],lifestyleLogs,P.genomicSnps||[],...([...(P.severe||[]),...(P.moderate||[]),...(P.mild||[])]))).patterns?.some?.(p=>p.type==='hidden_exposure') || false;
+                const expanded = mrExpandedId === r.id;
+                return (
+                  <div key={r.id} style={{ background:T.w,border:`1px solid ${isHidden?T.rg:T.w3}`,borderRadius:12,padding:'12px 14px',marginBottom:8 }}>
+                    <button onClick={()=>setMrExpandedId(expanded?null:r.id)} style={{ width:'100%',background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',gap:12,textAlign:'left' }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.1em',marginBottom:4 }}>{(r.timestamp||'').replace('T',' ').slice(0,16)} · {r.mealType}</div>
+                        <div style={{ display:'flex',gap:5 }}>
+                          {dots.map((c,i)=><div key={i} style={{ width:10,height:10,borderRadius:'50%',background:c }}/>)}
+                        </div>
+                      </div>
+                      {isHidden && <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.rg2,border:`1px solid ${T.rg}40`,borderRadius:4,padding:'2px 6px' }}>HIDDEN EXP.</div>}
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.w4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform:expanded?'rotate(180deg)':'none',transition:'transform .2s',flexShrink:0 }}><polyline points="6 9 12 15 18 9"/></svg>
+                    </button>
+                    {expanded && (
+                      <div style={{ marginTop:12,paddingTop:12,borderTop:`1px solid ${T.w2}` }}>
+                        <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:8 }}>
+                          {[['Energy 30m', r.energy_30min!=null?`${r.energy_30min}/10`:'—'],['Energy 2hr',r.energy_2hr!=null?`${r.energy_2hr}/10`:'—'],['Bloating',r.bloating||'—'],['Brain',r.brainClarity||'—'],['Skin',r.skin||'—'],['Mood',r.mood||'—']].map(([l,v])=>(
+                            <div key={l}><span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.1em',textTransform:'uppercase' }}>{l} </span><span style={{ fontFamily:fonts.sans,fontSize:12,color:T.w6 }}>{v}</span></div>
+                          ))}
+                        </div>
+                        {(r.digestion||[]).length > 0 && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w5,marginBottom:4 }}>Digestion: {r.digestion.join(', ')}</div>}
+                        {r.notes && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w5,fontStyle:'italic' }}>{r.notes}</div>}
+                        {r.wearable?.resting_hr_today && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.rg2,marginTop:6 }}>HR {r.wearable.resting_hr_today}bpm{r.wearable.hrv_pre_meal?` · HRV ${r.wearable.hrv_pre_meal}ms`:''}{r.wearable.deep_sleep_minutes?` · Deep sleep ${r.wearable.deep_sleep_minutes}min`:''}</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
       </div>
     );
 
@@ -3898,6 +4194,71 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             </button>
           </div>
 
+          {(() => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const todayResponse = mealResponses.find(r=>(r.timestamp||'').slice(0,10)===todayStr);
+            const hasAlcatCheck = (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0;
+            if (!todayResponse && hasAlcatCheck) return (
+              <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'16px 18px',marginBottom:14 }}>
+                <Eyebrow>POST-MEAL RESPONSE</Eyebrow>
+                <div style={{ fontFamily:fonts.sans,fontSize:14,color:T.w7,fontWeight:500,marginBottom:4 }}>How was your last meal?</div>
+                <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5,lineHeight:1.6,marginBottom:14 }}>Log how your body responded — it takes about 15 seconds and builds your personalised pattern data.</div>
+                <button onClick={()=>{ setMrFormMeta({ mealId:`today_${todayStr}`, mealType:'meal', foods:[], timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ background:T.rg,border:'none',borderRadius:9,padding:'10px 22px',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff' }}>Log Response</button>
+              </div>
+            );
+            return null;
+          })()}
+
+          {(() => {
+            const allReactors = [...(P.severe||[]),...(P.moderate||[]),...(P.mild||[])];
+            const { patterns, discrepancies } = computeMealPatterns(mealResponses, lifestyleLogs, P.genomicSnps||[], allReactors);
+            const top3 = patterns.filter(p=>p.type!=='hidden_exposure').slice(0,3);
+            const hiddenFlags = patterns.filter(p=>p.type==='hidden_exposure');
+            const typeIcon = { fasting:'⏱', movement:'⚡', sleep:'◑', cold:'❄', breathwork:'◎', polyphenol:'◆' };
+            if (mealResponses.length < 7) return (
+              <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'16px 18px',marginBottom:14 }}>
+                <Eyebrow>WEEKLY PATTERNS</Eyebrow>
+                <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w5,lineHeight:1.7 }}>Log {7-mealResponses.length} more meal response{7-mealResponses.length!==1?'s':''} to unlock your personalised pattern insights. You have {mealResponses.length} so far.</div>
+              </div>
+            );
+            return (
+              <div style={{ marginBottom:14 }}>
+                <Panel>
+                  <Eyebrow>WEEKLY PATTERNS</Eyebrow>
+                  <div style={{ fontFamily:fonts.serif,fontSize:18,color:T.w7,marginBottom:16 }}>What your body is telling us</div>
+                  {top3.length === 0 && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4 }}>Keep logging — patterns emerge with more data.</div>}
+                  {top3.map((p,i) => (
+                    <div key={i} style={{ marginBottom:14,paddingBottom:14,borderBottom:i<top3.length-1?`1px solid ${T.w2}`:'none' }}>
+                      <div style={{ display:'flex',alignItems:'flex-start',gap:12 }}>
+                        <div style={{ fontSize:18,flexShrink:0,marginTop:2 }}>{typeIcon[p.type]||'·'}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w7,lineHeight:1.6,marginBottom:6 }}>{p.summary}</div>
+                          <div style={{ display:'flex',alignItems:'center',gap:10,marginBottom:p.genomicContext?6:0 }}>
+                            <div style={{ height:4,borderRadius:4,background:p.impact==='positive'?T.ok:T.warn,width:`${Math.min(Math.max(p.delta/5*100,8),100)}%`,maxWidth:120 }}/>
+                            <span style={{ fontFamily:fonts.mono,fontSize:10,color:p.impact==='positive'?T.ok:T.warn }}>{p.impact==='positive'?'+':'-'}{p.delta}</span>
+                          </div>
+                          {p.genomicContext && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.rg2,lineHeight:1.6 }}>{p.genomicContext}</div>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {discrepancies.length > 0 && (
+                    <div style={{ background:T.rgBg,border:`1px solid ${T.rg}40`,borderRadius:10,padding:'12px 14px',marginTop:8 }}>
+                      <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6 }}>WEARABLE SIGNALS</div>
+                      <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w6,lineHeight:1.7 }}>Your wearable data and self-reports diverged {discrepancies.length} time{discrepancies.length!==1?'s':''} this week. This is not a problem — it is data. Your body sometimes registers signals before you consciously feel them. Mario uses both layers to see the full picture.</div>
+                    </div>
+                  )}
+                  {hiddenFlags.length > 0 && (
+                    <div style={{ background:T.rgBg,border:`1px solid ${T.rg}40`,borderRadius:10,padding:'12px 14px',marginTop:8 }}>
+                      <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.rg2,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6 }}>HIDDEN EXPOSURE SIGNAL</div>
+                      <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w6,lineHeight:1.7 }}>{hiddenFlags[0].summary}</div>
+                    </div>
+                  )}
+                </Panel>
+              </div>
+            );
+          })()}
+
           <button onClick={()=>setTab('mario')} style={{ width:'100%',background:`linear-gradient(140deg,${T.rg3} 0%,${T.rg} 40%,${T.rg2} 100%)`,border:'none',borderRadius:14,padding:'18px 20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
             <div style={{ textAlign:'left' }}>
               <div style={{ fontFamily:fonts.sans,fontSize:14,color:'rgba(255,255,255,0.92)',fontWeight:500,marginBottom:2 }}>Ask Mario anything</div>
@@ -4288,6 +4649,51 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
               </button>
             ))}
           </div>
+          <div style={{ marginBottom:20 }}>
+            <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:10 }}>WEARABLE DATA</div>
+            <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,overflow:'hidden' }}>
+              <div style={{ padding:'16px 18px',borderBottom:`1px solid ${T.w2}` }}>
+                <Eyebrow>WEARABLE DATA</Eyebrow>
+                <div style={{ fontFamily:fonts.sans,fontSize:14,color:T.w7,fontWeight:500,marginBottom:12 }}>Connect your device</div>
+                <div style={{ display:'flex',flexWrap:'wrap',gap:6,marginBottom:16 }}>
+                  {['Apple Health','Oura','Whoop','Garmin','Fitbit','Manual entry','None'].map(src => (
+                    <button key={src} onClick={async()=>{
+                      setWearableSource(src);
+                      if (authUser?.id) {
+                        const pd = { ...patient, wearableSource: src };
+                        setPatient(pd);
+                        await supabase.from('profiles').upsert({ id:authUser.id, patient_data:JSON.stringify(pd), updated_at:new Date().toISOString() }, { onConflict:'id' });
+                        try { sessionStorage.setItem('mm_profile_'+authUser.id, JSON.stringify(pd)); } catch {}
+                      }
+                    }} style={{ padding:'7px 14px',borderRadius:50,fontSize:12,fontFamily:fonts.sans,fontWeight:wearableSource===src?500:400,border:`1px solid ${wearableSource===src?T.rg:T.w3}`,background:wearableSource===src?T.rgBg:T.w,color:wearableSource===src?T.rg2:T.w5,cursor:'pointer' }}>{src}</button>
+                  ))}
+                </div>
+                {wearableSource && wearableSource !== 'None' && wearableSource !== 'Manual entry' && (
+                  <div style={{ background:T.w,border:`1px solid ${T.w3}`,borderRadius:10,padding:'12px 14px' }}>
+                    <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w6,lineHeight:1.7,marginBottom:4 }}>Device integration coming soon. Use manual entry for now to start building your data.</div>
+                    <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w4,lineHeight:1.6 }}>When connected, your device data will automatically enrich every meal response and lifestyle log.</div>
+                  </div>
+                )}
+                {wearableSource === 'Manual entry' && (
+                  <div>
+                    <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12 }}>
+                      {[['resting_hr','Resting HR (bpm)'],['hrv','HRV (ms)'],['total_sleep','Sleep duration (hrs)'],['deep_sleep','Deep sleep (min)'],['readiness','Readiness score (0-100)']].map(([k,lbl])=>(
+                        <div key={k}>
+                          <FieldLabel>{lbl}</FieldLabel>
+                          <input type="number" value={wearableManualForm[k]} onChange={e=>setWearableManualForm(f=>({...f,[k]:e.target.value}))} placeholder="—" style={{ width:'100%',background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'8px 12px',fontFamily:fonts.sans,fontSize:13,color:T.w7,outline:'none' }}/>
+                        </div>
+                      ))}
+                    </div>
+                    <BtnPrimary small onClick={saveWearableEntry}>{wearableSaved ? 'Saved' : 'Save today\'s data'}</BtnPrimary>
+                    {wearableEntries.find(e=>e.date===new Date().toISOString().split('T')[0]) && (
+                      <div style={{ marginTop:10,fontFamily:fonts.sans,fontSize:11,color:T.ok }}>Today's wearable data on file — will be attached to meal responses.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div style={{ textAlign:'center',padding:'4px 0 8px' }}>
             <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.1em',marginBottom:6 }}>MediBalans AB · Karlavägen 89, Stockholm</div>
             <div style={{ display:'flex',alignItems:'center',justifyContent:'center',gap:6,marginBottom:8 }}>
@@ -4301,6 +4707,79 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
     }
 
     return null;
+  };
+
+  // ── MEAL RESPONSE FORM OVERLAY ────────────────────────────────────────────────
+  const MealResponseForm = () => {
+    if (!mrFormOpen) return null;
+    const f = mrFormState;
+    const setF = (k, v) => setMrFormState(s => ({ ...s, [k]: v }));
+    const toggleDigestion = (val) => setF('digestion', f.digestion.includes(val) ? f.digestion.filter(x=>x!==val) : [...f.digestion, val]);
+    const SliderCompact = ({ label, val, onChange }) => (
+      <div style={{ marginBottom:8 }}>
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:4 }}>
+          <span style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase' }}>{label}</span>
+          <span style={{ fontFamily:fonts.mono,fontSize:11,color:T.rg2 }}>{val != null ? val : '—'}/10</span>
+        </div>
+        <input type="range" min={1} max={10} value={val??5} onChange={e=>onChange(Number(e.target.value))} style={{ width:'100%',accentColor:T.rg,height:3,cursor:'pointer' }}/>
+      </div>
+    );
+    const ChipRowForm = ({ label, opts, val, multi, onChange }) => (
+      <div style={{ marginBottom:14 }}>
+        <FieldLabel>{label}</FieldLabel>
+        <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+          {opts.map(o => {
+            const on = multi ? (val||[]).includes(o.toLowerCase()) : val === o.toLowerCase();
+            return <button key={o} onClick={()=>onChange(o.toLowerCase())} style={{ padding:'6px 14px',borderRadius:50,fontSize:12,fontFamily:fonts.sans,fontWeight:on?500:400,border:`1px solid ${on?T.rg:T.w3}`,background:on?T.rgBg:T.w,color:on?T.rg2:T.w5,cursor:'pointer' }}>{o}</button>;
+          })}
+        </div>
+      </div>
+    );
+    return (
+      <div style={{ position:'fixed',inset:0,zIndex:1200,background:'rgba(24,18,14,0.55)',display:'flex',alignItems:'flex-end' }} onClick={()=>setMrFormOpen(false)}>
+        <div style={{ width:'100%',maxWidth:560,margin:'0 auto',background:T.w,borderRadius:'20px 20px 0 0',padding:'28px 24px 44px',maxHeight:'90vh',overflowY:'auto' }} onClick={e=>e.stopPropagation()}>
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20 }}>
+            <div>
+              <Eyebrow>POST-MEAL RESPONSE</Eyebrow>
+              <div style={{ fontFamily:fonts.sans,fontSize:16,color:T.w7,fontWeight:500 }}>How did your body respond?</div>
+              <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,marginTop:3 }}>{mrFormMeta.timestamp?.replace('T',' ')} · {mrFormMeta.mealType}</div>
+            </div>
+            <button onClick={()=>setMrFormOpen(false)} style={{ background:'none',border:'none',cursor:'pointer',padding:4 }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.w4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div style={{ marginBottom:16 }}>
+            <FieldLabel>ENERGY LEVELS</FieldLabel>
+            <SliderCompact label="30 minutes after" val={f.energy_30min} onChange={v=>setF('energy_30min',v)}/>
+            <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.1em',marginBottom:4 }}>Optional — fill in later (form stays open 6 hours)</div>
+            <SliderCompact label="2 hours after" val={f.energy_2hr} onChange={v=>setF('energy_2hr',v)}/>
+            <SliderCompact label="4 hours after" val={f.energy_4hr} onChange={v=>setF('energy_4hr',v)}/>
+          </div>
+
+          <ChipRowForm label="BLOATING" opts={['None','Mild','Moderate','Severe']} val={f.bloating} onChange={v=>setF('bloating',v)}/>
+          <ChipRowForm label="BRAIN CLARITY" opts={['Clear','Foggy','Headache']} val={f.brainClarity} onChange={v=>setF('brainClarity',v)}/>
+          <ChipRowForm label="SKIN" opts={['Normal','Flushed','Itchy','Rash']} val={f.skin} onChange={v=>setF('skin',v)}/>
+          <ChipRowForm label="MOOD" opts={['Stable','Irritable','Low','Anxious']} val={f.mood} onChange={v=>setF('mood',v)}/>
+          <div style={{ marginBottom:14 }}>
+            <FieldLabel>DIGESTION (select all that apply)</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:6 }}>
+              {['Normal','Gas','Cramping','Reflux','Diarrhea','Constipation'].map(o => {
+                const on = (f.digestion||[]).includes(o.toLowerCase());
+                return <button key={o} onClick={()=>toggleDigestion(o.toLowerCase())} style={{ padding:'6px 14px',borderRadius:50,fontSize:12,fontFamily:fonts.sans,fontWeight:on?500:400,border:`1px solid ${on?T.rg:T.w3}`,background:on?T.rgBg:T.w,color:on?T.rg2:T.w5,cursor:'pointer' }}>{o}</button>;
+              })}
+            </div>
+          </div>
+
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>ANYTHING ELSE YOU NOTICED?</FieldLabel>
+            <input type="text" maxLength={200} placeholder="Optional note…" value={f.notes} onChange={e=>setF('notes',e.target.value)} style={{ width:'100%',background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'9px 12px',fontFamily:fonts.sans,fontSize:13,color:T.w7,outline:'none' }}/>
+          </div>
+
+          <BtnPrimary onClick={()=>saveMealResponse(f, mrFormMeta)}>Log Response</BtnPrimary>
+        </div>
+      </div>
+    );
   };
 
   // ── WELCOME AVATAR ────────────────────────────────────────────────────────────
@@ -4760,6 +5239,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
     <div style={{ height:'100dvh',minHeight:'-webkit-fill-available',background:T.w,color:T.w7,fontFamily:fonts.sans,display:'flex',flexDirection:'column',maxWidth:430,margin:'0 auto',overflow:'hidden',position:'relative' }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}}*{box-sizing:border-box}input::placeholder,textarea::placeholder{color:${T.w4};font-style:italic;font-weight:300}::-webkit-scrollbar{width:0;height:0}button:hover{opacity:0.88}a{color:inherit;text-decoration:none}`}</style>
       {popup && <SpikePopup/>}
+      <MealResponseForm/>
       {showDoctorPopup && (
         <div style={{ position:'fixed',inset:0,background:'rgba(28,20,16,0.5)',zIndex:2000,display:'flex',alignItems:'flex-end',justifyContent:'center',backdropFilter:'blur(8px)' }} onClick={()=>setShowDoctorPopup(false)}>
           <div style={{ background:T.w,borderRadius:'20px 20px 0 0',width:'100%',maxWidth:430,boxShadow:'0 -8px 40px rgba(28,20,16,0.22)',overflow:'hidden',paddingBottom:'env(safe-area-inset-bottom,0px)' }} onClick={e=>e.stopPropagation()}>
