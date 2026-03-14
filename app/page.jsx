@@ -2475,18 +2475,12 @@ Keep notes sensory and practical — not clinical. Examples:
       // after 6+ exchanges, slice(-12) can begin with an assistant turn, which Anthropic rejects.
       const sliced = msgs.slice(-12);
       const recentMsgs = sliced[0]?.role === 'assistant' ? sliced.slice(1) : sliced;
-      // Build API message array from scratch — ONLY role+content, never UI fields
-      const apiMsgs = recentMsgs.map((m, i) => {
-        let content = typeof m.content === 'string' ? m.content : getMessageText(m.content);
-        // Truncate assistant history to 500 chars — full text stays in display state, only history sent to API is shortened
-        if (m.role === 'assistant' && content.length > 500) {
-          content = content.slice(0, 500) + ' [...]';
-        }
-        if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
-          content = content + contextNote;
-        }
-        return { role: m.role, content };
-      });
+      const apiMsgs = chatMsgs.slice(-8).map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content :
+          Array.isArray(m.content) ? m.content.filter(b => b.type === 'text').map(b => b.text).join('\n') :
+          String(m.content || '')
+      }));
       const lifestyleSummary = lifestyleLogs.length ? (() => {
         const wk = new Date(); wk.setDate(wk.getDate()-6); wk.setHours(0,0,0,0);
         const wl = lifestyleLogs.filter(l => new Date(l.date) >= wk);
