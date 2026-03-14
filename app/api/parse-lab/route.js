@@ -38,18 +38,31 @@ Also extract:
 - "cma_antioxidants": antioxidant-specific nutrients: [{"name":"glutathione","value":...,"status":"adequate|low|deficient"}]
 - "cma_categories": {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
 
-REPORT TYPE 3 — Blood work / other:
-Extract any out-of-range markers into "moderate", normal into "mild".
+REPORT TYPE 3 — Standard blood work / serum lab panel (e.g. Unilabs, Synlab, hospital labs):
+This is a standard serum/blood lab report — NOT an ALCAT food reactivity panel. It contains serum markers such as testosterone, ferritin, DHEAS, TSH, cortisol, haemoglobin, glucose, etc.
+
+CRITICAL: Do NOT put these into the severe/moderate/mild arrays. Those arrays are reserved for ALCAT food names only. Instead extract ALL markers into "bloodWork" as structured objects.
+
+For each marker extract:
+- "name": marker name in lowercase English (translate Swedish)
+- "value": numeric result (number only, no units)
+- "unit": unit string (e.g. "nmol/L", "µg/dL", "ng/mL")
+- "status": "low" | "normal" | "high" — compare value against reference range
+- "ref_low": lower bound of reference range (number)
+- "ref_high": upper bound of reference range (number)
+
+Leave severe/moderate/mild as empty arrays for this report type.
 
 Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{}}
+{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}
 Lowercase English names. Translate Swedish to English. Include EVERY nutrient found — do not skip any.`;
 
 const TEXT_PROMPT = `This is a medical lab document. Extract reactive foods and classify by severity.
 
 Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"redox_score":null}
+{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"redox_score":null,"bloodWork":[]}
 
+For LAB type: put ALL markers in "bloodWork" as [{"name":"...","value":0,"unit":"...","status":"low|normal|high","ref_low":0,"ref_high":0}]. Leave severe/moderate/mild empty.
 Lowercase English food/nutrient names. Translate Swedish to English.`;
 
 export async function POST(req) {
@@ -104,7 +117,7 @@ export async function POST(req) {
       }
     }
 
-    console.log(`[/api/parse-lab] report_type=${json.report_type} severe=${(json.severe||[]).length} moderate=${(json.moderate||[]).length} mild=${(json.mild||[]).length} cma_def=${(json.cma_deficiencies||[]).length}`);
+    console.log(`[/api/parse-lab] report_type=${json.report_type} severe=${(json.severe||[]).length} moderate=${(json.moderate||[]).length} mild=${(json.mild||[]).length} cma_def=${(json.cma_deficiencies||[]).length} bloodWork=${(json.bloodWork||[]).length}`);
     return Response.json(json);
   } catch (err) {
     console.error('[/api/parse-lab]', err.message);

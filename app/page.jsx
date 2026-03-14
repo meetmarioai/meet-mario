@@ -431,6 +431,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
     symptoms:[], tests:[],
     medications:'', supplements:'', conditions:'', goals:[],
     alcat_severe:[], alcat_moderate:[], alcat_mild:[], alcat_raw:'',
+    bloodWork:[],
     // New onboarding fields
     symptomDuration:'', practitionerCount:'', priorApproaches:[],
     impactSeverity:'', protocolStart:'', protocolStartDate:'', testingStatus:'',
@@ -579,9 +580,17 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       const newModerate = norm(json.moderate);
       const newMild = norm(json.mild);
 
-      // ── Route results based on file type — CMA nutrients must NOT go into alcat arrays ──
-      const isCMAResult = detectedType === 'micronutrient' || detectedType === 'redox' || json.report_type === 'CMA';
-      if (isCMAResult) {
+      // ── Route results based on file type — each type has its own namespace ──
+      const isBloodWork = json.report_type === 'LAB';
+      const isCMAResult = !isBloodWork && (detectedType === 'micronutrient' || detectedType === 'redox' || json.report_type === 'CMA');
+      if (isBloodWork) {
+        // Standard blood work — serum markers go into bloodWork[], never ALCAT arrays
+        const markers = Array.isArray(json.bloodWork) ? json.bloodWork : [];
+        if (markers.length) {
+          u('bloodWork', [...(data.bloodWork || []), ...markers]);
+        }
+        console.log('[Lab parse BLOODWORK] markers:', markers.length);
+      } else if (isCMAResult) {
         // CMA/CNA/REDOX — comprehensive prompt returns cma_deficiencies, cma_adequate, redox_score
         const cmaDef  = norm(json.cma_deficiencies).length ? norm(json.cma_deficiencies) : norm(json.deficient);
         const cmaBord = norm(json.borderline);
@@ -610,9 +619,11 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       }
       setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
 
-      const hasResults = newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0
-        || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0
-        || norm(json.deficient).length > 0 || norm(json.adequate).length > 0;
+      const hasResults = isBloodWork
+        ? (Array.isArray(json.bloodWork) && json.bloodWork.length > 0)
+        : (newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0
+          || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0
+          || norm(json.deficient).length > 0 || norm(json.adequate).length > 0);
       if (!hasResults) {
         setLabParseError('API returned OK but 0 items extracted.');
       }
@@ -621,10 +632,11 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       setLabParsed(true);
       setLabParsing(false);
 
-      // Compute finals (outside IIFE so they're in scope for onPatientUpdate)
-      const finalSevere   = detectedType === 'micronutrient' ? [] : isAdditional ? [...new Set([...(data.alcat_severe||[]),   ...newSevere])]   : newSevere;
-      const finalModerate = detectedType === 'micronutrient' ? [] : isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
-      const finalMild     = detectedType === 'micronutrient' ? [] : isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
+      // Compute finals — blood work and CMA never write to ALCAT arrays
+      const isNonAlcat = isBloodWork || detectedType === 'micronutrient';
+      const finalSevere   = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_severe||[]),   ...newSevere])]   : newSevere;
+      const finalModerate = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
+      const finalMild     = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
 
       console.log('[Lab upload] Finals computed:', { severe: finalSevere.length, moderate: finalModerate.length, mild: finalMild.length, isAdditional, detectedType });
 
@@ -639,42 +651,54 @@ function Onboarding({ onComplete, onPatientUpdate }) {
           const reportType = fn.includes('cna') || fn.includes('cma') ? 'CMA'
             : fn.includes('alc') || fn.includes('alcat') ? 'ALCAT' : 'LAB';
 
-          // 1. alcat_results
-          const { error: alcatErr } = await supabase.from('alcat_results').upsert({
-            patient_id: currentUser.id, severe: finalSevere, moderate: finalModerate, mild: finalMild,
-            test_date: new Date().toISOString().split('T')[0], lab_id: file.name,
-            raw_report_url: reportType, created_at: new Date().toISOString(),
-          }, { onConflict: 'patient_id' });
-          console.log('[Lab upload] alcat_results upsert:', alcatErr ? `ERROR: ${alcatErr.message} (${alcatErr.code})` : 'OK');
+          if (isBloodWork) {
+            // Blood work — save to profiles.patient_data.bloodWork only. Never touch alcat_results.
+            const { data: profRow, error: profReadErr } = await supabase.from('profiles').select('patient_data').eq('id', currentUser.id).single();
+            console.log('[Lab upload] profiles read (bloodWork):', profReadErr ? `ERROR: ${profReadErr.message}` : `OK`);
+            if (profRow?.patient_data) {
+              const pd = typeof profRow.patient_data === 'string' ? JSON.parse(profRow.patient_data) : profRow.patient_data;
+              pd.bloodWork = [...(pd.bloodWork || []), ...(json.bloodWork || [])];
+              const { error: profWriteErr } = await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
+              console.log('[Lab upload] profiles write (bloodWork):', profWriteErr ? `ERROR: ${profWriteErr.message} (${profWriteErr.code})` : 'OK');
+            }
+          } else {
+            // 1. alcat_results (ALCAT only)
+            const { error: alcatErr } = await supabase.from('alcat_results').upsert({
+              patient_id: currentUser.id, severe: finalSevere, moderate: finalModerate, mild: finalMild,
+              test_date: new Date().toISOString().split('T')[0], lab_id: file.name,
+              raw_report_url: reportType, created_at: new Date().toISOString(),
+            }, { onConflict: 'patient_id' });
+            console.log('[Lab upload] alcat_results upsert:', alcatErr ? `ERROR: ${alcatErr.message} (${alcatErr.code})` : 'OK');
 
-          // 2. onboarding_intake
-          const { error: intakeErr } = await supabase.from('onboarding_intake').upsert({
-            user_id: currentUser.id, alcat_severe: finalSevere, alcat_moderate: finalModerate,
-            alcat_mild: finalMild, updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id' });
-          console.log('[Lab upload] onboarding_intake upsert:', intakeErr ? `ERROR: ${intakeErr.message} (${intakeErr.code})` : 'OK');
+            // 2. onboarding_intake (ALCAT only)
+            const { error: intakeErr } = await supabase.from('onboarding_intake').upsert({
+              user_id: currentUser.id, alcat_severe: finalSevere, alcat_moderate: finalModerate,
+              alcat_mild: finalMild, updated_at: new Date().toISOString(),
+            }, { onConflict: 'user_id' });
+            console.log('[Lab upload] onboarding_intake upsert:', intakeErr ? `ERROR: ${intakeErr.message} (${intakeErr.code})` : 'OK');
 
-          // 3. profiles.patient_data — merge and save
-          const { data: profRow, error: profReadErr } = await supabase.from('profiles').select('patient_data').eq('id', currentUser.id).single();
-          console.log('[Lab upload] profiles read:', profReadErr ? `ERROR: ${profReadErr.message}` : `OK, has data: ${!!profRow?.patient_data}`);
-          if (profRow?.patient_data) {
-            const pd = typeof profRow.patient_data === 'string' ? JSON.parse(profRow.patient_data) : profRow.patient_data;
-            pd.alcat_severe = finalSevere; pd.alcat_moderate = finalModerate; pd.alcat_mild = finalMild;
-            pd.severe = finalSevere; pd.moderate = finalModerate; pd.mild = finalMild;
-            const { error: profWriteErr } = await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
-            console.log('[Lab upload] profiles write:', profWriteErr ? `ERROR: ${profWriteErr.message} (${profWriteErr.code})` : 'OK');
+            // 3. profiles.patient_data — merge ALCAT data
+            const { data: profRow, error: profReadErr } = await supabase.from('profiles').select('patient_data').eq('id', currentUser.id).single();
+            console.log('[Lab upload] profiles read:', profReadErr ? `ERROR: ${profReadErr.message}` : `OK, has data: ${!!profRow?.patient_data}`);
+            if (profRow?.patient_data) {
+              const pd = typeof profRow.patient_data === 'string' ? JSON.parse(profRow.patient_data) : profRow.patient_data;
+              pd.alcat_severe = finalSevere; pd.alcat_moderate = finalModerate; pd.alcat_mild = finalMild;
+              pd.severe = finalSevere; pd.moderate = finalModerate; pd.mild = finalMild;
+              const { error: profWriteErr } = await supabase.from('profiles').upsert({ id: currentUser.id, patient_data: JSON.stringify(pd), updated_at: new Date().toISOString() }, { onConflict: 'id' });
+              console.log('[Lab upload] profiles write:', profWriteErr ? `ERROR: ${profWriteErr.message} (${profWriteErr.code})` : 'OK');
+            }
           }
 
           // Also clear sessionStorage so next loadProfile goes fresh from Supabase
           try { sessionStorage.removeItem('mm_profile_' + currentUser.id); } catch {}
 
-          console.log('[Lab upload] ✅ All saves done:', reportType, finalSevere.length, 'severe /', finalModerate.length, 'moderate /', finalMild.length, 'mild');
+          console.log('[Lab upload] ✅ All saves done:', reportType, isBloodWork ? `bloodWork: ${(json.bloodWork||[]).length} markers` : `${finalSevere.length} severe / ${finalModerate.length} moderate / ${finalMild.length} mild`);
         } catch(dbErr) {
           console.error('[Lab upload] ❌ Unexpected DB error:', dbErr.message, dbErr);
         }
 
         // Update live React state immediately
-        if (onPatientUpdate && (finalSevere.length > 0 || finalModerate.length > 0 || finalMild.length > 0)) {
+        if (onPatientUpdate && !isBloodWork && (finalSevere.length > 0 || finalModerate.length > 0 || finalMild.length > 0)) {
           console.log('[Lab upload] Calling onPatientUpdate with', finalSevere.length + finalModerate.length + finalMild.length, 'items');
           onPatientUpdate({ severe: finalSevere, moderate: finalModerate, mild: finalMild,
             alcat_severe: finalSevere, alcat_moderate: finalModerate, alcat_mild: finalMild });
