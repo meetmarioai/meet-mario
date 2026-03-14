@@ -2716,7 +2716,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
     { id:'today',    label:'Today', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> },
     { id:'mario',    label:'Mario', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
     { id:'rotation', label:'Meals', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2"/><path d="M18 15V2"/><path d="M15 2c0 4.8 6 4.8 6 9.6a5.98 5.98 0 0 1-6 5.4"/><path d="M21 22v-7"/><path d="M18 22v-7"/></svg> },
-    { id:'lifestyle', label:'Lifestyle', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c0 6-8 6-8 12a8 8 0 0 0 16 0c0-6-8-6-8-12z"/></svg> },
+    { id:'lifestyle', label:'Signal', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c0 6-8 6-8 12a8 8 0 0 0 16 0c0-6-8-6-8-12z"/></svg> },
     { id:'me',       label:'Me',    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
   ];
   const MEALS_GROUP = new Set(['rotation','meals','generate','grocery']);
@@ -4558,7 +4558,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         <div style={{ padding:'24px 20px 120px', maxWidth:640, margin:'0 auto' }}>
           <style>{`@keyframes breatheExpand{from{transform:scale(1)}to{transform:scale(1.38)}}@keyframes breatheContract{from{transform:scale(1.38)}to{transform:scale(1)}}`}</style>
 
-          <Eyebrow>LIFESTYLE HORMESIS</Eyebrow>
+          <Eyebrow>SIGNAL HORMESIS</Eyebrow>
           <div style={{ fontFamily:fonts.serif, fontSize:34, fontWeight:400, color:T.w7, lineHeight:1.14, marginBottom:10 }}>Restore the Signal</div>
           <div style={{ fontFamily:fonts.sans, fontSize:14, color:T.w4, fontWeight:300, lineHeight:1.7, marginBottom:28 }}>The detox removes the noise. These interventions restore the molecular dialogue your cells are waiting for.</div>
 
