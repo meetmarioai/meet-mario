@@ -76,6 +76,18 @@ const EAT_PATS = [
   { id:"if5_2",   label:"5:2",        desc:"5 normal · 2 low-cal days", fasting:true, detail:"~500 kcal fasting days" },
 ];
 
+// Statistical population-level reactive food predictions (shown to Segment C patients)
+const PREDICTED_REACTIVE_FOODS = [
+  { food: "Cow's dairy (milk, cheese, yoghurt)", pct: 81 },
+  { food: 'Gluten / wheat', pct: 74 },
+  { food: 'Egg white', pct: 68 },
+  { food: "Baker's & brewer's yeast", pct: 65 },
+  { food: 'Cane sugar', pct: 61 },
+  { food: 'Coffee', pct: 58 },
+  { food: 'Corn / maize', pct: 52 },
+  { food: 'Soy protein', pct: 49 },
+];
+
 const PHASES = [
   { id:1, label:"21-Day Detox",            range:"Days 1–21",  color:T.rg,   rules:["Green list only","6 meals every 3h","No sugars/yeast","No dairy"],       note:"Any deviation resets the inflammatory clock." },
   { id:2, label:"Green Phase",             range:"Months 1–3", color:T.ok,   rules:["Strict 4-day rotation","One legume day/week","Candida rules continue"],   note:"Rotation prevents new sensitivities forming." },
@@ -419,6 +431,9 @@ function Onboarding({ onComplete, onPatientUpdate }) {
     symptoms:[], tests:[],
     medications:'', supplements:'', conditions:'', goals:[],
     alcat_severe:[], alcat_moderate:[], alcat_mild:[], alcat_raw:'',
+    // New onboarding fields
+    symptomDuration:'', practitionerCount:'', priorApproaches:[],
+    impactSeverity:'', protocolStart:'', protocolStartDate:'', testingStatus:'',
   });
   const [labFile, setLabFile] = useState(null);
   const [labFileName, setLabFileName] = useState('');
@@ -677,6 +692,12 @@ function Onboarding({ onComplete, onPatientUpdate }) {
   const u = (k, v) => setData(p => ({ ...p, [k]:v }));
   const toggle = (k, v) => setData(p => ({ ...p, [k]: p[k].includes(v) ? p[k].filter(x => x !== v) : [...p[k], v] }));
 
+  // Upload step (index 8) is skipped for patients with no tests
+  const UPLOAD_STEP = 8;
+  const skipUpload = () => data.testingStatus === "No, I haven't been tested yet";
+  const nextStep = cur => { const n = cur + 1; return n === UPLOAD_STEP && skipUpload() ? n + 1 : n; };
+  const prevStep = cur => { const p = cur - 1; return p === UPLOAD_STEP && skipUpload() ? p - 1 : p; };
+
   const STEPS = [
     {
       title:"Your Identity", sub:"The foundation of your personalised protocol.",
@@ -756,6 +777,84 @@ function Onboarding({ onComplete, onPatientUpdate }) {
               </div>
             </div>
           ))}
+        </div>
+      ),
+    },
+    {
+      title:"Your journey so far", sub:"Understanding what you've tried helps us calibrate your protocol.",
+      render:() => (
+        <div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>How long have you been experiencing these symptoms?</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+              {['Less than 6 months','6 months – 2 years','2–5 years','5–10 years','More than 10 years'].map(o=>(
+                <Chip key={o} label={o} on={data.symptomDuration===o} onClick={()=>u('symptomDuration',o)}/>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>How many different practitioners or approaches have you tried?</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+              {['None yet','1–2','3–5','6 or more'].map(o=>(
+                <Chip key={o} label={o} on={data.practitionerCount===o} onClick={()=>u('practitionerCount',o)}/>
+              ))}
+            </div>
+          </div>
+          <div>
+            <FieldLabel>Have you tried any of these before?</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+              {['Elimination diet','Low-FODMAP','IgG food sensitivity test','ALCAT','MRT','Functional medicine practitioner','Naturopath','Gastroenterologist','Immunologist','None of these'].map(o=>(
+                <Chip key={o} label={o} on={data.priorApproaches.includes(o)} onClick={()=>toggle('priorApproaches',o)}/>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"How much has this affected your life?", sub:"This helps us understand the urgency.",
+      render:() => (
+        <div>
+          <FieldLabel>Impact on daily life</FieldLabel>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+            {['Minimal — occasional inconvenience','Moderate — I manage but it limits me','Significant — it affects my work and relationships',"Severe — I've had to stop working or drastically change my life"].map(o=>(
+              <Chip key={o} label={o} on={data.impactSeverity===o} onClick={()=>u('impactSeverity',o)}/>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title:"Have you started an elimination protocol?", sub:"If you've already begun, Mario will meet you where you are.",
+      render:() => (
+        <div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>Protocol status</FieldLabel>
+            <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+              {["I haven't started yet",'Less than 3 months ago','3–6 months ago','6–12 months ago','More than 12 months ago'].map(o=>(
+                <Chip key={o} label={o} on={data.protocolStart===o} onClick={()=>u('protocolStart',o)}/>
+              ))}
+            </div>
+          </div>
+          {data.protocolStart && data.protocolStart !== "I haven't started yet" && (
+            <div>
+              <FieldLabel>Approximate start date (if you remember)</FieldLabel>
+              <RuledInput value={data.protocolStartDate} onChange={e=>u('protocolStartDate',e.target.value)} placeholder="YYYY-MM-DD"/>
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title:"Do you have lab results?", sub:"Upload now or later — Mario works with whatever data you have.",
+      render:() => (
+        <div>
+          <FieldLabel>Testing status</FieldLabel>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
+            {['Yes, recent results (last 6 months)','Yes, older results (more than 6 months ago)',"No, I haven't been tested yet","I've been tested but didn't get clear answers"].map(o=>(
+              <Chip key={o} label={o} on={data.testingStatus===o} onClick={()=>u('testingStatus',o)}/>
+            ))}
+          </div>
         </div>
       ),
     },
@@ -947,11 +1046,34 @@ function Onboarding({ onComplete, onPatientUpdate }) {
   const canAdvance = step === 0 ? data.name.length > 1 : true;
 
   const handleComplete = () => {
+    // Compute phase & dayInProtocol from protocol start selection
+    let phase = 1, dayInProtocol = 1;
+    if (data.protocolStart && data.protocolStart !== "I haven't started yet") {
+      if (data.protocolStartDate) {
+        const days = Math.floor((Date.now() - new Date(data.protocolStartDate)) / 86400000);
+        if (days <= 90)       { phase = 1; dayInProtocol = Math.max(1, days); }
+        else if (days <= 120) { phase = 2; dayInProtocol = days; }
+        else if (days <= 270) { phase = 3; dayInProtocol = days; }
+        else                  { phase = 4; dayInProtocol = days; }
+      } else {
+        if (data.protocolStart === 'Less than 3 months ago')      { phase = 1; dayInProtocol = 45; }
+        else if (data.protocolStart === '3–6 months ago')         { phase = 2; dayInProtocol = 135; }
+        else if (data.protocolStart === '6–12 months ago')        { phase = 3; dayInProtocol = 270; }
+        else if (data.protocolStart === 'More than 12 months ago') { phase = 4; dayInProtocol = 400; }
+      }
+    }
+    const patientSegment = !data.testingStatus || data.testingStatus === "No, I haven't been tested yet" ? 'C'
+      : data.testingStatus === 'Yes, recent results (last 6 months)' ? 'A' : 'B';
+    const symptomDurationMap = { 'Less than 6 months':0.5, '6 months – 2 years':1, '2–5 years':3, '5–10 years':7, 'More than 10 years':12 };
+    const symptomDurationYears = symptomDurationMap[data.symptomDuration] ?? null;
+    const symptomCategoryCount = Object.values(SYMPTOM_CATS).filter(cat =>
+      cat.items.some(item => data.symptoms.includes(item))
+    ).length;
     onComplete({
       ...data,
       profileComplete: true,
       protocol: 'Option A — 21-day universal detox',
-      phase: 1, dayInProtocol: 1,
+      phase, dayInProtocol, patientSegment, symptomCategoryCount, symptomDurationYears,
       severe: data.alcat_severe || [],
       moderate: data.alcat_moderate || [],
       mild: data.alcat_mild || [],
@@ -987,11 +1109,11 @@ function Onboarding({ onComplete, onPatientUpdate }) {
         {/* Navigation */}
         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center' }}>
           {step > 0
-            ? <button onClick={()=>setStep(s=>s-1)} style={{ background:'none',border:`1px solid ${T.w3}`,borderRadius:9,padding:'11px 24px',cursor:'pointer',fontSize:12,fontFamily:fonts.sans,color:T.w5 }}>Back</button>
+            ? <button onClick={()=>setStep(prevStep(step))} style={{ background:'none',border:`1px solid ${T.w3}`,borderRadius:9,padding:'11px 24px',cursor:'pointer',fontSize:12,fontFamily:fonts.sans,color:T.w5 }}>Back</button>
             : <div/>
           }
           {step < STEPS.length - 1
-            ? <BtnPrimary onClick={()=>canAdvance&&setStep(s=>s+1)} disabled={!canAdvance}>Continue</BtnPrimary>
+            ? <BtnPrimary onClick={()=>canAdvance&&setStep(nextStep(step))} disabled={!canAdvance}>Continue</BtnPrimary>
             : <BtnPrimary onClick={handleComplete}>Enter My Dashboard</BtnPrimary>
           }
         </div>
@@ -1019,6 +1141,7 @@ export default function MeetMario({ patient: patientProp }) {
   const [besScore, setBesScore] = useState(null);
   const [besBand, setBesBand] = useState(null);
   const [besInterpretation, setBesInterpretation] = useState('');
+  const [ccsScore, setCcsScore] = useState(null);
   const [showDiet, setShowDiet] = useState(false);
   const [dietPlan, setDietPlan] = useState('');
   const [dietLoading, setDietLoading] = useState(false);
@@ -3951,6 +4074,17 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         genomicChecked: data.genomicChecked || 0,
         // Rotation calendar
         rotation: data.rotation || { 1:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 2:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 3:{grains:[],veg:[],fruit:[],protein:[],misc:[]}, 4:{grains:[],veg:[],fruit:[],protein:[],misc:[]} },
+        // Onboarding clinical fields
+        symptomDuration: data.symptomDuration || '',
+        practitionerCount: data.practitionerCount || '',
+        priorApproaches: data.priorApproaches || [],
+        impactSeverity: data.impactSeverity || '',
+        protocolStart: data.protocolStart || '',
+        protocolStartDate: data.protocolStartDate || '',
+        testingStatus: data.testingStatus || '',
+        phase: data.phase || 1,
+        dayInProtocol: data.dayInProtocol || 1,
+        patientSegment: data.patientSegment || 'A',
       };
       // Immediate sessionStorage save — works regardless of Supabase RLS
       if (authUser?.id) {
@@ -3989,6 +4123,15 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             alcat_severe: data.alcat_severe || [],
             alcat_moderate: data.alcat_moderate || [],
             alcat_mild: data.alcat_mild || [],
+            symptom_duration: data.symptomDuration || '',
+            practitioner_count: data.practitionerCount || '',
+            prior_approaches: data.priorApproaches || [],
+            impact_severity: data.impactSeverity || '',
+            protocol_start: data.protocolStart || '',
+            testing_status: data.testingStatus || '',
+            phase: data.phase || 1,
+            day_in_protocol: data.dayInProtocol || 1,
+            patient_segment: data.patientSegment || 'A',
             updated_at: new Date().toISOString(),
           }, { onConflict: 'user_id' });
           if (intakeErr) console.error('[save] onboarding_intake upsert error:', intakeErr.message);
@@ -4018,11 +4161,18 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
           hormonalStatus: data.hormonalStatus,
           medications: data.medications,
           conditions: data.conditions,
+          symptomCategoryCount: data.symptomCategoryCount || 0,
+          symptomDuration: data.symptomDuration,
+          practitionerCount: data.practitionerCount,
+          priorApproaches: data.priorApproaches,
+          testingStatus: data.testingStatus,
+          impactSeverity: data.impactSeverity,
         }),
-      }).then(r => r.json()).then(({ score, band, interpretation }) => {
+      }).then(r => r.json()).then(({ score, band, interpretation, ccsScore: ccs }) => {
         setBesScore(score);
         setBesBand(band);
         setBesInterpretation(interpretation);
+        setCcsScore(ccs ?? null);
         setShowBES(true);
       }).catch(e => {
         console.error('[BES score]', e.message);
@@ -4059,17 +4209,69 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             Your biology is ready<br/>to begin the reset.
           </h2>
           <p style={{ fontSize:14, color:T.w5, lineHeight:1.7, marginBottom:32 }}>{desc}</p>
-          <div style={{ background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:10, padding:'14px 20px', marginBottom:32, textAlign:'left' }}>
+          <div style={{ background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:10, padding:'14px 20px', marginBottom:16, textAlign:'left' }}>
             <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.rg, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:8 }}>Protocol assigned</div>
             <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w7 }}>Option A — 21-Day Universal GCR Detox</div>
             <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w5, marginTop:4 }}>The fastest path to immune silence. Saves 3 months vs rotation-only approach.</div>
           </div>
-          <button onClick={()=>setShowDietBasis(true)} style={{
-            background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px',
-            fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'0.04em',
-          }}>
-            Generate My 21-Day Plan
-          </button>
+
+          {/* Phase indicator — shown if patient has already started a protocol */}
+          {patient.protocolStart && patient.protocolStart !== "I haven't started yet" && (
+            <div style={{ background:T.w1, border:`1px solid ${T.w3}`, borderRadius:10, padding:'12px 18px', marginBottom:16, textAlign:'left' }}>
+              <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:4 }}>Protocol phase</div>
+              <div style={{ fontFamily:fonts.serif, fontSize:15, color:T.w7 }}>
+                {patient.phase === 4 ? 'Maintenance' : `Phase ${patient.phase}`}
+                {patient.dayInProtocol > 1 && ` — Day ${patient.dayInProtocol}`}
+              </div>
+            </div>
+          )}
+
+          {/* CCS >= 60: Concordance pathway note */}
+          {ccsScore != null && ccsScore >= 60 && (
+            <div style={{ background:`${T.warn}10`, border:`1px solid ${T.warn}30`, borderRadius:10, padding:'12px 18px', marginBottom:16, textAlign:'left' }}>
+              <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.6 }}>
+                Your clinical profile suggests you may benefit from our advanced Precision Concordance pathway. Mario will discuss this with you.
+              </div>
+            </div>
+          )}
+
+          {/* Segment C: no tests yet — predicted reactive foods + booking CTA */}
+          {patient.patientSegment === 'C' ? (
+            <div style={{ textAlign:'left' }}>
+              <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:12, textAlign:'center' }}>
+                Based on clinical population data
+              </div>
+              <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, lineHeight:1.6, marginBottom:20, textAlign:'center' }}>
+                Your symptom profile correlates with elevated reactivity in these categories. These are statistical predictions — your ALCAT test reveals your individual immune fingerprint.
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:8, marginBottom:24 }}>
+                {PREDICTED_REACTIVE_FOODS.map(({ food, pct }) => (
+                  <div key={food} style={{ display:'flex', alignItems:'center', gap:12 }}>
+                    <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w6, width:220, flexShrink:0 }}>{food}</div>
+                    <div style={{ flex:1, height:6, background:T.w2, borderRadius:3, overflow:'hidden' }}>
+                      <div style={{ width:`${pct}%`, height:'100%', background:T.rg, borderRadius:3, transition:'width 1s ease' }}/>
+                    </div>
+                    <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, width:32, textAlign:'right' }}>{pct}%</div>
+                  </div>
+                ))}
+              </div>
+              <a href="https://medibalans.com/booking" target="_blank" rel="noopener noreferrer" style={{ display:'block', textDecoration:'none' }}>
+                <button style={{ width:'100%', background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px', fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'0.04em' }}>
+                  Book your precision testing
+                </button>
+              </a>
+              <button onClick={()=>{ setShowBES(false); }} style={{ width:'100%', marginTop:12, background:'none', border:`1px solid ${T.w3}`, borderRadius:9, padding:'11px 24px', fontFamily:fonts.sans, fontSize:13, color:T.w5, cursor:'pointer' }}>
+                Continue to Mario (general guidance)
+              </button>
+            </div>
+          ) : (
+            <button onClick={()=>setShowDietBasis(true)} style={{
+              background:T.rg, color:'#fff', border:'none', borderRadius:9, padding:'13px 36px',
+              fontFamily:fonts.sans, fontSize:14, fontWeight:700, cursor:'pointer', letterSpacing:'0.04em',
+            }}>
+              Generate My 21-Day Plan
+            </button>
+          )}
 
           {/* Diet basis explanation popup */}
           {showDietBasis && (
