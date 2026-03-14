@@ -134,7 +134,7 @@ async function callClaudeRich(messages, system, extra = {}) {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system, messages, ...bodyExtra }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2048, system, messages, ...bodyExtra }),
     signal: sig,
   });
   if (!res.ok) {
@@ -2481,6 +2481,17 @@ Keep notes sensory and practical — not clinical. Examples:
           Array.isArray(m.content) ? m.content.filter(b => b.type === 'text').map(b => b.text).join('\n') :
           String(m.content || '')
       }));
+      // Truncate long assistant messages in history
+      apiMsgs.forEach((m, i) => {
+        if (m.role === 'assistant' && m.content.length > 500 && i < apiMsgs.length - 1) {
+          m.content = m.content.slice(0, 500) + ' [...]';
+        }
+      });
+      // Append patient context to last user message
+      if (contextNote && apiMsgs.length > 0) {
+        const last = apiMsgs[apiMsgs.length - 1];
+        if (last.role === 'user') last.content += contextNote;
+      }
       const lifestyleSummary = lifestyleLogs.length ? (() => {
         const wk = new Date(); wk.setDate(wk.getDate()-6); wk.setHours(0,0,0,0);
         const wl = lifestyleLogs.filter(l => new Date(l.date) >= wk);
