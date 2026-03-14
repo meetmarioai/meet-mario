@@ -2140,12 +2140,20 @@ Keep notes sensory and practical — not clinical. Examples:
       const sliced = msgs.slice(-12);
       const recentMsgs = sliced[0]?.role === 'assistant' ? sliced.slice(1) : sliced;
       const apiMsgs = recentMsgs.map((m, i) => {
-        if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
-          return { ...m, content: m.content + contextNote };
+        let content = m.content;
+        // Truncate assistant history to 500 chars — full text stays in display state, only history sent to API is shortened
+        if (m.role === 'assistant' && typeof content === 'string' && content.length > 500) {
+          content = content.slice(0, 500) + ' [...]';
         }
-        return m;
+        if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
+          return { ...m, content: content + contextNote };
+        }
+        return { ...m, content };
       });
-      const { text: r, showContactButton } = await callClaudeRich(apiMsgs, buildMarioSystemPrompt(patient), { signal: controller.signal });
+      const systemPrompt = buildMarioSystemPrompt(patient);
+      const totalChars = systemPrompt.length + apiMsgs.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0), 0);
+      console.log('[sendChat] messages:', apiMsgs.length, '| system chars:', systemPrompt.length, '| total chars:', totalChars, '| ~tokens:', Math.round(totalChars / 4));
+      const { text: r, showContactButton } = await callClaudeRich(apiMsgs, systemPrompt, { signal: controller.signal });
       const finalMsgs = [...msgs, { role:'assistant', content:r, showContactButton }];
       setChatMsgs(finalMsgs);
       // Save to Supabase in background
@@ -2163,6 +2171,7 @@ Keep notes sensory and practical — not clinical. Examples:
       if (err.name === 'AbortError') {
         setChatMsgs(msgs.slice(0, -1)); // remove last user msg on cancel
       } else {
+        console.error('[sendChat] crash — name:', err.name, '| message:', err.message, '| status:', err.status ?? 'n/a', '| full:', err);
         setChatMsgs([...msgs, { role:'assistant', content:'', isError: true, retryMsg: userMsg }]);
       }
     }
