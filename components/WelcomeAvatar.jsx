@@ -1,24 +1,10 @@
-// ─── components/WelcomeAvatar.jsx ────────────────────────────────────────────
-// Auto-playing welcome video for first-time visitors.
-// Shows Mario's avatar delivering the opening statement before the user
-// has any data. This is the first impression — the moment they decide to stay.
-//
-// Plays once per user (tracked via localStorage flag).
-// Can be replayed from settings or a "Watch intro" link.
-//
-// Usage in page.jsx:
-//   {showWelcome && <WelcomeAvatar patient={patient} onComplete={() => setShowWelcome(false)} />}
-//
 'use client'
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { getWelcomeScript } from '../lib/welcomeScripts'
+import { useState, useEffect, useRef } from 'react'
 
-// ── Design tokens ────────────────────────────────────────────────────────────
 const T = {
-  w:    '#F7F4F0', w1: '#F1EDE7', w2: '#E8E2DA', w3: '#D8D0C4',
-  w4:   '#B8ACA0', w5: '#8A7E72', w6: '#4A4038', w7: '#1C1510',
-  rg:   '#C4887A', rg2: '#9A6255', rg3: '#DEB0A4', rgBg: '#F8F0EE',
-  err:  '#B85040', ok: '#6A9060',
+  w:  '#F7F4F0', w1: '#F1EDE7', w2: '#E8E2DA', w3: '#D8D0C4',
+  w4: '#B8ACA0', w5: '#8A7E72', w6: '#4A4038', w7: '#1C1510',
+  rg: '#C4887A', rg2: '#9A6255', rg3: '#DEB0A4',
 }
 const fonts = {
   serif: "'Playfair Display', Georgia, 'Times New Roman', serif",
@@ -26,119 +12,73 @@ const fonts = {
   mono:  "'IBM Plex Mono', 'SF Mono', 'Fira Mono', 'Courier New', monospace",
 }
 
-const AVATAR_ID = process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID || 'default'
+const SCRIPTS = {
+  en: [
+    'Your body is the most sophisticated system ever built. Four hundred trillion cells. Five hundred million years of evolution. A molecular intelligence that knows exactly what it needs — and has been trying to tell you.',
+    'But somewhere along the way, we stopped listening. We replaced real food with processed calories. We silenced the signals with medication. And we accepted fatigue, brain fog, and inflammation as normal. They are not normal. They are your biology asking for help.',
+    'Meet Mario exists because I believe medicine should translate, not guess. Every person who walks through our doors — or opens this app — deserves to know what their cells are actually saying. Not what a blood test approximates. What the cell itself contains, what the immune system is reacting to, and what the DNA has been shaping since before you were born.',
+    'This platform connects those layers for the first time. Your immune reactivity. Your cellular nutrition. Your genetic architecture. And from that data, a protocol — precise, personalised, built for your biology alone.',
+    'We have done this for twenty-five thousand patients. And we have seen what happens when the immune system is finally heard. Energy returns. Clarity returns. The body remembers what it was designed to do.',
+    'This is not a diet app. This is not a wellness trend. This is precision medicine — made accessible to everyone, everywhere.',
+    'Welcome to Meet Mario. Let us begin.',
+  ],
+  sv: [
+    'Din kropp är det mest sofistikerade systemet som någonsin byggts. Fyrahundra biljoner celler. Femhundra miljoner år av evolution. En molekylär intelligens som vet exakt vad den behöver — och som har försökt berätta det för dig.',
+    'Men någonstans längs vägen slutade vi lyssna. Vi ersatte riktig mat med processade kalorier. Vi tystade signalerna med mediciner. Och vi accepterade trötthet, hjärndimma och inflammation som normalt. Det är inte normalt. Det är din biologi som ber om hjälp.',
+    'Meet Mario finns för att jag tror att medicin ska översätta, inte gissa. Varje person som kommer till oss — eller öppnar den här appen — förtjänar att veta vad deras celler faktiskt säger. Inte vad ett blodprov uppskattar. Vad cellen själv innehåller, vad immunförsvaret reagerar på, och vad ditt DNA har format sedan innan du föddes.',
+    'Den här plattformen kopplar samman dessa lager för första gången. Din immunreaktivitet. Din cellulära näring. Din genetiska arkitektur. Och från dessa data, ett protokoll — precist, personligt, byggt för just din biologi.',
+    'Vi har gjort detta för tjugofemtusen patienter. Och vi har sett vad som händer när immunförsvaret äntligen blir hört. Energin återvänder. Klarheten återvänder. Kroppen minns vad den var skapad att göra.',
+    'Det här är inte en dietapp. Det här är inte en hälsotrend. Det här är precisionsmedicin — tillgänglig för alla, överallt.',
+    'Välkommen till Meet Mario. Låt oss börja.',
+  ],
+}
 
-export default function WelcomeAvatar({ patient, onComplete, onSkip }) {
-  const [phase, setPhase]       = useState('ready')  // ready | connecting | speaking | complete
-  const [progress, setProgress] = useState('')
-  const [showTranscript, setShowTranscript] = useState(false)
-  const [currentParagraph, setCurrentParagraph] = useState(0)
-  const videoRef   = useRef(null)
-  const avatarRef  = useRef(null)
+const UI = {
+  en: { begin: 'Begin Assessment', skip: 'Skip for now' },
+  sv: { begin: 'Börja bedömning',  skip: 'Hoppa över'   },
+}
 
-  const { id: scriptId, script } = getWelcomeScript(patient)
-  const paragraphs = script.split('\n').map(p => p.trim()).filter(p => p.length > 0)
+export default function WelcomeAvatar({ onComplete, onSkip }) {
+  const defaultLang = typeof navigator !== 'undefined' && navigator.language?.startsWith('sv') ? 'sv' : 'en'
+  const [lang, setLang]           = useState(defaultLang)
+  const [idx, setIdx]             = useState(0)      // current paragraph index
+  const [visible, setVisible]     = useState(true)   // controls fade
+  const [done, setDone]           = useState(false)
+  const timerRef                  = useRef(null)
+  const paragraphs                = SCRIPTS[lang]
+  const isLast                    = idx === paragraphs.length - 1
 
-  // ── Cleanup ────────────────────────────────────────────────────────────
+  // Advance paragraph every 3 s
   useEffect(() => {
-    return () => {
-      if (avatarRef.current) {
-        try { avatarRef.current.stopAvatar() } catch {}
+    if (done) return
+    timerRef.current = setTimeout(() => {
+      if (isLast) {
+        setDone(true)
+        try { localStorage.setItem('mm_welcome_seen', 'welcome') } catch {}
+        return
       }
-    }
-  }, [])
+      // Fade out → advance → fade in
+      setVisible(false)
+      setTimeout(() => {
+        setIdx(i => i + 1)
+        setVisible(true)
+      }, 400)
+    }, 3000)
+    return () => clearTimeout(timerRef.current)
+  }, [idx, done, isLast])
 
-  // ── Start the avatar ───────────────────────────────────────────────────
-  const startVideo = useCallback(async () => {
-    setPhase('connecting')
-    setProgress('Connecting…')
+  // When language changes mid-sequence, restart from current idx with new text
+  const switchLang = (l) => {
+    if (l === lang) return
+    setVisible(false)
+    setTimeout(() => { setLang(l); setVisible(true) }, 300)
+  }
 
-    try {
-      // Get token
-      const tokenRes = await fetch('/api/avatar/token', { method: 'POST' })
-      if (!tokenRes.ok) throw new Error('Auth failed')
-      const { token } = await tokenRes.json()
-
-      // Load SDK
-      const { default: StreamingAvatar, TaskType, TaskMode } = await import(
-        '@heygen/streaming-avatar'
-      )
-
-      const avatar = new StreamingAvatar({ token })
-      avatarRef.current = avatar
-
-      avatar.on('stream_ready', (event) => {
-        if (videoRef.current && event.detail) {
-          videoRef.current.srcObject = event.detail
-          videoRef.current.play().catch(() => {})
-        }
-      })
-
-      avatar.on('avatar_start_talking', () => {
-        setPhase('speaking')
-        setProgress('')
-      })
-
-      avatar.on('avatar_stop_talking', () => {
-        // Check if this was the last paragraph
-        setCurrentParagraph(prev => {
-          if (prev >= paragraphs.length - 1) {
-            setPhase('complete')
-            // Mark as seen
-            try { localStorage.setItem('mm_welcome_seen', scriptId) } catch {}
-          }
-          return prev + 1
-        })
-      })
-
-      // Create session
-      setProgress('Dr. Mario is joining…')
-      await avatar.createStartAvatar({
-        avatarName: AVATAR_ID,
-        quality: 'high',
-        voice: {
-          voiceId: process.env.NEXT_PUBLIC_HEYGEN_VOICE_ID || undefined,
-          rate: 0.92,
-        },
-        language: 'en',
-      })
-
-      // Wait for stream to stabilise
-      await new Promise(r => setTimeout(r, 1500))
-
-      // Deliver paragraphs
-      for (let i = 0; i < paragraphs.length; i++) {
-        setCurrentParagraph(i)
-        await avatar.speak({
-          text: paragraphs[i],
-          task_type: TaskType.REPEAT,
-          taskMode: TaskMode.SYNC,
-        })
-        if (i < paragraphs.length - 1) {
-          await new Promise(r => setTimeout(r, 500))
-        }
-      }
-
-      setPhase('complete')
-      try { localStorage.setItem('mm_welcome_seen', scriptId) } catch {}
-
-    } catch (err) {
-      console.error('[WelcomeAvatar] Error:', err)
-      // On error, show text fallback — don't block the user
-      setPhase('complete')
-    }
-  }, [paragraphs, scriptId])
-
-  // ── Skip handler ───────────────────────────────────────────────────────
-  const handleSkip = useCallback(() => {
-    if (avatarRef.current) {
-      try { avatarRef.current.stopAvatar() } catch {}
-    }
-    try { localStorage.setItem('mm_welcome_seen', scriptId) } catch {}
-    onSkip?.() || onComplete?.()
-  }, [scriptId, onSkip, onComplete])
-
-  // ── RENDER ─────────────────────────────────────────────────────────────
+  const handleSkip = () => {
+    clearTimeout(timerRef.current)
+    try { localStorage.setItem('mm_welcome_seen', 'welcome') } catch {}
+    onSkip?.() ?? onComplete?.()
+  }
 
   return (
     <div style={{
@@ -147,239 +87,109 @@ export default function WelcomeAvatar({ patient, onComplete, onSkip }) {
       display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
     }}>
-
-      {/* ── READY STATE: Cinematic intro screen ──────────────────────── */}
-      {phase === 'ready' && (
-        <div style={{
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', maxWidth: 520, padding: '0 28px',
-          textAlign: 'center',
-          animation: 'welcomeFadeIn 1s ease both',
-        }}>
-          {/* Wordmark */}
-          <div style={{
-            fontFamily: fonts.serif, fontSize: 14, color: T.w4,
-            letterSpacing: '0.08em', marginBottom: 48, opacity: 0.7,
-          }}>meet mario</div>
-
-          {/* Avatar circle */}
-          <div style={{
-            width: 100, height: 100, borderRadius: '50%',
-            background: `radial-gradient(circle at 40% 35%, ${T.rg3}, ${T.rg2})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: 36,
-            boxShadow: `0 0 60px rgba(196, 136, 122, 0.3)`,
-          }}>
-            <span style={{
-              fontSize: 36, fontFamily: fonts.serif,
-              fontWeight: 400, color: '#fff',
-            }}>M</span>
-          </div>
-
-          <h1 style={{
-            fontFamily: fonts.serif, fontSize: 28, fontWeight: 400,
-            color: T.w1, lineHeight: 1.3, marginBottom: 12,
-          }}>
-            Your body has been speaking.
-          </h1>
-
-          <p style={{
-            fontFamily: fonts.sans, fontSize: 15, fontWeight: 300,
-            color: T.w4, lineHeight: 1.7, marginBottom: 40,
-          }}>
-            I would like to tell you what this platform does — and what it
-            can do for you. It takes about ninety seconds.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 280 }}>
-            <button onClick={startVideo} style={{
-              background: `linear-gradient(140deg, ${T.rg3}, ${T.rg}, ${T.rg2})`,
-              border: 'none', borderRadius: 10, padding: '14px 32px',
-              cursor: 'pointer', fontFamily: fonts.sans, fontSize: 14,
-              fontWeight: 500, color: '#fff', letterSpacing: '0.04em',
-              boxShadow: `0 4px 24px rgba(196, 136, 122, 0.35)`,
-            }}>Watch Introduction</button>
-
-            <button onClick={handleSkip} style={{
-              background: 'transparent', border: `1px solid ${T.w5}40`,
-              borderRadius: 10, padding: '12px 32px',
-              cursor: 'pointer', fontFamily: fonts.sans, fontSize: 13,
-              fontWeight: 300, color: T.w4,
-            }}>Skip for now</button>
-          </div>
-
-          <div style={{
-            fontFamily: fonts.mono, fontSize: 8, color: T.w5,
-            letterSpacing: '0.16em', marginTop: 36, opacity: 0.5,
-          }}>PRECISION MEDICINE · STOCKHOLM</div>
+      {/* ── Top bar: wordmark + lang toggle + skip ── */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '18px 24px',
+      }}>
+        <div style={{ fontFamily: fonts.serif, fontSize: 13, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.06em' }}>
+          meet mario
         </div>
-      )}
 
-      {/* ── CONNECTING: Minimal loading ───────────────────────────────── */}
-      {phase === 'connecting' && (
-        <div style={{
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center',
-        }}>
-          <div style={{
-            width: 80, height: 80, borderRadius: '50%',
-            background: `radial-gradient(circle at 40% 35%, ${T.rg3}, ${T.rg})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            animation: 'avatarPulse 2s ease-in-out infinite',
-            marginBottom: 24,
-          }}>
-            <span style={{
-              fontSize: 28, fontFamily: fonts.serif, color: '#fff',
-            }}>M</span>
-          </div>
-          <div style={{
-            fontFamily: fonts.sans, fontSize: 15, color: T.w3,
-            fontWeight: 300, marginBottom: 12,
-          }}>{progress}</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[0,1,2].map(i => (
-              <div key={i} style={{
-                width: 5, height: 5, borderRadius: '50%', background: T.rg,
-                animation: `dotPulse 1.2s ${i * 0.2}s ease-in-out infinite`,
-              }}/>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {/* Language toggle */}
+          <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.06)', borderRadius: 6, padding: 2 }}>
+            {['en','sv'].map(l => (
+              <button key={l} onClick={() => switchLang(l)} style={{
+                background: lang === l ? 'rgba(255,255,255,0.12)' : 'transparent',
+                border: 'none', borderRadius: 4, padding: '4px 10px',
+                cursor: 'pointer', fontFamily: fonts.mono, fontSize: 10,
+                color: lang === l ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.35)',
+                letterSpacing: '0.1em', textTransform: 'uppercase',
+                transition: 'all 0.2s',
+              }}>{l}</button>
             ))}
           </div>
-        </div>
-      )}
 
-      {/* ── SPEAKING: Full-screen video ───────────────────────────────── */}
-      {(phase === 'speaking' || phase === 'complete') && (
-        <div style={{
-          width: '100%', height: '100%',
-          display: 'flex', flexDirection: 'column',
-          position: 'relative',
-        }}>
-          {/* Video — full screen */}
-          <div style={{
-            flex: 1, position: 'relative', background: '#0a0806',
-            overflow: 'hidden',
+          {/* Skip */}
+          {!done && (
+            <button onClick={handleSkip} style={{
+              background: 'transparent', border: '1px solid rgba(255,255,255,0.15)',
+              borderRadius: 6, padding: '5px 14px', cursor: 'pointer',
+              fontFamily: fonts.mono, fontSize: 9,
+              color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em',
+            }}>{UI[lang].skip.toUpperCase()}</button>
+          )}
+        </div>
+      </div>
+
+      {/* ── M circle ── */}
+      <div style={{
+        width: 72, height: 72, borderRadius: '50%',
+        background: `radial-gradient(circle at 40% 35%, ${T.rg3}, ${T.rg2})`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        marginBottom: 48,
+        boxShadow: `0 0 48px rgba(196,136,122,0.25)`,
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 28, fontFamily: fonts.serif, fontWeight: 400, color: '#fff' }}>M</span>
+      </div>
+
+      {/* ── Paragraph area ── */}
+      <div style={{ maxWidth: 560, padding: '0 32px', textAlign: 'center', minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {!done ? (
+          <p style={{
+            fontFamily: fonts.sans, fontSize: 16, fontWeight: 300,
+            color: 'rgba(255,255,255,0.82)', lineHeight: 1.75,
+            margin: 0,
+            opacity: visible ? 1 : 0,
+            transform: visible ? 'translateY(0)' : 'translateY(8px)',
+            transition: 'opacity 0.4s ease, transform 0.4s ease',
           }}>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              style={{
-                width: '100%', height: '100%',
-                objectFit: 'cover',
-              }}
-            />
-
-            {/* Top bar — wordmark + skip */}
-            <div style={{
-              position: 'absolute', top: 0, left: 0, right: 0,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              padding: '16px 24px',
-              background: 'linear-gradient(to bottom, rgba(10,8,6,0.6), transparent)',
+            {paragraphs[idx]}
+          </p>
+        ) : (
+          <div style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24,
+            animation: 'wfadeIn 0.6s ease both',
+          }}>
+            <p style={{
+              fontFamily: fonts.serif, fontSize: 22, fontWeight: 400,
+              color: 'rgba(255,255,255,0.92)', lineHeight: 1.5,
+              margin: 0, textAlign: 'center',
             }}>
-              <div style={{
-                fontFamily: fonts.serif, fontSize: 13, color: 'rgba(255,255,255,0.6)',
-                letterSpacing: '0.06em',
-              }}>meet mario</div>
-
-              {phase === 'speaking' && (
-                <button onClick={handleSkip} style={{
-                  background: 'rgba(255,255,255,0.1)',
-                  backdropFilter: 'blur(8px)',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: 6, padding: '5px 14px',
-                  cursor: 'pointer', fontFamily: fonts.mono,
-                  fontSize: 9, color: 'rgba(255,255,255,0.6)',
-                  letterSpacing: '0.1em',
-                }}>SKIP</button>
-              )}
-            </div>
-
-            {/* Bottom bar — live subtitle of current paragraph */}
-            {phase === 'speaking' && currentParagraph < paragraphs.length && (
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(to top, rgba(10,8,6,0.8), transparent)',
-                padding: '40px 32px 24px',
-              }}>
-                <div style={{
-                  fontFamily: fonts.sans, fontSize: 14, fontWeight: 300,
-                  color: 'rgba(255,255,255,0.88)', lineHeight: 1.7,
-                  maxWidth: 560, textAlign: 'center', margin: '0 auto',
-                  animation: 'subtitleFade 0.4s ease both',
-                }}>
-                  {paragraphs[currentParagraph]}
-                </div>
-              </div>
-            )}
-
-            {/* Complete overlay */}
-            {phase === 'complete' && (
-              <div style={{
-                position: 'absolute', inset: 0,
-                background: 'rgba(10, 8, 6, 0.75)',
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                gap: 20,
-                animation: 'welcomeFadeIn 0.6s ease both',
-              }}>
-                <div style={{
-                  fontFamily: fonts.serif, fontSize: 24, color: '#fff',
-                  fontWeight: 400, textAlign: 'center',
-                }}>Let us begin.</div>
-
-                <button onClick={() => onComplete?.()} style={{
-                  background: `linear-gradient(140deg, ${T.rg3}, ${T.rg}, ${T.rg2})`,
-                  border: 'none', borderRadius: 10, padding: '14px 36px',
-                  cursor: 'pointer', fontFamily: fonts.sans, fontSize: 14,
-                  fontWeight: 500, color: '#fff', letterSpacing: '0.04em',
-                  boxShadow: `0 4px 24px rgba(196, 136, 122, 0.35)`,
-                }}>Begin Assessment</button>
-
-                <button onClick={() => setShowTranscript(!showTranscript)} style={{
-                  background: 'transparent', border: 'none',
-                  cursor: 'pointer', fontFamily: fonts.mono,
-                  fontSize: 9, color: 'rgba(255,255,255,0.4)',
-                  letterSpacing: '0.12em', marginTop: 8,
-                }}>
-                  {showTranscript ? 'HIDE' : 'READ'} TRANSCRIPT
-                </button>
-
-                {showTranscript && (
-                  <div style={{
-                    maxWidth: 520, maxHeight: 200, overflowY: 'auto',
-                    padding: '16px 24px', marginTop: 8,
-                    background: 'rgba(255,255,255,0.05)',
-                    borderRadius: 10,
-                  }}>
-                    <div style={{
-                      fontFamily: fonts.sans, fontSize: 12.5, color: 'rgba(255,255,255,0.6)',
-                      fontWeight: 300, lineHeight: 1.8, whiteSpace: 'pre-wrap',
-                    }}>{script}</div>
-                  </div>
-                )}
-              </div>
-            )}
+              {paragraphs[paragraphs.length - 1]}
+            </p>
+            <button onClick={() => onComplete?.()} style={{
+              background: `linear-gradient(140deg, ${T.rg3}, ${T.rg}, ${T.rg2})`,
+              border: 'none', borderRadius: 10, padding: '14px 36px',
+              cursor: 'pointer', fontFamily: fonts.sans, fontSize: 14,
+              fontWeight: 500, color: '#fff', letterSpacing: '0.04em',
+              boxShadow: `0 4px 24px rgba(196,136,122,0.35)`,
+              marginTop: 8,
+            }}>{UI[lang].begin}</button>
           </div>
+        )}
+      </div>
+
+      {/* ── Progress dots ── */}
+      {!done && (
+        <div style={{ position: 'absolute', bottom: 32, display: 'flex', gap: 6 }}>
+          {paragraphs.map((_, i) => (
+            <div key={i} style={{
+              width: i === idx ? 18 : 5, height: 5, borderRadius: 3,
+              background: i === idx ? T.rg : 'rgba(255,255,255,0.18)',
+              transition: 'all 0.3s ease',
+            }} />
+          ))}
         </div>
       )}
 
-      {/* ── Animations ────────────────────────────────────────────────── */}
       <style>{`
-        @keyframes welcomeFadeIn {
+        @keyframes wfadeIn {
           from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes avatarPulse {
-          0%, 100% { transform: scale(1); opacity: 0.9; }
-          50% { transform: scale(1.06); opacity: 1; }
-        }
-        @keyframes dotPulse {
-          0%, 100% { opacity: 0.3; transform: scale(0.8); }
-          50% { opacity: 1; transform: scale(1.2); }
-        }
-        @keyframes subtitleFade {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
     </div>

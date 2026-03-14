@@ -9,12 +9,18 @@ export async function POST() {
       return Response.json({ error: 'HEYGEN_API_KEY not configured' }, { status: 500 });
     }
 
+    const avatarId = process.env.NEXT_PUBLIC_HEYGEN_AVATAR_ID;
+    if (!avatarId) {
+      return Response.json({ error: 'NEXT_PUBLIC_HEYGEN_AVATAR_ID not configured' }, { status: 500 });
+    }
+
     const res = await fetch('https://api.liveavatar.com/v1/sessions/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-API-KEY': apiKey,
       },
+      body: JSON.stringify({ avatar_id: avatarId }),
     });
 
     const data = await res.json();
