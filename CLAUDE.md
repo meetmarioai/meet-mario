@@ -123,6 +123,22 @@ the system prompt file and clinical reasoning would be exposed.
 
 ---
 
+## Appendix E — Wearable Integration Roadmap
+
+### Supported devices
+Apple Health · Samsung Health · Oura · Whoop · Garmin · Fitbit
+
+### Phases
+**Launch (built):** Manual entry — ME tab daily form for HR, HRV, sleep, deep sleep, readiness.
+
+**Week 1 post-launch:** Oura OAuth2 direct integration (REST API, Christina's test ring).
+
+**Week 2–3:** Open Wearables self-hosted deployment on Railway — covers Samsung Health, Apple Health, Garmin, Fitbit, Oura through ONE unified API. One integration, every wearable.
+
+**Future:** Native companion app for Health Connect direct integration.
+
+---
+
 ## Appendix D — Design System Rules
 
 ### Every card is a tap target
