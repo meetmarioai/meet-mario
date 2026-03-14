@@ -5,6 +5,9 @@ export const maxDuration = 60;
 
 const COMPREHENSIVE_PROMPT = `This is a medical lab test result. Identify the report type and extract ALL data.
 
+CLASSIFICATION PRIORITY — READ BEFORE ANYTHING ELSE:
+If this document contains ANY of the following: "Cell Science Systems", "ALCAT", "Food Sensitivities", "Reactive Foods", "Non-Reactive Foods", food items organised by colour (red/orange/yellow columns), or a list of foods grouped by reactivity level — it is an ALCAT report. Classify it as ALCAT regardless of any other content. ALCAT reports include patient demographics and physician details that may reference clinical lab terms — ignore those for classification purposes. Do NOT let the presence of a patient name, ID number, date of birth, or ordering doctor name cause you to classify an ALCAT report as blood work.
+
 REPORT TYPE 1 — ALCAT (Cell Science Systems food immune reactivity panel):
 This is a Cell Science Systems ALCAT report. The layout has THREE SEPARATE reactivity columns side by side. You MUST extract all three columns independently — do NOT merge them.
 
@@ -117,7 +120,7 @@ Scan EVERY PAGE of the document. The report may repeat patient header info acros
 Leave severe/moderate/mild as empty arrays for this report type.
 
 Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}
+{"report_type":"ALCAT|CMA|LAB|HORMONE|STOOL|UNKNOWN","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}
 English lowercase names. Include EVERY analyte found — do not skip any.`;
 
 const TEXT_PROMPT = `This is a medical lab document. Extract reactive foods and classify by severity.

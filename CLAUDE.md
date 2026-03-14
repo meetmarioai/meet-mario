@@ -123,6 +123,29 @@ the system prompt file and clinical reasoning would be exposed.
 
 ---
 
+## Appendix D — Design System Rules
+
+### Every card is a tap target
+The entire card surface triggers the primary action. Small buttons inside cards (LOG, Generate, etc.) are visual affordances, not the only click targets. Apply universally:
+- Outer card div gets `onClick` + `cursor:'pointer'`
+- Form/input children inside an expanded card get `onClick={e=>e.stopPropagation()}` to prevent accidental collapse
+- Locked/disabled cards: `cursor:'default'`, no onClick action
+
+### File type identification is always automatic
+The user never selects file type manually. The classifier determines type from content, not from user input or filename.
+
+Classification hierarchy:
+1. `.vcf` / `.txt` with VCF headers → VCF genomic data (skip Claude, parse directly)
+2. `.zip` → extract and classify each file inside
+3. PDF/image → send to Claude classifier → returns: `ALCAT` / `CMA` / `BLOOD_WORK` / `HORMONE` / `STOOL` / `UNKNOWN`
+4. Route to type-specific parser → store in correct namespace → display type-appropriate feedback
+
+The classifier in `/api/parse-lab/route.js` runs on EVERY file upload regardless of context — onboarding, Labs tab, ME tab, camera FAB. The user drops a file. Mario reads it. Mario tells them what it is.
+
+The patient is not a data entry clerk. Never add "choose file type" dropdowns, radio buttons, or any manual type selection UI to any upload flow.
+
+---
+
 ## Appendix C — Known Bugs (keep updated)
 
 ### Unresolved

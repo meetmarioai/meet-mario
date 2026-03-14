@@ -61,12 +61,10 @@ const SYMPTOM_CATS = {
 };
 
 const CUISINES = [
-  { id:"mediterranean", label:"Mediterranean", desc:"Olive oil · herbs · fish" },
-  { id:"french",        label:"French",        desc:"Bistro — duck, lentils" },
-  { id:"swedish",       label:"Swedish",       desc:"Nordic fish, root veg" },
-  { id:"japanese",      label:"Japanese",      desc:"Clean minimal, fish" },
-  { id:"middle_eastern",label:"Middle Eastern",desc:"Spiced meats, herbs" },
-  { id:"scandinavian",  label:"Scandinavian",  desc:"Cured fish, forest" },
+  { label:"Mexican"       },
+  { label:"French"        },
+  { label:"Scandinavian"  },
+  { label:"Greek"         },
 ];
 
 const EAT_PATS = [
@@ -589,13 +587,8 @@ function Onboarding({ onComplete, onPatientUpdate }) {
 
     const isVCF = ext === 'vcf';
 
-    // Detect report type from filename
-    const fn2 = file.name.toLowerCase();
-    const detectedType = isVCF ? 'genomic'
-      : (fn2.includes('cma') || fn2.includes('cna')) ? 'micronutrient'
-      : (fn2.includes('redox') || fn2.includes('antioxidant') || fn2.includes('spectrox')) ? 'redox'
-      : 'alcat';
-    setLastFileType(detectedType);
+    // For VCF files, set type immediately; for PDFs/images the classifier determines type
+    if (isVCF) setLastFileType('genomic');
 
     console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| detectedType:', detectedType, '| size:', (file.size/1024).toFixed(0)+'KB');
 
@@ -706,14 +699,21 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       }
       console.log('[Lab parse] report_type:', json.report_type, '| severe:', (json.severe||[]).length, '| moderate:', (json.moderate||[]).length);
 
+      // Set type from classifier, not filename
+      const classifiedType = json.report_type === 'LAB' || json.report_type === 'HORMONE' || json.report_type === 'STOOL' ? 'bloodwork'
+        : json.report_type === 'CMA' ? 'micronutrient'
+        : json.report_type === 'ALCAT' ? 'alcat'
+        : 'alcat'; // default unknown → alcat
+      setLastFileType(classifiedType);
+
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newSevere = norm(json.severe);
       const newModerate = norm(json.moderate);
       const newMild = norm(json.mild);
 
-      // ── Route results based on file type — each type has its own namespace ──
-      const isBloodWork = json.report_type === 'LAB';
-      const isCMAResult = !isBloodWork && (detectedType === 'micronutrient' || detectedType === 'redox' || json.report_type === 'CMA');
+      // ── Route results based on classifier — each type has its own namespace ──
+      const isBloodWork = json.report_type === 'LAB' || json.report_type === 'HORMONE' || json.report_type === 'STOOL';
+      const isCMAResult = json.report_type === 'CMA';
       if (isBloodWork) {
         // Standard blood work — serum markers go into bloodWork[], never ALCAT arrays
         const markers = Array.isArray(json.bloodWork) ? json.bloodWork : [];
@@ -752,9 +752,9 @@ function Onboarding({ onComplete, onPatientUpdate }) {
 
       const hasResults = isBloodWork
         ? (Array.isArray(json.bloodWork) && json.bloodWork.length > 0)
-        : (newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0
-          || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0
-          || norm(json.deficient).length > 0 || norm(json.adequate).length > 0);
+        : isCMAResult
+        ? (norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0 || (Array.isArray(json.cma_nutrients) && json.cma_nutrients.length > 0))
+        : (newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0);
       if (!hasResults) {
         setLabParseError('API returned OK but 0 items extracted.');
       }
@@ -764,7 +764,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       setLabParsing(false);
 
       // Compute finals — blood work and CMA never write to ALCAT arrays
-      const isNonAlcat = isBloodWork || detectedType === 'micronutrient';
+      const isNonAlcat = isBloodWork || isCMAResult;
       const finalSevere   = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_severe||[]),   ...newSevere])]   : newSevere;
       const finalModerate = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
       const finalMild     = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
@@ -1056,7 +1056,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
                 <div style={{ fontFamily:fonts.serif, fontSize:16, color:T.w6, marginBottom:8 }}>
                   {lastFileType === 'genomic' ? 'Matching variants to clinical index...'
                     : lastFileType === 'micronutrient' ? 'Reading intracellular nutrients...'
-                    : lastFileType === 'redox' ? 'Calculating antioxidant capacity...'
+                    : lastFileType === 'bloodwork' ? 'Extracting lab markers...'
                     : 'Reading your results...'}
                 </div>
                 <div style={{ display:'flex', gap:6, justifyContent:'center' }}>
@@ -1121,25 +1121,24 @@ function Onboarding({ onComplete, onPatientUpdate }) {
                       ))}
                     </div>
                   </>
-                ) : lastFileType === 'redox' ? (
+                ) : lastFileType === 'bloodwork' ? (
                   <>
                     <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
-                      EXTRACTED — antioxidant capacity analysed
+                      BLOOD WORK — {(data.bloodWork||[]).length} analytes extracted · {(data.bloodWork||[]).filter(m=>m.status==='low'||m.status==='high').length} flagged
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
-                      <div style={{ background:'#fff', borderRadius:8, padding:'14px 16px', border:`1px solid ${T.ok}30`, textAlign:'center' }}>
-                        <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:6 }}>REDOX SCORE</div>
-                        <div style={{ fontFamily:fonts.serif, fontSize:28, color:T.w7, lineHeight:1 }}>{lastRedoxScore != null ? lastRedoxScore : '—'}</div>
-                        <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>/100</div>
-                      </div>
-                      <div style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${T.err}30` }}>
-                        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.err, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>DEFICIENT ANTIOXIDANTS · {(data.cmaDeficiencies||[]).length}</div>
-                        {(data.cmaDeficiencies||[]).slice(0,5).map(f => (
-                          <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
-                        ))}
-                        {(data.cmaDeficiencies||[]).length > 5 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(data.cmaDeficiencies||[]).length-5} more</div>}
-                      </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(140px,1fr))', gap:8, marginBottom:14 }}>
+                      {(data.bloodWork||[]).slice(0,12).map(m => {
+                        const col = m.status==='low' ? T.warn : m.status==='high' ? T.err : T.ok;
+                        return (
+                          <div key={m.name} style={{ background:'#fff', borderRadius:8, padding:'8px 10px', border:`1px solid ${col}30` }}>
+                            <div style={{ fontFamily:fonts.mono, fontSize:9, color:col, letterSpacing:'0.1em', textTransform:'uppercase', marginBottom:2 }}>{m.status}</div>
+                            <div style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6 }}>{m.name}</div>
+                            <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5 }}>{m.value}{m.unit ? ' '+m.unit : ''}</div>
+                          </div>
+                        );
+                      })}
                     </div>
+                    {(data.bloodWork||[]).length > 12 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginBottom:14 }}>+{(data.bloodWork||[]).length-12} more analytes</div>}
                   </>
                 ) : (
                   // Default: ALCAT food reactivity
@@ -1419,6 +1418,7 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   // Meal builder
   const [mealSlotFoods, setMealSlotFoods] = useState({ breakfast:[], lunch:[], dinner:[], snack1:[], snack2:[] });
   const [activeMealSlot, setActiveMealSlot] = useState(null);
+  const [expandedCats, setExpandedCats] = useState({});
   const [genMealLoading, setGenMealLoading] = useState({});
   const [genMealResult, setGenMealResult] = useState({});
 
@@ -1691,9 +1691,16 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
     const isImage = mimeType.startsWith('image/') || imageExts.includes(ext)
       // Android camera fallback: empty MIME, no known non-image extension → treat as image
       || (mimeType === '' && !['pdf','vcf','txt','doc','docx','zip','csv','tsv'].includes(ext) && file.size > 1024);
-    // .vcf, .vcf.gz (check second-to-last extension too), .txt
+    // .vcf, .vcf.gz — .txt only treated as VCF if headers confirmed below
     const rawNameLower = rawName.toLowerCase();
-    const isVCF = ext === 'vcf' || ext === 'txt' || rawNameLower.endsWith('.vcf.gz') || rawNameLower.endsWith('.vcf.bgz');
+    let isVCF = ext === 'vcf' || rawNameLower.endsWith('.vcf.gz') || rawNameLower.endsWith('.vcf.bgz');
+    if (!isVCF && ext === 'txt') {
+      // Peek first 4 KB to check for VCF signature
+      try {
+        const peek = await file.slice(0, 4096).text();
+        isVCF = peek.includes('##fileformat=VCF') || peek.includes('#CHROM\t');
+      } catch {}
+    }
     const isWord = ext === 'doc' || ext === 'docx';
     const isZip = ext === 'zip' || mimeType === 'application/zip' || mimeType === 'application/x-zip-compressed';
     const imageMediaType = mimeType.startsWith('image/') ? mimeType : ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
@@ -1892,7 +1899,7 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
-      const isBloodWork = json.report_type === 'LAB';
+      const isBloodWork = json.report_type === 'LAB' || json.report_type === 'HORMONE' || json.report_type === 'STOOL';
       const isCMA = !isBloodWork && (json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0 || (Array.isArray(json.cma_nutrients) && json.cma_nutrients.length > 0));
       // Fallback: derive cma_deficiencies / cma_adequate from cma_nutrients if arrays were empty
       let cmaDef = norm(json.cma_deficiencies);
@@ -2296,7 +2303,7 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const genMenu = async () => {
     if (!cuisine || genLoad) return; setGenLoad(true); setGenResult(null);
     const rot = (patient.rotation||{})[rotDay] || {};
-    const cu = CUISINES.find(c => c.id === cuisine)?.label;
+    const cu = cuisine;
     const ep = EAT_PATS.find(e => e.id === eatPat);
     const foods = rot.grains ? `Grains: ${rot.grains.join(', ')}\nVeg: ${rot.veg.join(', ')}\nFruit: ${rot.fruit.join(', ')}\nProtein: ${rot.protein.join(', ')}\nMisc: ${rot.misc.join(', ')}` : 'Patient rotation not yet loaded.';
     const pInstr = eatPat === 'standard' ? 'Standard 6 meals every 3h.' : ep?.detail || 'Intermittent fasting protocol.';
@@ -2340,7 +2347,7 @@ INSTRUCTIONS: [4-6 flowing prose paragraphs — warm, confident chef voice — n
     if (!foods.length || genMealLoading[slotKey]) return;
     setGenMealLoading(prev => ({ ...prev, [slotKey]: true }));
     setGenMealResult(prev => ({ ...prev, [slotKey]: null }));
-    const cu = CUISINES.find(c => c.id === cuisine)?.label || 'Mediterranean';
+    const cu = cuisine || 'Mediterranean';
     const allReactive = [...(patient.severe||[]),...(patient.moderate||[]),...(patient.mild||[])];
     const severe = allReactive.join(', ') || 'none';
     const cmaD = (patient.cmaDeficiencies||[]).slice(0,5).join(', ') || 'none on file';
@@ -2482,11 +2489,10 @@ Keep notes sensory and practical — not clinical. Examples:
     chatAbortRef.current = controller;
     try {
       const contextNote = buildPatientContext();
-      // Cap history at last 12 messages. Ensure the slice always starts with a user message —
-      // after 6+ exchanges, slice(-12) can begin with an assistant turn, which Anthropic rejects.
+      // Cap history at last 12 messages. Ensure the slice always starts with a user message.
       const sliced = msgs.slice(-12);
-      const recentMsgs = sliced[0]?.role === 'assistant' ? sliced.slice(1) : sliced;
-      const apiMsgs = chatMsgs.slice(-8).map(m => ({
+      const startMsgs = sliced[0]?.role === 'assistant' ? sliced.slice(1) : sliced;
+      const apiMsgs = startMsgs.map(m => ({
         role: m.role,
         content: typeof m.content === 'string' ? m.content :
           Array.isArray(m.content) ? m.content.filter(b => b.type === 'text').map(b => b.text).join('\n') :
@@ -3019,12 +3025,18 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         );})()}
         {ROT[rotDay] && Object.keys(ROT[rotDay]).length > 0 ? (
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
-            {Object.entries(ROT[rotDay]).map(([cat,items])=>{ const th=DAY_THEMES[rotDay]; return (
-              <div key={cat} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:'12px' }}>
-                <div style={{ fontFamily:fonts.mono,fontSize:9,color:th.color,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:8 }}>{cat}</div>
-                <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-                  {items.map(f=><span key={f} style={{ fontSize:11,color:T.w6,fontFamily:fonts.sans,background:T.w,border:`1px solid ${th.border}`,borderRadius:4,padding:'3px 8px' }}>{f}</span>)}
+            {Object.entries(ROT[rotDay]).map(([cat,items])=>{ const th=DAY_THEMES[rotDay]; const catKey=`${rotDay}_${cat}`; const isOpen=expandedCats[catKey]!==false; return (
+              <div key={cat} onClick={()=>setExpandedCats(prev=>({...prev,[catKey]:!isOpen}))} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:'12px',cursor:'pointer' }}>
+                <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:isOpen?8:0 }}>
+                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:th.color,letterSpacing:'0.16em',textTransform:'uppercase' }}>{cat}</div>
+                  <div style={{ display:'flex',alignItems:'center',gap:6 }}>
+                    <span style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4 }}>{items.length}</span>
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ transform:isOpen?'rotate(0)':'rotate(-90deg)',transition:'transform 0.15s' }}><path d="M2 3.5L5 6.5L8 3.5" stroke={T.w4} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
                 </div>
+                {isOpen && <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                  {items.map(f=><span key={f} style={{ fontSize:11,color:T.w6,fontFamily:fonts.sans,background:T.w,border:`1px solid ${th.border}`,borderRadius:4,padding:'3px 8px' }}>{f}</span>)}
+                </div>}
               </div>
             );})}
           </div>
@@ -3064,14 +3076,12 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
           </div>
           <div style={{ marginBottom:24 }}>
             <FieldLabel>Cuisine</FieldLabel>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8 }}>
+            <div style={{ display:'flex',gap:8,marginBottom:8 }}>
               {CUISINES.map(c=>(
-                <button key={c.id} onClick={()=>setCuisine(c.id)} style={{ background:cuisine===c.id?T.rgBg:T.w,border:`1px solid ${cuisine===c.id?T.rg:T.w3}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',textAlign:'left',transition:'all .15s' }}>
-                  <div style={{ fontSize:12,color:cuisine===c.id?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{c.label}</div>
-                  <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{c.desc}</div>
-                </button>
+                <button key={c.label} onClick={()=>setCuisine(c.label)} style={{ background:cuisine===c.label?T.rgBg:T.w,border:`1px solid ${cuisine===c.label?T.rg:T.w3}`,borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:12,color:cuisine===c.label?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:cuisine===c.label?500:400,transition:'all .15s',whiteSpace:'nowrap' }}>{c.label}</button>
               ))}
             </div>
+            <input value={CUISINES.some(c=>c.label===cuisine)?'':cuisine} onChange={e=>setCuisine(e.target.value)} placeholder="Or type any cuisine…" style={{ width:'100%',background:'transparent',border:`1px solid ${T.w3}`,borderRadius:8,outline:'none',padding:'9px 12px',fontSize:12,fontFamily:fonts.sans,color:T.w7,boxSizing:'border-box' }}/>
           </div>
           <BtnPrimary onClick={genMenu} loading={genLoad} disabled={!cuisine}>Generate menu</BtnPrimary>
         </Panel>
@@ -3399,14 +3409,12 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
           </div>
           <div style={{ marginBottom:24 }}>
             <FieldLabel>Cuisine</FieldLabel>
-            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8 }}>
+            <div style={{ display:'flex',gap:8,marginBottom:8 }}>
               {CUISINES.map(c=>(
-                <button key={c.id} onClick={()=>setCuisine(c.id)} style={{ background:cuisine===c.id?T.rgBg:T.w,border:`1px solid ${cuisine===c.id?T.rg:T.w3}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',textAlign:'left',transition:'all .15s' }}>
-                  <div style={{ fontSize:12,color:cuisine===c.id?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{c.label}</div>
-                  <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{c.desc}</div>
-                </button>
+                <button key={c.label} onClick={()=>setCuisine(c.label)} style={{ background:cuisine===c.label?T.rgBg:T.w,border:`1px solid ${cuisine===c.label?T.rg:T.w3}`,borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:12,color:cuisine===c.label?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:cuisine===c.label?500:400,transition:'all .15s',whiteSpace:'nowrap' }}>{c.label}</button>
               ))}
             </div>
+            <input value={CUISINES.some(c=>c.label===cuisine)?'':cuisine} onChange={e=>setCuisine(e.target.value)} placeholder="Or type any cuisine…" style={{ width:'100%',background:'transparent',border:`1px solid ${T.w3}`,borderRadius:8,outline:'none',padding:'9px 12px',fontSize:12,fontFamily:fonts.sans,color:T.w7,boxSizing:'border-box' }}/>
           </div>
           <BtnPrimary onClick={genMenu} loading={genLoad} disabled={!cuisine}>Generate menu</BtnPrimary>
         </Panel>
@@ -3990,7 +3998,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
               return tiles.map(t => {
                 const timeout = !t.active && t.filePresent; // file stored but parse failed/timed out
                 return (
-                  <div key={t.name} onClick={() => !t.active && labFileRef.current?.click()} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: t.active ? `${T.ok}08` : timeout ? `${T.warn}08` : T.w1, border:`1px solid ${t.active ? T.ok+'30' : timeout ? T.warn+'50' : T.w3}`, borderRadius:8, cursor: t.active ? 'default' : 'pointer' }}>
+                  <div key={t.name} onClick={() => t.active ? setTab('labs') : labFileRef.current?.click()} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background: t.active ? `${T.ok}08` : timeout ? `${T.warn}08` : T.w1, border:`1px solid ${t.active ? T.ok+'30' : timeout ? T.warn+'50' : T.w3}`, borderRadius:8, cursor:'pointer' }}>
                     <div style={{ width:22, height:22, borderRadius:'50%', background: t.active ? T.ok : timeout ? T.warn : T.w3, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                       {t.active
                         ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -4436,11 +4444,11 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             const todayResponse = mealResponses.find(r=>(r.timestamp||'').slice(0,10)===todayStr);
             const hasAlcatCheck = (P.severe?.length||0)+(P.moderate?.length||0)+(P.mild?.length||0) > 0;
             if (!todayResponse && hasAlcatCheck) return (
-              <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'16px 18px',marginBottom:14 }}>
+              <div onClick={()=>{ setMrFormMeta({ mealId:`today_${todayStr}`, mealType:'meal', foods:[], timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:14,padding:'16px 18px',marginBottom:14,cursor:'pointer' }}>
                 <Eyebrow>POST-MEAL RESPONSE</Eyebrow>
                 <div style={{ fontFamily:fonts.sans,fontSize:14,color:T.w7,fontWeight:500,marginBottom:4 }}>How was your last meal?</div>
                 <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w5,lineHeight:1.6,marginBottom:14 }}>Log how your body responded — it takes about 15 seconds and builds your personalised pattern data.</div>
-                <button onClick={()=>{ setMrFormMeta({ mealId:`today_${todayStr}`, mealType:'meal', foods:[], timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ background:T.rg,border:'none',borderRadius:9,padding:'10px 22px',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff' }}>Log Response</button>
+                <button onClick={e=>{ e.stopPropagation(); setMrFormMeta({ mealId:`today_${todayStr}`, mealType:'meal', foods:[], timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ background:T.rg,border:'none',borderRadius:9,padding:'10px 22px',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,fontWeight:600,color:'#fff' }}>Log Response</button>
               </div>
             );
             return null;
@@ -4573,7 +4581,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         const streak = dayStreak(id);
         const todayLogged = lifestyleLogs.some(l => l.type===id && l.date===today);
         return (
-          <div style={{ ...cardStyle, ...lockedOver }}>
+          <div onClick={()=>{ if(!locked){ setLifestyleOpen(open?null:id); setLsForm({}); } }} style={{ ...cardStyle, ...lockedOver, cursor: locked?'default':'pointer' }}>
             <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
                 <div style={{ color:T.w4, marginTop:3, flexShrink:0 }}>{icon}</div>
@@ -4586,12 +4594,12 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
                 {streak > 0 && <span style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, letterSpacing:'0.1em' }}>{streak}d</span>}
                 {todayLogged
                   ? <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, background:`${T.ok}15`, borderRadius:6, padding:'4px 8px', letterSpacing:'0.08em' }}>LOGGED</div>
-                  : <button onClick={()=>{ setLifestyleOpen(open?null:id); setLsForm({}); }} style={{ fontFamily:fonts.mono, fontSize:10, letterSpacing:'0.08em', color:T.rg2, background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>LOG</button>
+                  : <button onClick={e=>{ e.stopPropagation(); setLifestyleOpen(open?null:id); setLsForm({}); }} style={{ fontFamily:fonts.mono, fontSize:10, letterSpacing:'0.08em', color:T.rg2, background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>LOG</button>
                 }
               </div>
             </div>
             {locked && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', marginTop:8 }}>UNLOCKS DAY 14</div>}
-            {open && !locked && <div style={{ marginTop:16, paddingTop:16, borderTop:`1px solid ${T.w2}` }}>{children}</div>}
+            {open && !locked && <div onClick={e=>e.stopPropagation()} style={{ marginTop:16, paddingTop:16, borderTop:`1px solid ${T.w2}` }}>{children}</div>}
           </div>
         );
       };
