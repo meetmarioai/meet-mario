@@ -998,7 +998,27 @@ function Onboarding({ onComplete, onPatientUpdate }) {
           {data.protocolStart && data.protocolStart !== "I haven't started yet" && (
             <div>
               <FieldLabel>Approximate start date (if you remember)</FieldLabel>
-              <input type="date" value={data.protocolStartDate} onChange={e=>u('protocolStartDate',e.target.value)} style={{ width:'100%',background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 0',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:T.w7,colorScheme:'dark' }}/>
+              {(() => {
+                const parts = (data.protocolStartDate || '').split('-');
+                const yy = parts[0] || '', mm = parts[1] || '', dd = parts[2] || '';
+                const set = (y,m,d) => u('protocolStartDate', (y&&m&&d) ? `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` : '');
+                const sel = (val, opts, placeholder, onChange) => (
+                  <select value={val} onChange={e=>onChange(e.target.value)} style={{ flex:1,background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 4px',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:val?T.w7:T.w4,appearance:'none',cursor:'pointer' }}>
+                    <option value="" disabled>{placeholder}</option>
+                    {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                  </select>
+                );
+                const days = Array.from({length:31},(_,i)=>({v:String(i+1).padStart(2,'0'),l:String(i+1)}));
+                const months = ['January','February','March','April','May','June','July','August','September','October','November','December'].map((l,i)=>({v:String(i+1).padStart(2,'0'),l}));
+                const years = Array.from({length:7},(_,i)=>({v:String(2020+i),l:String(2020+i)}));
+                return (
+                  <div style={{ display:'flex', gap:8 }}>
+                    {sel(dd, days,   'Day',   d => set(yy,mm,d))}
+                    {sel(mm, months, 'Month', m => set(yy,m,dd))}
+                    {sel(yy, years,  'Year',  y => set(y,mm,dd))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
