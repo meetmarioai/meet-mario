@@ -3,125 +3,75 @@
 
 export const maxDuration = 60;
 
-const COMPREHENSIVE_PROMPT = `This is a medical lab test result. Identify the report type and extract ALL data.
+// ── Phase 1: classify only ─────────────────────────────────────────────────
+const CLASSIFY_PROMPT = `Look at this medical document and return ONLY this JSON — nothing else:
+{"report_type":"ALCAT|CMA|LAB|UNKNOWN"}
 
-CLASSIFICATION PRIORITY — READ BEFORE ANYTHING ELSE:
-If this document contains ANY of the following: "Cell Science Systems", "ALCAT", "Food Sensitivities", "Reactive Foods", "Non-Reactive Foods", food items organised by colour (red/orange/yellow columns), or a list of foods grouped by reactivity level — it is an ALCAT report. Classify it as ALCAT regardless of any other content. ALCAT reports include patient demographics and physician details that may reference clinical lab terms — ignore those for classification purposes. Do NOT let the presence of a patient name, ID number, date of birth, or ordering doctor name cause you to classify an ALCAT report as blood work.
+ALCAT: Cell Science Systems food reactivity panel. Has three coloured columns: RED (severe), ORANGE (moderate), YELLOW (mild). Contains food names, NOT lab values.
+CMA: Cell Science Systems intracellular micronutrient analysis. Lists ~55 nutrients with quartile bars.
+LAB: Standard serum/blood lab panel (e.g. Unilabs, Synlab). Has test names, numeric values, reference ranges, units.
+UNKNOWN: anything else.
 
-REPORT TYPE 1 — ALCAT (Cell Science Systems food immune reactivity panel):
-This is a Cell Science Systems ALCAT report. The layout has THREE SEPARATE reactivity columns side by side. You MUST extract all three columns independently — do NOT merge them.
+CRITICAL: If you see "Cell Science Systems", "ALCAT", "Food Sensitivities", or coloured food columns — return ALCAT even if lab terms appear in headers.`;
 
-COLUMN LAYOUT (left to right):
-1. SEVERE column (far left) — foods highlighted in RED or dark red background. These are Class 3-4 reactions. → "severe" array
-2. MODERATE column (middle) — foods highlighted in ORANGE or amber background. These are Class 2 reactions. → "moderate" array
-3. MILD column (right) — foods highlighted in YELLOW or light yellow background. These are Class 1 reactions. → "mild" array
-4. ACCEPTABLE / GREEN — omit entirely
+// ── Phase 2a: ALCAT extraction ─────────────────────────────────────────────
+const ALCAT_PROMPT = `Extract ALL reactive foods from this ALCAT report. Three separate columns, extract independently.
 
-CRITICAL: The SEVERE column is on the FAR LEFT and is often the smallest column with the fewest items. Do NOT skip it. Do NOT merge SEVERE foods into the MODERATE column. Extract every single food name from all three columns as three distinct arrays.
+SEVERE (far left, RED background) → "severe" array
+MODERATE (middle, ORANGE background) → "moderate" array
+MILD (right, YELLOW background) → "mild" array
+ACCEPTABLE/GREEN → omit entirely
 
-REPORT TYPE 2 — CMA / CNA / Spectrox (Cell Science Systems intracellular micronutrient analysis):
-This is a Cell Science Systems CMA or CNA report. It tests ~55 intracellular micronutrients.
-
-TABLE LAYOUT: The report has a table where each ROW is one nutrient. The LEFT column contains the nutrient name. The right columns show quartile ranges (1st, 2nd, 3rd, 4th quartile) with the patient's result marked — often as a filled bar, dot, or highlighted cell in one of the quartile columns. Lower quartiles (1st, 2nd) = below optimal. Upper quartiles (3rd, 4th) = adequate.
-
-The Spectrox score (Total Antioxidant Function) is a single numeric score, often shown prominently at the top or bottom.
-
-READ EVERY ROW of the nutrient table. Do NOT skip any nutrient. If a nutrient is in the 1st or 2nd quartile it is deficient/low. If in 3rd or 4th quartile it is adequate.
-
-For the summary arrays:
-- 1st quartile / DEFICIENT / VERY LOW → "severe" AND "cma_deficiencies"
-- 2nd quartile / LOW / BORDERLINE → "moderate" AND "cma_deficiencies"
-- 3rd or 4th quartile / ADEQUATE / NORMAL → "mild" AND "cma_adequate"
-
-Also extract:
-- "cma_deficiencies": ALL below-optimal nutrient names (1st + 2nd quartile)
-- "cma_adequate": ALL optimal nutrient names (3rd + 4th quartile)
-- "cma_nutrients": EVERY nutrient as [{"name":"vitamin d","value":32,"unit":"ng/mL","range_low":30,"range_high":100,"status":"adequate|low|deficient"}]
-- "redox_score": the Spectrox / REDOX / Total Antioxidant Function score (numeric only)
-- "cma_antioxidants": antioxidant-specific nutrients: [{"name":"glutathione","value":...,"status":"adequate|low|deficient"}]
-- "cma_categories": {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
-
-REPORT TYPE 3 — Standard blood work / serum lab panel (e.g. Unilabs, Synlab, hospital labs):
-This is a standard serum/blood lab report — NOT an ALCAT food reactivity panel.
-
-CRITICAL: Do NOT put any results into the severe/moderate/mild arrays. Those arrays are reserved for ALCAT food names only. Extract ALL lab markers into "bloodWork" as structured objects.
-
-Extract ALL lab results from this report. The report may be in Swedish, English, German, or other languages. For each result extract: test name (translate to English standard name), value (number), unit, reference range (low and high as separate numbers), and status (normal if within range, low if below, high if above).
-
-Swedish term mapping:
-- Analys/Undersökning = Test name
-- Resultat = Result
-- Referensintervall = Reference range
-- Enhet = Unit
-- Delsvar = Partial result (interim)
-- Slutsvar = Final result
-- Referensintervall saknas = Reference range not available (set ref_low and ref_high to null)
-- Se kommentar = See comment (use phase-specific ranges if provided)
-
-Common Swedish test name translations:
-- S-DHEAS → DHEA-S
-- S-Testosteron,bioaktiv → Bioactive Testosterone
-- S-Testosteron → Total Testosterone
-- P-Homocystein → Homocysteine
-- S-Östradiol → Estradiol
-- B-Hemoglobin → Hemoglobin
-- B-EVF → Hematocrit
-- B-Erytrocyter → Red Blood Cells
-- B-MCV → MCV
-- Erc(B)-MCH → MCH
-- B-Leukocyter → White Blood Cells
-- B-Trombocyter → Platelets
-- S-Follitropin (FSH) → FSH
-- S-Progesteron → Progesterone
-- S-SHBG → SHBG
-- S-25-hydroxiVitaminD → 25-OH Vitamin D
-- S-Kortisol → Cortisol
-- P-Kreatinin → Creatinine
-- Pt-eGFRrel (LMrev) → eGFR
-- Pt-eGFR(Krea)absolut → eGFR Absolute
-- P-Ferritin → Ferritin
-- P-ALAT → ALT
-- P-ASAT → AST
-- P-Bilirubin → Bilirubin
-- P-Kolesterol → Total Cholesterol
-- P-HDL-kolesterol → HDL Cholesterol
-- P-LDL-kol, beräknat → LDL Cholesterol
-- P-Tyrotropin (TSH) → TSH
-- P-T4, fritt → Free T4
-- P-T3, fritt → Free T3
-- P-ALP → Alkaline Phosphatase
-- P(fPt)-Triglycerid → Triglycerides
-- S-Insulin → Insulin
-- P-Glukos → Glucose
-- S-IGF-1 → IGF-1
-- B-HbA1c → HbA1c
-- P-Natrium → Sodium
-- P-Kalium → Potassium
-- P-Kalcium → Calcium
-- P-Magnesium → Magnesium
-- P-Fosfat → Phosphate
-- S-Järn → Iron
-- S-Transferrin → Transferrin
-- S-Transferrinmättnad → Transferrin Saturation
-
-For phase-dependent reference ranges (e.g. hormones with Follikelfas/Midcykel/Lutealfas/Postmenopaus), use the broadest range across all applicable phases for ref_low/ref_high, and add phase info in the "notes" field.
-
-For each marker in bloodWork:
-- "name": English standard name in lowercase
-- "value": numeric result only (no units in this field)
-- "unit": unit string exactly as shown
-- "status": "low" | "normal" | "high" based on reference range comparison
-- "ref_low": lower bound of reference range as number, or null if unavailable
-- "ref_high": upper bound of reference range as number, or null if unavailable
-- "notes": phase info or other clinical notes, or null
-
-Scan EVERY PAGE of the document. The report may repeat patient header info across multiple pages — ignore duplicate headers, extract only unique test results. Include every analyte found.
-
-Leave severe/moderate/mild as empty arrays for this report type.
+CRITICAL: SEVERE column is smallest, far left. Do NOT skip it or merge into MODERATE.
 
 Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB|HORMONE|STOOL|UNKNOWN","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}
-English lowercase names. Include EVERY analyte found — do not skip any.`;
+{"report_type":"ALCAT","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}`;
+
+// ── Phase 2b: CMA extraction ───────────────────────────────────────────────
+const CMA_PROMPT = `Extract ALL nutrients from this CMA/CNA/Spectrox report.
+
+Each row = one nutrient. Quartile position determines status:
+- 1st quartile / DEFICIENT → "severe" AND "cma_deficiencies"
+- 2nd quartile / LOW → "moderate" AND "cma_deficiencies"
+- 3rd or 4th quartile / ADEQUATE → "mild" AND "cma_adequate"
+
+Also extract:
+- "cma_deficiencies": all below-optimal nutrient names
+- "cma_adequate": all optimal nutrient names
+- "cma_nutrients": every nutrient as [{"name":"...","value":0,"unit":"...","range_low":0,"range_high":0,"status":"adequate|low|deficient"}]
+- "redox_score": the Spectrox/REDOX/Total Antioxidant Function score (number only, null if absent)
+- "cma_antioxidants": [{"name":"...","value":0,"status":"adequate|low|deficient"}]
+- "cma_categories": {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
+
+Return ONLY this JSON (no markdown):
+{"report_type":"CMA","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}`;
+
+// ── Phase 2c: LAB extraction ───────────────────────────────────────────────
+const LAB_PROMPT = `Extract ALL lab markers from this blood/serum report. Translate all test names to lowercase English.
+
+Do NOT put anything in severe/moderate/mild — those are for ALCAT food reactivity only.
+Put ALL markers in "bloodWork" as structured objects.
+
+For each marker:
+- "name": English standard name in lowercase
+- "value": numeric result only
+- "unit": unit string exactly as shown
+- "status": "low" | "normal" | "high" based on reference range
+- "ref_low": lower bound as number, or null
+- "ref_high": upper bound as number, or null
+- "notes": phase info or null
+
+Swedish term mapping:
+Analys/Undersökning=test name, Resultat=result, Referensintervall=reference range, Enhet=unit
+Slutsvar=final result, Referensintervall saknas=no reference range (ref_low/ref_high null)
+Se kommentar=see comment (use broadest phase range, add phase info to notes)
+
+Common translations: S-DHEAS→DHEA-S, S-Testosteron→Total Testosterone, S-Testosteron,bioaktiv→Bioactive Testosterone, P-Homocystein→Homocysteine, S-Östradiol→Estradiol, B-Hemoglobin→Hemoglobin, B-EVF→Hematocrit, B-Erytrocyter→Red Blood Cells, B-MCV→MCV, Erc(B)-MCH→MCH, B-Leukocyter→White Blood Cells, B-Trombocyter→Platelets, S-Follitropin→FSH, S-Progesteron→Progesterone, S-SHBG→SHBG, S-25-hydroxiVitaminD→25-OH Vitamin D, S-Kortisol→Cortisol, P-Kreatinin→Creatinine, Pt-eGFRrel→eGFR, P-Ferritin→Ferritin, P-ALAT→ALT, P-ASAT→AST, P-Bilirubin→Bilirubin, P-Kolesterol→Total Cholesterol, P-HDL-kolesterol→HDL Cholesterol, P-LDL-kol,beräknat→LDL Cholesterol, P-Tyrotropin→TSH, P-T4,fritt→Free T4, P-T3,fritt→Free T3, P-ALP→Alkaline Phosphatase, P(fPt)-Triglycerid→Triglycerides, S-Insulin→Insulin, P-Glukos→Glucose, S-IGF-1→IGF-1, B-HbA1c→HbA1c, P-Natrium→Sodium, P-Kalium→Potassium, P-Kalcium→Calcium, P-Magnesium→Magnesium, P-Fosfat→Phosphate, S-Järn→Iron, S-Transferrin→Transferrin, S-Transferrinmättnad→Transferrin Saturation
+
+Scan every page. Skip repeated patient headers. Include every unique analyte.
+
+Return ONLY this JSON (no markdown):
+{"report_type":"LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}`;
 
 const TEXT_PROMPT = `This is a medical lab document. Extract reactive foods and classify by severity.
 
@@ -133,60 +83,96 @@ Swedish→English: S-DHEAS→DHEA-S, S-Testosteron→Total Testosterone, P-Homoc
 Analys/Undersökning=test name, Resultat=result, Referensintervall=reference range, Enhet=unit.
 Translate all test names to lowercase English. Include every analyte found.`;
 
+async function callClaude(fileBlock, prompt, maxTokens) {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'anthropic-beta': 'pdfs-2024-09-25',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
+      messages: [{ role: 'user', content: [fileBlock, { type: 'text', text: prompt }] }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `Anthropic ${res.status}`);
+  }
+  const data = await res.json();
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+  console.log(`[/api/parse-lab] call stop_reason=${data.stop_reason} tokens=${data.usage?.input_tokens}/${data.usage?.output_tokens}`);
+  return text;
+}
+
+function parseJSON(text) {
+  try { return JSON.parse(text.replace(/```json\s?|```/g, '').trim()); } catch {}
+  const m = text.match(/\{[\s\S]*\}/);
+  if (m) try { return JSON.parse(m[0]); } catch {}
+  return null;
+}
+
 export async function POST(req) {
   try {
     const { fileBase64, mediaType, isPDF, textContent } = await req.json();
 
-    let messages;
+    // ── Text content path (Word docs / plain text) ───────────────────────────
     if (textContent) {
-      messages = [{ role: 'user', content: `${TEXT_PROMPT}\n\nDocument contents:\n${textContent.slice(0, 50000)}` }];
-    } else {
-      if (!fileBase64 || !mediaType) return Response.json({ error: 'fileBase64 and mediaType required' }, { status: 400 });
-      const fileBlock = isPDF
-        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
-        : { type: 'image', source: { type: 'base64', media_type: mediaType, data: fileBase64 } };
-      messages = [{ role: 'user', content: [fileBlock, { type: 'text', text: COMPREHENSIVE_PROMPT }] }];
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 3000,
+          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else.',
+          messages: [{ role: 'user', content: `${TEXT_PROMPT}\n\nDocument contents:\n${textContent.slice(0, 50000)}` }],
+        }),
+      });
+      if (!res.ok) { const e = await res.json().catch(()=>({})); return Response.json({ error: e?.error?.message||'API error' }, { status: 500 }); }
+      const d = await res.json();
+      const t = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      const json = parseJSON(t) || {};
+      return Response.json(json);
     }
 
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-beta': 'pdfs-2024-09-25',
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-6',
-        max_tokens: 8000,
-        system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
-        messages,
-      }),
-    });
+    if (!fileBase64 || !mediaType) return Response.json({ error: 'fileBase64 and mediaType required' }, { status: 400 });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      console.error('[/api/parse-lab] Anthropic error:', err?.error?.message);
-      return Response.json({ error: err?.error?.message || 'API error' }, { status: 500 });
-    }
+    const fileBlock = isPDF
+      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
+      : { type: 'image',    source: { type: 'base64', media_type: mediaType,           data: fileBase64 } };
 
-    const data = await res.json();
-    const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-    console.log('[/api/parse-lab] stop_reason:', data.stop_reason, '| tokens in/out:', data.usage?.input_tokens, '/', data.usage?.output_tokens);
-    console.log('[/api/parse-lab] raw text (first 600):', text.slice(0, 600));
+    console.log(`[/api/parse-lab] incoming isPDF=${isPDF} mediaType=${mediaType} base64Len=${fileBase64.length}`);
 
-    let json = {};
-    try {
-      json = JSON.parse(text.replace(/```json\s?|```/g, '').trim());
-    } catch {
-      console.log('[/api/parse-lab] Primary JSON parse failed — trying fallbacks');
-      // Fallback 1: match full JSON object
-      const m2 = text.match(/\{[\s\S]*\}/);
-      if (m2) try { json = JSON.parse(m2[0]); } catch (e2) { console.log('[/api/parse-lab] Fallback JSON parse also failed:', e2.message, '| snippet:', m2[0].slice(0, 200)); }
-    }
+    // ── Phase 1: classify ─────────────────────────────────────────────────────
+    const classifyText = await callClaude(fileBlock, CLASSIFY_PROMPT, 30);
+    const classified = parseJSON(classifyText) || {};
+    const reportType = classified.report_type || 'UNKNOWN';
+    console.log(`[/api/parse-lab] classified as: ${reportType}`);
+
+    // ── Phase 2: type-specific extraction ────────────────────────────────────
+    const extractPrompt = reportType === 'ALCAT' ? ALCAT_PROMPT
+      : reportType === 'CMA' ? CMA_PROMPT
+      : LAB_PROMPT; // LAB / HORMONE / STOOL / UNKNOWN all go through LAB extractor
+
+    const maxTok = reportType === 'CMA' ? 4000 : reportType === 'ALCAT' ? 3000 : 3000;
+    const extractText = await callClaude(fileBlock, extractPrompt, maxTok);
+    console.log('[/api/parse-lab] raw extract (first 400):', extractText.slice(0, 400));
+
+    const json = parseJSON(extractText) || { report_type: reportType };
+    // Ensure report_type is set from classifier if extractor omitted it
+    if (!json.report_type) json.report_type = reportType;
 
     console.log(`[/api/parse-lab] report_type=${json.report_type} severe=${(json.severe||[]).length} moderate=${(json.moderate||[]).length} mild=${(json.mild||[]).length} cma_def=${(json.cma_deficiencies||[]).length} bloodWork=${(json.bloodWork||[]).length}`);
     return Response.json(json);
+
   } catch (err) {
     console.error('[/api/parse-lab]', err.message);
     return Response.json({ error: err.message }, { status: 500 });

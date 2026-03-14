@@ -683,7 +683,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'to /api/parse-lab, base64 length:', base64.length);
 
       const parseAbort = new AbortController();
-      const parseTimeout = setTimeout(() => parseAbort.abort(), 30000);
+      const parseTimeout = setTimeout(() => parseAbort.abort(), 55000);
       let res;
       try {
         res = await fetch('/api/parse-lab', {
@@ -1917,7 +1917,7 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
       // PDF / Image — send to /api/parse-lab
       const base64 = await fileToBase64(file);
       const dashAbort = new AbortController();
-      const dashTimeout = setTimeout(() => dashAbort.abort(), 30000);
+      const dashTimeout = setTimeout(() => dashAbort.abort(), 55000);
       let res;
       try {
         res = await fetch('/api/parse-lab', {
