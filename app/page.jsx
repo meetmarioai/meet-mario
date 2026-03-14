@@ -3083,8 +3083,18 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ transform:isOpen?'rotate(0)':'rotate(-90deg)',transition:'transform 0.15s' }}><path d="M2 3.5L5 6.5L8 3.5" stroke={T.w4} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </div>
                 </div>
-                {isOpen && <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-                  {items.map(f=><span key={f} style={{ fontSize:11,color:T.w6,fontFamily:fonts.sans,background:T.w,border:`1px solid ${th.border}`,borderRadius:4,padding:'3px 8px' }}>{f}</span>)}
+                {isOpen && <div onClick={e=>e.stopPropagation()} style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                  {items.map(f => {
+                    const inActive = activeMealSlot && mealSlotFoods[activeMealSlot]?.includes(f);
+                    const inAnySlot = Object.values(mealSlotFoods).some(arr => arr.includes(f));
+                    return (
+                      <button key={f} onClick={e => {
+                        e.stopPropagation();
+                        if (!activeMealSlot) return;
+                        setMealSlotFoods(prev => ({ ...prev, [activeMealSlot]: inActive ? prev[activeMealSlot].filter(x => x !== f) : [...prev[activeMealSlot], f] }));
+                      }} style={{ fontSize:11, fontFamily:fonts.sans, background: inActive ? `${th.color}22` : inAnySlot ? `${T.ok}10` : T.w, border:`1px solid ${inActive ? th.color+'60' : inAnySlot ? T.ok+'40' : th.border}`, borderRadius:4, padding:'3px 8px', cursor: activeMealSlot ? 'pointer' : 'default', color: inActive ? th.color : inAnySlot ? T.ok : T.w6, transition:'all .12s' }}>{f}</button>
+                    );
+                  })}
                 </div>}
               </div>
             );})}
