@@ -2255,7 +2255,8 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
   // Auto-generate rotation when opening Meals tab if ALCAT mild data present but rotation empty
   useEffect(() => {
-    if (tab === 'rotation' && (patient.mild?.length > 0) && !patient.rotation?.[1]) {
+    const hasAlcat = (patient.severe?.length > 0) || (patient.moderate?.length > 0) || (patient.mild?.length > 0);
+    if (tab === 'rotation' && hasAlcat && !patient.rotation?.[1]) {
       buildRotationFromAlcat(patient);
     }
   }, [tab]);
@@ -3027,15 +3028,62 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
               </div>
             );})}
           </div>
-        ) : P.mild?.length > 0 ? (
+        ) : (patient.severe?.length > 0 || patient.moderate?.length > 0 || patient.mild?.length > 0) ? (
           <Panel style={{ textAlign:'center', padding:32 }}>
-            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:16 }}>{P.mild.length} mild foods detected — generating your 4-day rotation…</div>
+            <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w5, marginBottom:16 }}>Building your 4-day rotation from your ALCAT data…</div>
             <div style={{ display:'flex',gap:8,justifyContent:'center',marginBottom:16 }}>
               {[0,1,2].map(i=><div key={i} style={{ width:8,height:8,borderRadius:'50%',background:T.rg,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
             </div>
             <button onClick={()=>buildRotationFromAlcat(patient)} style={{ background:T.rg,color:'#fff',border:'none',borderRadius:9,padding:'10px 24px',cursor:'pointer',fontFamily:fonts.sans,fontSize:13,fontWeight:600 }}>Build Rotation</button>
           </Panel>
-        ) : <EmptyState title="No ALCAT mild foods found" sub="Upload your ALCAT results to generate your 4-day rotation calendar."/>}
+        ) : <EmptyState title="No ALCAT data yet" sub="Upload your ALCAT results to generate your 4-day rotation calendar."/>}
+
+        {/* Generate menu section */}
+        <Panel style={{ marginTop:20 }}>
+          <Eyebrow>AI menu generation</Eyebrow>
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>Scope</FieldLabel>
+            <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
+              {[['full_day','Full Day'],['breakfast','Breakfast'],['lunch','Lunch'],['dinner','Dinner']].map(([id,label])=>(
+                <button key={id} onClick={()=>setMealScope(id)} style={{ background:mealScope===id?T.rgBg:T.w,border:`1px solid ${mealScope===id?T.rg:T.w3}`,borderRadius:7,padding:'8px 16px',cursor:'pointer',color:mealScope===id?T.rg2:T.w5,fontFamily:fonts.sans,fontSize:11,fontWeight:mealScope===id?500:400 }}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ marginBottom:20 }}>
+            <FieldLabel>Eating pattern</FieldLabel>
+            <div style={{ display:'flex',gap:8,flexWrap:'wrap' }}>
+              {EAT_PATS.map(ep=>(
+                <button key={ep.id} onClick={async()=>{setEatPat(ep.id);if(ep.fasting&&!ifResearch){setIfLoad(true);try{const r=await callClaude([{role:'user',content:'Summarise the latest clinical evidence on intermittent fasting for metabolic inflammation and gut healing. 3 sentences max.'}],buildMarioSystemPrompt(P));setIfResearch(r);}catch{}setIfLoad(false);}}} style={{ background:eatPat===ep.id?T.rgBg:T.w,border:`1px solid ${eatPat===ep.id?T.rg:T.w3}`,borderRadius:8,padding:'8px 14px',cursor:'pointer',textAlign:'left',minWidth:120 }}>
+                  <div style={{ fontSize:12,color:eatPat===ep.id?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{ep.label}</div>
+                  <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{ep.desc}</div>
+                  {ep.detail && eatPat===ep.id && <div style={{ fontSize:10,color:T.rg2,fontFamily:fonts.mono,marginTop:2 }}>{ep.detail}</div>}
+                </button>
+              ))}
+            </div>
+            {ifResearch && <div style={{ marginTop:12,background:T.rgBg,border:`1px solid ${T.rg}25`,borderRadius:8,padding:'10px 14px',fontSize:11,color:T.w5,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>{ifLoad?'Loading research…':ifResearch}</div>}
+          </div>
+          <div style={{ marginBottom:24 }}>
+            <FieldLabel>Cuisine</FieldLabel>
+            <div style={{ display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8 }}>
+              {CUISINES.map(c=>(
+                <button key={c.id} onClick={()=>setCuisine(c.id)} style={{ background:cuisine===c.id?T.rgBg:T.w,border:`1px solid ${cuisine===c.id?T.rg:T.w3}`,borderRadius:8,padding:'10px 12px',cursor:'pointer',textAlign:'left',transition:'all .15s' }}>
+                  <div style={{ fontSize:12,color:cuisine===c.id?T.rg2:T.w6,fontFamily:fonts.sans,fontWeight:500,marginBottom:2 }}>{c.label}</div>
+                  <div style={{ fontSize:10,color:T.w4,fontFamily:fonts.mono }}>{c.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+          <BtnPrimary onClick={genMenu} loading={genLoad} disabled={!cuisine}>Generate menu</BtnPrimary>
+        </Panel>
+        {genResult && <Panel>
+          <FieldLabel>Generated menu</FieldLabel>
+          <div style={{ fontSize:13,color:T.w6,lineHeight:1.9,fontFamily:fonts.sans,fontWeight:300 }}>
+            {genResult.split('\n').map((l,i)=>{
+              if(l.startsWith('**')&&l.endsWith('**'))return<div key={i} style={{ fontFamily:fonts.serif,fontSize:15,fontWeight:600,color:T.w7,marginTop:14,marginBottom:3 }}>{l.replace(/\*\*/g,'')}</div>;
+              return l.trim()?<div key={i} style={{ marginBottom:4 }}>{l}</div>:null;
+            })}
+          </div>
+        </Panel>}
       </div>
     );
 
