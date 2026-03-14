@@ -783,7 +783,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       const finalModerate = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_moderate||[]), ...newModerate])] : newModerate;
       const finalMild     = isNonAlcat ? [] : isAdditional ? [...new Set([...(data.alcat_mild||[]),     ...newMild])]     : newMild;
 
-      console.log('[Lab upload] Finals computed:', { severe: finalSevere.length, moderate: finalModerate.length, mild: finalMild.length, isAdditional, detectedType });
+      console.log('[Lab upload] Finals computed:', { severe: finalSevere.length, moderate: finalModerate.length, mild: finalMild.length, isAdditional });
 
       ;(async () => {
         try {
