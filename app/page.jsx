@@ -987,7 +987,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
           {data.protocolStart && data.protocolStart !== "I haven't started yet" && (
             <div>
               <FieldLabel>Approximate start date (if you remember)</FieldLabel>
-              <RuledInput value={data.protocolStartDate} onChange={e=>u('protocolStartDate',e.target.value)} placeholder="YYYY-MM-DD"/>
+              <input type="date" value={data.protocolStartDate} onChange={e=>u('protocolStartDate',e.target.value)} style={{ width:'100%',background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 0',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:T.w7,colorScheme:'dark' }}/>
             </div>
           )}
         </div>
@@ -1030,13 +1030,22 @@ function Onboarding({ onComplete, onPatientUpdate }) {
               <>
                 <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w6, marginBottom:8 }}>Upload your lab results</div>
                 <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, marginBottom:20 }}>ALCAT · CMA · REDOX · VCF — Mario identifies the report type automatically</div>
-                <label style={{ cursor:'pointer' }}>
-                  <input type="file" accept="image/*,application/pdf,.vcf,text/plain" style={{ display:'none' }}
-                    onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f); } }}/>
-                  <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'11px 28px', display:'inline-block', fontFamily:fonts.sans, fontSize:13, fontWeight:700 }}>
-                    Choose file
-                  </div>
-                </label>
+                <div style={{ display:'flex', gap:10, justifyContent:'center', flexWrap:'wrap' }}>
+                  <label style={{ cursor:'pointer' }}>
+                    <input type="file" accept="image/*,application/pdf,.vcf,text/plain" style={{ display:'none' }}
+                      onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f); } }}/>
+                    <div style={{ background:T.rg, color:'#fff', borderRadius:8, padding:'11px 28px', display:'inline-block', fontFamily:fonts.sans, fontSize:13, fontWeight:700 }}>
+                      Choose file
+                    </div>
+                  </label>
+                  <label style={{ cursor:'pointer' }}>
+                    <input type="file" accept="image/*" capture="environment" style={{ display:'none' }}
+                      onChange={e=>{ const f=e.target.files[0]; if(f){ setLabFile(f); parseLabFile(f); } }}/>
+                    <div style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg2, borderRadius:8, padding:'11px 22px', display:'inline-block', fontFamily:fonts.sans, fontSize:13, fontWeight:600 }}>
+                      Take a photo
+                    </div>
+                  </label>
+                </div>
                 <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:12, letterSpacing:'0.1em' }}>
                   PDF · IMAGE · VCF · ANY FORMAT
                 </div>
@@ -1441,6 +1450,7 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const chatEndRef = useRef(null);
   const labFileRef = useRef(null);
   const labFileAddRef = useRef(null);
+  const labCameraRef = useRef(null);
   const plateFileRef = useRef(null);
   const gutFileRef = useRef(null);
   const suppLabelRef = useRef(null);
@@ -4121,13 +4131,18 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
               onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, false); } e.target.value = ''; }}/>
             <input ref={labFileAddRef} type="file" accept="*/*" style={{ display:'none' }}
               onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, true); } e.target.value = ''; }}/>
+            <input ref={labCameraRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }}
+              onChange={e => { const f = e.target.files[0]; if (f) { setDashLabFile(f); dashParseFile(f, false); } e.target.value = ''; }}/>
             <div style={{ display:'flex', gap:10, justifyContent:'center', marginTop:12, flexWrap:'wrap' }}>
               <button onClick={() => labFileRef.current?.click()} style={{ background:T.rg, color:'#fff', border:'none', borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600, cursor:'pointer' }}>
                 {dashLabSuccess ? 'Replace results' : 'Choose file'}
               </button>
+              <button onClick={() => labCameraRef.current?.click()} style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg2, borderRadius:8, padding:'9px 18px', fontFamily:fonts.sans, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                Take a photo
+              </button>
               {dashLabSuccess && (
-                <button onClick={() => labFileAddRef.current?.click()} style={{ background:'none', border:`1px solid ${T.rg}`, color:T.rg, borderRadius:8, padding:'9px 22px', fontFamily:fonts.sans, fontSize:12, fontWeight:600, cursor:'pointer' }}>
-                  + Add another file
+                <button onClick={() => labFileAddRef.current?.click()} style={{ background:'none', border:`1px solid ${T.w3}`, color:T.w5, borderRadius:8, padding:'9px 18px', fontFamily:fonts.sans, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                  + Add another
                 </button>
               )}
             </div>
