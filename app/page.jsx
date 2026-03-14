@@ -1217,7 +1217,9 @@ function Onboarding({ onComplete, onPatientUpdate }) {
     let phase = 1, dayInProtocol = 1;
     if (data.protocolStart && data.protocolStart !== "I haven't started yet") {
       if (data.protocolStartDate) {
-        const days = Math.floor((Date.now() - new Date(data.protocolStartDate)) / 86400000);
+        const rawPsd = String(data.protocolStartDate).trim();
+        const normPsd = /^\d{8}$/.test(rawPsd) ? `${rawPsd.slice(0,4)}-${rawPsd.slice(4,6)}-${rawPsd.slice(6,8)}` : rawPsd;
+        const days = Math.floor((Date.now() - new Date(normPsd)) / 86400000);
         if (days <= 90)       { phase = 1; dayInProtocol = Math.max(1, days); }
         else if (days <= 120) { phase = 2; dayInProtocol = days; }
         else if (days <= 270) { phase = 3; dayInProtocol = days; }
@@ -2282,13 +2284,15 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
     return () => clearInterval(t);
   }, [chatLoad]);
 
-  // Auto-generate rotation when opening Meals tab if ALCAT mild data present but rotation empty
+  // Auto-generate rotation when ALCAT data is present but rotation has no food content.
+  // Depends on ALCAT arrays so it re-triggers if data loads after the tab is already open.
   useEffect(() => {
     const hasAlcat = (patient.severe?.length > 0) || (patient.moderate?.length > 0) || (patient.mild?.length > 0);
-    if (tab === 'rotation' && hasAlcat && !patient.rotation?.[1]) {
+    const hasContent = patient.rotation?.[1] && Object.values(patient.rotation[1]).some(arr => Array.isArray(arr) && arr.length > 0);
+    if ((tab === 'rotation' || tab === 'meals') && hasAlcat && !hasContent) {
       buildRotationFromAlcat(patient);
     }
-  }, [tab]);
+  }, [tab, patient.severe, patient.moderate, patient.mild]);
 
   // Monitor interval
   useEffect(() => {
@@ -2771,7 +2775,14 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
     4: { name:'The Land',   color:'#7A3030', bg:'#7A303014', border:'#7A303035', intention:'Today you restore your mineral reserves' },
   };
 
-  const P = patient;
+  // Compute dayInProtocol fresh from protocolStartDate so it increments daily
+  // and is immune to stale stored values. Normalize YYYYMMDD → YYYY-MM-DD.
+  const _psd = String(patient.protocolStartDate || '').trim();
+  const _psdNorm = /^\d{8}$/.test(_psd) ? `${_psd.slice(0,4)}-${_psd.slice(4,6)}-${_psd.slice(6,8)}` : _psd;
+  const _startMs = _psdNorm ? new Date(_psdNorm).getTime() : NaN;
+  const _computedDay = !isNaN(_startMs) ? Math.max(1, Math.floor((Date.now() - _startMs) / 86400000) + 1) : (patient.dayInProtocol || 1);
+  const _computedPhase = _computedDay <= 90 ? 1 : _computedDay <= 120 ? 2 : _computedDay <= 270 ? 3 : 4;
+  const P = { ...patient, dayInProtocol: _computedDay, phase: _computedPhase };
   const ROT = patient.rotation || {};
   const MEALS_DATA = patient.meals || {};
   const stores = STORES[country] || STORES.SE;
@@ -3045,7 +3056,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
             <div style={{ fontFamily:fonts.sans,fontSize:12,color:th.color,fontStyle:'italic' }}>{th.intention}</div>
           </div>
         );})()}
-        {ROT[rotDay] && Object.keys(ROT[rotDay]).length > 0 ? (
+        {ROT[rotDay] && Object.values(ROT[rotDay]).some(arr => arr.length > 0) ? (
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:10 }}>
             {Object.entries(ROT[rotDay]).map(([cat,items])=>{ const th=DAY_THEMES[rotDay]; const catKey=`${rotDay}_${cat}`; const isOpen=expandedCats[catKey]!==false; return (
               <div key={cat} onClick={()=>setExpandedCats(prev=>({...prev,[catKey]:!isOpen}))} style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:'12px',cursor:'pointer' }}>
