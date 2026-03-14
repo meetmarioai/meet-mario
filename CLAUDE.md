@@ -119,9 +119,9 @@ the system prompt file and clinical reasoning would be exposed.
 - [ ] Booking insert failure (Supabase)
 - [ ] meetmario.ai custom domain (Cloudflare → Inleed nameserver pending)
 - [ ] Resend domain verification for medibalans.com
-- [ ] Onboarding skipped symptom questions — new steps replaced existing symptom step instead of being added after it.
 
 ### Resolved
+- [x] Onboarding skipped symptom questions — merged "Your journey so far" (step 3) back into "Your Symptoms" (step 2). Duration/practitioners/prior-approaches now in same step as checkboxes. UPLOAD_STEP 8 → 7. Step count 10 → 9.
 - [x] Chat crashes on second message — root cause: showContactButton spreading into Anthropic message objects via `...m`, causing 400 validation errors. Fixed: apiMsgs returns explicit `{ role, content }` only. System prompt is ~13K tokens (well within 200K limit); 500-char truncation kept as guard.
 - [x] Blood work PDFs (Unilabs) parsed as ALCAT — parser now routes report_type=LAB to bloodWork[] namespace. ALCAT arrays untouched. Fixes testosterone/ferritin/DHEAS appearing as reactive foods.
 - [x] ALCAT SEVERE: 0 for Christina — root cause was blood work upload overwriting alcat_results with empty arrays. Fixed by bug above.

@@ -716,8 +716,8 @@ function Onboarding({ onComplete, onPatientUpdate }) {
   const u = (k, v) => setData(p => ({ ...p, [k]:v }));
   const toggle = (k, v) => setData(p => ({ ...p, [k]: p[k].includes(v) ? p[k].filter(x => x !== v) : [...p[k], v] }));
 
-  // Upload step (index 8) is skipped for patients with no tests
-  const UPLOAD_STEP = 8;
+  // Upload step (index 7) is skipped for patients with no tests
+  const UPLOAD_STEP = 7;
   const skipUpload = () => data.testingStatus === "No, I haven't been tested yet";
   const nextStep = cur => { const n = cur + 1; return n === UPLOAD_STEP && skipUpload() ? n + 1 : n; };
   const prevStep = cur => { const p = cur - 1; return p === UPLOAD_STEP && skipUpload() ? p - 1 : p; };
@@ -801,13 +801,6 @@ function Onboarding({ onComplete, onPatientUpdate }) {
               </div>
             </div>
           ))}
-        </div>
-      ),
-    },
-    {
-      title:"Your journey so far", sub:"Understanding what you've tried helps us calibrate your protocol.",
-      render:() => (
-        <div>
           <div style={{ marginBottom:24 }}>
             <FieldLabel>How long have you been experiencing these symptoms?</FieldLabel>
             <div style={{ display:'flex',flexWrap:'wrap',gap:8,marginTop:4 }}>
