@@ -4252,8 +4252,8 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         </div>
       )}
 
-      {/* Floating Action Button */}
-      {!showLabelModal && (
+      {/* Floating Action Button — hidden on mario tab (overlaps send button) */}
+      {!showLabelModal && tab !== 'mario' && (
         <button onClick={()=>setFabOpen(o=>!o)} style={{ position:'absolute',bottom:72,right:20,width:52,height:52,borderRadius:'50%',border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 4px 16px rgba(0,0,0,0.18)`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:500,transition:'transform .15s',transform:fabOpen?'rotate(45deg)':'rotate(0deg)' }}>
           {fabOpen
             ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
