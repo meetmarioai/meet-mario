@@ -73,6 +73,9 @@ reintroduce it and see how your biology responds."
 No markdown formatting in chat responses. No **bold**, no - bullet points, no ## headers.
 Patients see raw text. Mario speaks in conversational paragraphs like a doctor would.
 
+### 13. File Type Discrimination is Mandatory
+ALCAT = food reactivity. CMA = intracellular nutrients. VCF = genomic variants. Standard blood work = serum markers. Each file type has its own storage namespace. NEVER mix data across types.
+
 ---
 
 ## Appendix B — Security Architecture
@@ -100,6 +103,9 @@ grep -r "clinicalSNPs\|POS_INDEX\|MTHFR\|rs1801133\|sigmoid\|Biological Entropy"
 # Should return ZERO matches
 ```
 
+### Blood Work / Standard Lab PDFs
+Blood work / standard lab PDFs are a NEW file type. They must NOT be routed into ALCAT arrays (severe/moderate/mild). They need their own data namespace: bloodWork[]
+
 ### GitHub Repo
 Must be PRIVATE. Never make public. Even with server-side logic,
 the system prompt file and clinical reasoning would be exposed.
@@ -113,6 +119,10 @@ the system prompt file and clinical reasoning would be exposed.
 - [ ] Booking insert failure (Supabase)
 - [ ] meetmario.ai custom domain (Cloudflare → Inleed nameserver pending)
 - [ ] Resend domain verification for medibalans.com
+- [ ] Chat crashes on second message — system prompt + history exceeds token limit. Truncation to 500 chars deployed but not confirmed working.
+- [ ] Blood work PDFs (Unilabs) parsed as ALCAT — lab analytes (testosterone, ferritin, DHEAS) appear as reactive "foods." Parser needs file type discrimination.
+- [ ] Onboarding skipped symptom questions — new steps replaced existing symptom step instead of being added after it.
+- [ ] ALCAT section shows SEVERE: 0 for Christina — should be 5. Possible data overwrite from blood work upload contaminating ALCAT arrays.
 
 ### Resolved
 - [x] Deprecated anthropic-beta headers — removed
