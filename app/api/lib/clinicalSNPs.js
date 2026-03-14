@@ -879,6 +879,7 @@ export const CLINICAL_SNPS = [
     sift: null,
     polyphen: null,
     source: 'SNPedia (unverified)',
+    verified_date: '2026-03-14',
   },
   {
     rsid: 'rs1801260', gene: 'CLOCK', chrom: '4', pos: 56298551, ref: 'T', alt: 'C',
@@ -1470,6 +1471,7 @@ export const CLINICAL_SNPS = [
     sift: { prediction: 'tolerated', score: 0.05 },
     polyphen: { prediction: 'benign', score: 0.18 },
     source: 'SNPedia (unverified)',
+    verified_date: '2026-03-14',
   },
   {
     rsid: 'rs1051740', gene: 'EPHX1', chrom: '1', pos: 225899721, ref: 'T', alt: 'C',
