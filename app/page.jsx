@@ -1,7 +1,6 @@
 "use client"
 import { useState, useRef, useEffect, useCallback } from "react";
 import { buildMarioSystemPrompt } from "../lib/marioSystemPrompt";
-import { POS_INDEX, CLINICAL_RSID_SET, RSID_INDEX } from "../lib/clinicalSNPs";
 import WelcomeAvatar from "../components/WelcomeAvatar";
 import { createClient } from "@supabase/supabase-js";
 
@@ -107,7 +106,13 @@ async function callClaude(messages, system, extra = {}) {
     body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system, messages, ...bodyExtra }),
     signal: sig,
   });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => String(res.status));
+    console.error('[callClaude] HTTP', res.status, errText.slice(0, 200));
+    throw new Error('HTTP ' + res.status);
+  }
   const d = await res.json();
+  if (d.error) throw new Error(d.error);
   return (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n');
 }
 
@@ -120,7 +125,16 @@ async function callClaudeRich(messages, system, extra = {}) {
     body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, system, messages, ...bodyExtra }),
     signal: sig,
   });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => String(res.status));
+    console.error('[callClaudeRich] HTTP', res.status, errText.slice(0, 300));
+    throw new Error('HTTP ' + res.status);
+  }
   const d = await res.json();
+  if (d.error) {
+    console.error('[callClaudeRich] API error:', d.error);
+    throw new Error(d.error);
+  }
   return {
     text: (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'),
     showContactButton: d.showContactButton || false,
@@ -128,15 +142,6 @@ async function callClaudeRich(messages, system, extra = {}) {
 }
 
 // Re-enrich genomicSnps that were stored before annotation fields were added (missing gene/interpretations)
-function enrichGenomicSnps(snps) {
-  if (!snps?.length) return snps || [];
-  return snps.map(s => {
-    if (s.gene && s.het_interpretation) return s; // already fully annotated
-    const annotation = RSID_INDEX[s.rsid];
-    if (!annotation) return s;
-    return { ...annotation, ...s, gene: annotation.gene || s.gene, het_interpretation: s.het_interpretation || annotation.het_interpretation, hom_interpretation: s.hom_interpretation || annotation.hom_interpretation, functional_impact: s.functional_impact || annotation.functional_impact, domain: s.domain || annotation.domain };
-  });
-}
 
 // Extract plain text from a message content field (string or Claude API content block array)
 function getMessageText(content) {
@@ -431,84 +436,35 @@ function Onboarding({ onComplete, onPatientUpdate }) {
 
     console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| detectedType:', detectedType, '| size:', (file.size/1024).toFixed(0)+'KB');
 
-    // ── VCF — position-based matching against clinicalSNPs (same as dashboard) ──
+    // ── VCF — stream lines client-side, match server-side via /api/vcf ──
     if (isVCF) {
       try {
-        const posMatchedSnps = [];
-        const rsidLines = [];
-        let lastHeaderLine = '';
-        let totalDataLines = 0;
-        let vcfDone = false;
-
-        const extractGT = (line, ref, alt) => {
-          const cols = line.split('\t');
-          if (cols.length < 10) return { genotype: '?/?', status: 'carrier' };
-          const fmt = (cols[8] || '').split(':');
-          const smp = (cols[9] || '').split(':');
-          const gtIdx = fmt.indexOf('GT');
-          const gtRaw = (gtIdx >= 0 ? smp[gtIdx] : smp[0]) || './.';
-          const alleles = gtRaw.split(/[/|]/).map(a => a.trim());
-          const isRef = a => a === '0';
-          const isAlt = a => a !== '0' && a !== '.';
-          const allRef = alleles.every(isRef);
-          const allAlt = alleles.length > 0 && alleles.every(isAlt);
-          const status = allRef ? 'normal' : allAlt ? 'risk' : 'carrier';
-          const genotype = alleles.map(a => isRef(a) ? ref : isAlt(a) ? alt : '?').join('');
-          return { genotype, status };
-        };
-
-        const processVCFLine = (line) => {
-          if (!line) return;
-          if (line.startsWith('#')) { lastHeaderLine = line; return; }
-          totalDataLines++;
-          const cols = line.split('\t');
-          const chrom = (cols[0] || '').replace(/^chr/i, '');
-          const pos   = cols[1] || '';
-          const id    = cols[2] || '.';
-          const ref   = cols[3] || '';
-          const alt   = (cols[4] || '').split(',')[0];
-          const posKey = `${chrom}:${pos}:${ref}:${alt}`;
-          const annotation = POS_INDEX[posKey];
-          if (annotation) {
-            const { genotype, status } = extractGT(line, ref, alt);
-            if (status !== 'normal') {
-              const impact = status === 'risk'
-                ? (annotation.hom_interpretation || annotation.functional_impact || '')
-                : (annotation.het_interpretation || annotation.functional_impact || '');
-              posMatchedSnps.push({ ...annotation, genotype, status, impact });
-            }
-            return;
-          }
-          const rsMatch = [...(id.match(/rs\d+/gi) || [])];
-          if (rsMatch.some(rs => CLINICAL_RSID_SET.has(rs.toLowerCase()))) rsidLines.push(line);
-        };
-
+        const lines = [];
         try {
           const reader = file.stream().getReader();
           const decoder = new TextDecoder();
           let buf = '';
-          while (!vcfDone) {
+          let done = false;
+          while (!done) {
             const { value, done: sd } = await reader.read();
-            vcfDone = sd;
-            buf += decoder.decode(value || new Uint8Array(), { stream: !vcfDone });
+            done = sd;
+            buf += decoder.decode(value || new Uint8Array(), { stream: !done });
             let ni;
             while ((ni = buf.indexOf('\n')) >= 0) {
-              processVCFLine(buf.slice(0, ni).trimEnd());
+              lines.push(buf.slice(0, ni).trimEnd());
               buf = buf.slice(ni + 1);
-              if (posMatchedSnps.length + rsidLines.length >= 500) { vcfDone = true; reader.cancel(); break; }
+              if (lines.length >= 60000) { done = true; reader.cancel(); break; }
             }
           }
-          if (buf.trim()) processVCFLine(buf.trim());
+          if (buf.trim()) lines.push(buf.trim());
         } catch (streamErr) {
           console.warn('[VCF onboarding] stream fallback:', streamErr.message);
           const txt = await file.text();
-          for (const line of txt.split('\n')) {
-            processVCFLine(line.trimEnd());
-            if (posMatchedSnps.length + rsidLines.length >= 500) break;
-          }
+          txt.split('\n').forEach(l => lines.push(l.trimEnd()));
         }
 
-        console.log(`[VCF onboarding] Scanned ${totalDataLines} variants. Pos-matched: ${posMatchedSnps.length}. rsID candidates: ${rsidLines.length}.`);
+        const totalDataLines = lines.filter(l => l && !l.startsWith('#')).length;
+        console.log(`[VCF onboarding] Collected ${lines.length} lines (${totalDataLines} data) → /api/vcf`);
 
         if (totalDataLines === 0) {
           setLabParseError('No genetic data found. Is this a valid VCF file?');
@@ -516,44 +472,23 @@ function Onboarding({ onComplete, onPatientUpdate }) {
           return;
         }
 
-        if (posMatchedSnps.length > 0) {
-          const deduped = [...new Map(posMatchedSnps.map(s => [s.rsid, s])).values()];
-          const enriched = typeof enrichGenomicSnps === 'function' ? enrichGenomicSnps(deduped) : deduped;
-          u('genomicSnps', enriched);
-          u('genomicChecked', Object.keys(POS_INDEX).length);
-          setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-          setLabParsed(true);
-          setLabParsing(false);
-          return;
-        }
-
-        if (rsidLines.length === 0) {
-          setLabParseError('No clinically relevant variants found. Ensure GRCh37 reference genome.');
-          setLabParsing(false);
-          return;
-        }
-
-        // rsID fallback — send matched lines to Claude for annotation
-        const filteredContent = [lastHeaderLine, ...rsidLines].filter(Boolean).join('\n');
-        const vcfRes = await fetch('/api/chat', {
+        const vcfRes = await fetch('/api/vcf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            max_tokens: 4000,
-            system: 'You are a clinical genomics analyst. Return only valid JSON.',
-            messages: [{ role: 'user', content: `${rsidLines.length} VCF lines matched clinical rsIDs. Annotate each.\n\nReturn: {"snps":[{"rsid":"rs...","gene":"GENE","status":"risk|carrier","impact":"...","domain":"...","intervention":"..."}]}\n\nVCF data:\n${filteredContent.slice(0, 80000)}` }],
-          }),
+          body: JSON.stringify({ lines }),
         });
-        if (!vcfRes.ok) throw new Error('API returned ' + vcfRes.status);
-        const vcfD = await vcfRes.json();
-        if (vcfD.error) throw new Error(vcfD.error);
-        const vcfText = (Array.isArray(vcfD.content) ? vcfD.content : []).filter(b => b.type === 'text').map(b => b.text).join('');
-        let vcfJson = { snps: [] };
-        try { vcfJson = JSON.parse(vcfText.replace(/```json|```/g, '').trim()); } catch {}
-        if (vcfJson.snps?.length > 0) {
-          u('genomicSnps', vcfJson.snps);
+        if (!vcfRes.ok) throw new Error('VCF API returned ' + vcfRes.status);
+        const vcfData = await vcfRes.json();
+        if (vcfData.error) throw new Error(vcfData.error);
+
+        const { genomicSnps = [], totalChecked, noMatch } = vcfData;
+        if (genomicSnps.length > 0) {
+          u('genomicSnps', genomicSnps);
+          u('genomicChecked', totalChecked || 111);
           setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
           setLabParsed(true);
+        } else if (noMatch) {
+          setLabParseError('No clinically relevant variants found. Ensure GRCh37 reference genome.');
         } else {
           setLabParseError('No clinically relevant variants found in this VCF.');
         }
@@ -569,53 +504,12 @@ function Onboarding({ onComplete, onPatientUpdate }) {
 
     try {
       const base64 = await fileToBase64(file);
+      console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'to /api/parse-lab, base64 length:', base64.length);
 
-      // Build content — PDFs use document type (native Anthropic support), images use image type
-      const fileBlock = isPDF
-        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-        : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
-
-      console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'block, base64 length:', base64.length);
-
-      const content = [
-        fileBlock,
-        { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
-
-REPORT TYPE 1 — ALCAT (Cell Science Systems food immune reactivity panel):
-This is a Cell Science Systems ALCAT report. The layout has THREE SEPARATE reactivity columns side by side. You MUST extract all three columns independently — do NOT merge them.
-
-COLUMN LAYOUT (left to right):
-1. SEVERE column (far left) — foods highlighted in RED or dark red background. These are Class 3-4 reactions. → "severe" array
-2. MODERATE column (middle) — foods highlighted in ORANGE or amber background. These are Class 2 reactions. → "moderate" array
-3. MILD column (right) — foods highlighted in YELLOW or light yellow background. These are Class 1 reactions. → "mild" array
-4. ACCEPTABLE / GREEN — omit entirely
-
-CRITICAL: The SEVERE column is on the FAR LEFT and is often the smallest column with the fewest items. Do NOT skip it. Do NOT merge SEVERE foods into the MODERATE column. Extract every single food name from all three columns as three distinct arrays.
-
-REPORT TYPE 2 — CMA / CNA (Cell Science Systems intracellular micronutrient analysis):
-This report tests ~55 micronutrients including vitamins, minerals, amino acids, antioxidants, fatty acids, and metabolites. Extract EVERY nutrient tested.
-- Any nutrient marked DEFICIENT, VERY LOW, or critically below range → "severe"
-- Any nutrient marked LOW, BORDERLINE, or below optimal → "moderate"
-- Any nutrient in ADEQUATE / NORMAL / within range → "mild"
-- Also extract: "cma_deficiencies" for all below-range nutrients, "cma_adequate" for all in-range
-
-REPORT TYPE 3 — Blood work / other:
-Extract any out-of-range markers into "moderate", normal into "mild".
-
-Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[]}
-Lowercase English names. Translate Swedish to English. Include EVERY nutrient found.` }
-      ];
-
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/parse-lab', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-opus-4-6',
-          max_tokens: 4000,
-          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
-          messages: [{ role: 'user', content }],
-        }),
+        body: JSON.stringify({ fileBase64: base64, mediaType: isPDF ? 'application/pdf' : imageMediaType, isPDF }),
       });
 
       if (!res.ok) {
@@ -625,23 +519,12 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         throw new Error(msg);
       }
 
-      const d = await res.json();
-      if (d.error) {
-        console.error('[Lab parse] API error:', d.error);
-        throw new Error(d.error);
+      const json = await res.json();
+      if (json.error) {
+        console.error('[Lab parse] API error:', json.error);
+        throw new Error(json.error);
       }
-      const text = (Array.isArray(d.content) ? d.content : [])
-        .filter(b => b.type === 'text').map(b => b.text).join('');
-
-      console.log('[Lab parse] Raw response:', text.slice(0, 300));
-
-      let json = { severe:[], moderate:[], mild:[] };
-      try {
-        json = JSON.parse(text.replace(/```json|```/g,'').trim());
-      } catch {
-        const match = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/);
-        if (match) { try { json = JSON.parse(match[0]); } catch {} }
-      }
+      console.log('[Lab parse] report_type:', json.report_type, '| severe:', (json.severe||[]).length, '| moderate:', (json.moderate||[]).length);
 
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newSevere = norm(json.severe);
@@ -649,20 +532,21 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
       const newMild = norm(json.mild);
 
       // ── Route results based on file type — CMA nutrients must NOT go into alcat arrays ──
-      if (detectedType === 'micronutrient') {
-        // CMA/CNA — route to cma fields only
-        const cmaDef = norm(json.cma_deficiencies).length > 0
-          ? norm(json.cma_deficiencies)
-          : [...newSevere, ...newModerate];
-        const cmaAdeq = norm(json.cma_adequate).length > 0 ? norm(json.cma_adequate) : newMild;
-        u('cmaDeficiencies', [...new Set([...(data.cmaDeficiencies||[]), ...cmaDef])]);
-        u('cmaAdequate',     [...new Set([...(data.cmaAdequate||[]),     ...cmaAdeq])]);
-        if (json.redox_score != null) u('redoxScore', Number(json.redox_score));
-        console.log('[Lab parse CMA] Deficiencies:', cmaDef.length, '| Adequate:', cmaAdeq.length, '| RedoxScore:', json.redox_score);
-      } else if (detectedType === 'redox') {
-        // REDOX — store score only
-        if (json.redox_score != null) u('redoxScore', Number(json.redox_score));
-        console.log('[Lab parse REDOX] Score:', json.redox_score);
+      const isCMAResult = detectedType === 'micronutrient' || detectedType === 'redox' || json.report_type === 'CMA';
+      if (isCMAResult) {
+        // CMA/CNA/REDOX — comprehensive prompt returns cma_deficiencies, cma_adequate, redox_score
+        const cmaDef  = norm(json.cma_deficiencies).length ? norm(json.cma_deficiencies) : norm(json.deficient);
+        const cmaBord = norm(json.borderline);
+        const cmaAdeq = norm(json.cma_adequate).length ? norm(json.cma_adequate) : norm(json.adequate);
+        const allBelow = [...new Set([...cmaDef, ...cmaBord])];
+        if (allBelow.length || cmaAdeq.length) {
+          u('cmaDeficiencies',  [...new Set([...(data.cmaDeficiencies||[]),  ...allBelow])]);
+          u('cmaAdequate',      [...new Set([...(data.cmaAdequate||[]),      ...cmaAdeq])]);
+          u('cmaAllNutrients',  [...new Set([...(data.cmaAllNutrients||[]),  ...allBelow, ...cmaAdeq])]);
+        }
+        const redoxScore = json.redox_score ?? json.redoxScore ?? null;
+        if (redoxScore != null) u('redoxScore', Number(redoxScore));
+        console.log('[Lab parse CMA/REDOX] Deficient:', allBelow.length, '| Adequate:', cmaAdeq.length, '| RedoxScore:', redoxScore);
       } else {
         // ALCAT or unknown — route to alcat arrays
         if (isAdditional) {
@@ -676,13 +560,13 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         }
         console.log('[Lab parse ALCAT] Severe:', newSevere.length, '| Moderate:', newModerate.length, '| Mild:', newMild.length);
       }
-      u('alcat_raw', text);
       setLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
 
       const hasResults = newSevere.length > 0 || newModerate.length > 0 || newMild.length > 0
-        || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0;
+        || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0
+        || norm(json.deficient).length > 0 || norm(json.adequate).length > 0;
       if (!hasResults) {
-        setLabParseError('API returned OK but 0 items extracted. Raw: ' + text.slice(0, 150));
+        setLabParseError('API returned OK but 0 items extracted.');
       }
 
       // ── Show results immediately, save to Supabase in background ────────────
@@ -916,10 +800,10 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 ) : lastFileType === 'micronutrient' ? (
                   <>
                     <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
-                      EXTRACTED — {(data.alcat_severe||[]).length + (data.alcat_moderate||[]).length + (data.alcat_mild||[]).length} nutrients analysed
+                      EXTRACTED — {(data.cmaAllNutrients||[]).length} nutrients analysed
                     </div>
-                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
-                      {[['Deficient', data.alcat_severe, T.err], ['Borderline', data.alcat_moderate, T.warn], ['Adequate', data.alcat_mild, T.ok]].map(([label, items, color]) => (
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
+                      {[['Deficient', data.cmaDeficiencies, T.err], ['Adequate', data.cmaAdequate, T.ok]].map(([label, items, color]) => (
                         <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
                           <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>{label} · {(items||[]).length}</div>
                           {(items||[]).slice(0,6).map(f => (
@@ -933,15 +817,15 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                 ) : lastFileType === 'genomic' ? (
                   <>
                     <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.ok, letterSpacing:'0.14em', marginBottom:12 }}>
-                      EXTRACTED — {(data.alcat_severe||[]).length + (data.alcat_moderate||[]).length + (data.alcat_mild||[]).length} variants matched to clinical SNP index
+                      EXTRACTED — {(data.genomicSnps||[]).length} variants matched to clinical SNP index
                     </div>
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, textAlign:'left', marginBottom:14 }}>
-                      {[['Pathogenic', data.alcat_severe, T.err], ['Uncertain significance', data.alcat_moderate, T.warn]].map(([label, items, color]) => (
+                      {[['Pathogenic', (data.genomicSnps||[]).filter(s => s.status === 'risk'), T.err], ['Uncertain significance', (data.genomicSnps||[]).filter(s => s.status === 'carrier'), T.warn]].map(([label, items, color]) => (
                         <div key={label} style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${color}30` }}>
                           <div style={{ fontFamily:fonts.mono, fontSize:10, color, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>VARIANTS · {(items||[]).length}</div>
                           <div style={{ fontFamily:fonts.sans, fontSize:11, color:T.w5, marginBottom:6 }}>{label}</div>
-                          {(items||[]).slice(0,5).map(f => (
-                            <div key={f} style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
+                          {(items||[]).slice(0,5).map(s => (
+                            <div key={s.rsid||s.variant||s.gene} style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{s.gene}{s.rsid ? ' · ' + s.rsid : s.variant ? ' · ' + s.variant : ''}</div>
                           ))}
                           {(items||[]).length > 5 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(items||[]).length-5} more</div>}
                         </div>
@@ -960,11 +844,11 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
                         <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, marginTop:4 }}>/100</div>
                       </div>
                       <div style={{ background:'#fff', borderRadius:8, padding:'10px 12px', border:`1px solid ${T.err}30` }}>
-                        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.err, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>DEFICIENT ANTIOXIDANTS · {(data.alcat_severe||[]).length}</div>
-                        {(data.alcat_severe||[]).slice(0,5).map(f => (
+                        <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.err, letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:6 }}>DEFICIENT ANTIOXIDANTS · {(data.cmaDeficiencies||[]).length}</div>
+                        {(data.cmaDeficiencies||[]).slice(0,5).map(f => (
                           <div key={f} style={{ fontFamily:fonts.sans, fontSize:11, color:T.w6, padding:'2px 0', borderBottom:`1px solid ${T.w1}` }}>{f}</div>
                         ))}
-                        {(data.alcat_severe||[]).length > 5 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(data.alcat_severe||[]).length-5} more</div>}
+                        {(data.cmaDeficiencies||[]).length > 5 && <div style={{ fontFamily:fonts.mono, fontSize:11, color:T.w4, marginTop:4 }}>+{(data.cmaDeficiencies||[]).length-5} more</div>}
                       </div>
                     </div>
                   </>
@@ -1100,6 +984,8 @@ export default function MeetMario({ patient: patientProp }) {
   const [showAuth, setShowAuth] = useState(false);
   const [showBES, setShowBES] = useState(false);
   const [besScore, setBesScore] = useState(null);
+  const [besBand, setBesBand] = useState(null);
+  const [besInterpretation, setBesInterpretation] = useState('');
   const [showDiet, setShowDiet] = useState(false);
   const [dietPlan, setDietPlan] = useState('');
   const [dietLoading, setDietLoading] = useState(false);
@@ -1456,97 +1342,37 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
         return;
       }
 
-      // VCF genetic files — stream line-by-line to avoid OOM on large files (23andMe = 25MB, Dante = 400MB)
+      // VCF genetic files — stream lines client-side, match server-side via /api/vcf
       if (isVCF) {
-        // ── POSITION & RSID LOOKUP — imported from lib/clinicalSNPs.js ──
-        // POS_INDEX: CHROM:POS:REF:ALT → full SNP annotation (GRCh37, no chr prefix)
-        // CLINICAL_RSID_SET: Set of all clinical rsIDs (for 23andMe rsID-based matching)
 
-        // ── STREAMING VCF READER — never loads full file into memory ──
-        // Only SNPs where we can intervene via supplementation, diet, training, hormesis, circadian, or lifestyle
-        const clinicalRsIds = CLINICAL_RSID_SET;
-
-        // ── GT extraction helper ──
-        const extractGT = (line, ref, alt) => {
-          const cols = line.split('\t');
-          if (cols.length < 10) return { genotype: '?/?', status: 'carrier' };
-          const fmt = (cols[8] || '').split(':');
-          const smp = (cols[9] || '').split(':');
-          const gtIdx = fmt.indexOf('GT');
-          const gtRaw = (gtIdx >= 0 ? smp[gtIdx] : smp[0]) || './.';
-          const alleles = gtRaw.split(/[/|]/).map(a => a.trim());
-          const isRef = a => a === '0';
-          const isAlt = a => a !== '0' && a !== '.';
-          const allRef = alleles.every(isRef);
-          const allAlt = alleles.length > 0 && alleles.every(isAlt);
-          const status = allRef ? 'normal' : allAlt ? 'risk' : 'carrier';
-          const genotype = alleles.map(a => isRef(a) ? ref : isAlt(a) ? alt : '?').join('');
-          return { genotype, status };
-        };
-
-        // ── STREAM the file line-by-line — never loads full VCF into RAM ──
-        const posMatchedSnps = []; // direct position matches (no Claude needed)
-        const rsidLines = [];      // rsID-matched lines (send to Claude as fallback)
-        let lastHeaderLine = '';
+        // Collect VCF lines client-side (streaming for Android compatibility)
+        const lines = [];
         let totalDataLines = 0;
-        let done = false;
-
-        const processLine = (line) => {
-          if (!line) return;
-          if (line.startsWith('#')) { lastHeaderLine = line; return; }
-          totalDataLines++;
-          const cols = line.split('\t');
-          const chrom = (cols[0] || '').replace(/^chr/i, ''); // strip chr prefix
-          const pos   = cols[1] || '';
-          const id    = cols[2] || '.';
-          const ref   = cols[3] || '';
-          const alt   = (cols[4] || '').split(',')[0]; // first ALT only
-
-          // 1. Position-based match (primary — works on Danteomics/no-rsID VCFs)
-          const posKey = `${chrom}:${pos}:${ref}:${alt}`;
-          const annotation = POS_INDEX[posKey];
-          if (annotation) {
-            const { genotype, status } = extractGT(line, ref, alt);
-            if (status !== 'normal') { // skip wild-type
-              const impact = status === 'risk'
-                ? (annotation.hom_interpretation || annotation.functional_impact || '')
-                : (annotation.het_interpretation || annotation.functional_impact || '');
-              posMatchedSnps.push({ ...annotation, genotype, status, impact });
-            }
-            return;
-          }
-
-          // 2. rsID-based match (fallback — works on 23andMe and annotated VCFs)
-          const rsMatch = [...(id.match(/rs\d+/gi) || []), ...(line.match(/(?:^|[;\t])RS=(\d+)/g) || []).map(m => 'rs' + m.replace(/.*RS=/i,''))];
-          if (rsMatch.some(rs => clinicalRsIds.has(rs.toLowerCase()))) {
-            rsidLines.push(line);
-          }
-        };
-
         try {
           const streamReader = file.stream().getReader();
           const decoder = new TextDecoder();
           let lineBuffer = '';
+          let done = false;
           while (!done) {
             const { value, done: streamDone } = await streamReader.read();
             done = streamDone;
             lineBuffer += decoder.decode(value || new Uint8Array(), { stream: !done });
             let nlIdx;
             while ((nlIdx = lineBuffer.indexOf('\n')) >= 0) {
-              processLine(lineBuffer.slice(0, nlIdx).trimEnd());
+              lines.push(lineBuffer.slice(0, nlIdx).trimEnd());
               lineBuffer = lineBuffer.slice(nlIdx + 1);
-              if (posMatchedSnps.length + rsidLines.length >= 500) { done = true; streamReader.cancel(); break; }
+              if (lines.length >= 60000) { done = true; streamReader.cancel(); break; }
             }
           }
-          if (lineBuffer.trim()) processLine(lineBuffer.trim());
+          if (lineBuffer.trim()) lines.push(lineBuffer.trim());
         } catch (streamErr) {
           console.warn('[VCF] stream() fallback:', streamErr.message);
           const textContent = await file.text();
-          for (const line of textContent.split('\n')) {
-            processLine(line.trimEnd());
-            if (posMatchedSnps.length + rsidLines.length >= 500) break;
-          }
+          textContent.split('\n').forEach(l => lines.push(l.trimEnd()));
         }
+
+        totalDataLines = lines.filter(l => l && !l.startsWith('#')).length;
+        console.log(`[VCF] Collected ${lines.length} lines (${totalDataLines} data) → /api/vcf`);
 
         if (totalDataLines === 0) {
           setDashLabError('No genetic data found in this file. Is it a valid VCF?');
@@ -1554,127 +1380,41 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
           return;
         }
 
-        // ── PATH A: position matches found — annotate directly, no Claude ──
-        const checkedCount = Object.keys(POS_INDEX).length;
-        console.log(`[VCF] Scanned ${totalDataLines} variants. Position-matched: ${posMatchedSnps.length}/${checkedCount} clinical positions. rsID-matched: ${rsidLines.length}.`);
-
-        // ── DEBUG: log sample posKeys to verify format matches POS_INDEX ──
-        {
-          const sampleKeys = [];
-          const sampleLines = [];
-          let debugCount = 0;
-          const debugReader = file.stream().getReader();
-          const debugDecoder = new TextDecoder();
-          let debugBuf = '';
-          let debugDone = false;
-          try {
-            while (!debugDone && debugCount < 20) {
-              const { value, done: sd } = await debugReader.read();
-              debugDone = sd;
-              debugBuf += debugDecoder.decode(value || new Uint8Array(), { stream: !sd });
-              let ni;
-              while ((ni = debugBuf.indexOf('\n')) >= 0 && debugCount < 20) {
-                const ln = debugBuf.slice(0, ni).trimEnd();
-                debugBuf = debugBuf.slice(ni + 1);
-                if (!ln || ln.startsWith('#')) continue;
-                const c = ln.split('\t');
-                const chrom = (c[0]||'').replace(/^chr/i,'');
-                const pos = c[1]||''; const ref = c[3]||''; const alt = (c[4]||'').split(',')[0];
-                sampleKeys.push(`${chrom}:${pos}:${ref}:${alt}`);
-                sampleLines.push(ln.slice(0, 120));
-                debugCount++;
-              }
-            }
-          } catch {} finally { try { debugReader.cancel(); } catch {} }
-          console.log('[VCF DEBUG] First data lines (raw):', sampleLines);
-          console.log('[VCF DEBUG] Sample posKeys generated:', sampleKeys);
-          const firstPosKey = Object.keys(POS_INDEX)[0];
-          console.log('[VCF DEBUG] First POS_INDEX key:', firstPosKey, '| matches any sample:', sampleKeys.includes(firstPosKey));
-          console.log('[VCF DEBUG] rsID candidates found:', rsidLines.slice(0, 5).map(l => l.split('\t').slice(0,5).join('\t')));
-        }
-        posMatchedSnps.forEach(s => console.log(`  ✓ ${s.gene} ${s.rsid} ${s.genotype} [${s.status}]`));
-
-        if (posMatchedSnps.length > 0) {
-          const deduped = [...new Map(posMatchedSnps.map(s => [s.rsid, s])).values()];
-          const updatedSnps = [...(patient.genomicSnps || []).filter(s => !deduped.find(n => n.rsid === s.rsid)), ...deduped];
-          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps, genomicChecked: checkedCount }; persistLabData(updated, file); return updated; });
-          setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-          setDashLabSuccess(true);
-          setDashLabParsing(false);
-          return;
-        }
-
-        // ── PATH B: only rsID matches — send to Claude for annotation ──
-        const filteredContent = [lastHeaderLine, ...rsidLines].filter(Boolean).join('\n');
-        const snpCount = rsidLines.length;
-
-        if (snpCount === 0) {
-          setDashLabError('No clinically relevant variants found. VCF has no rsIDs and no position matches — ensure GRCh37 reference.');
-          setDashLabParsing(false);
-          return;
-        }
-
-        const res = await fetch('/api/chat', {
+        const vcfRes = await fetch('/api/vcf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            max_tokens: 4000,
-            system: 'You are a clinical genomics analyst. Extract variants from VCF data and return structured JSON. Only include variants where a specific intervention exists.',
-            messages: [{ role: 'user', content: `Genetic data: ${snpCount} pre-filtered lines out of ${totalDataLines} total variants.
-
-For each variant extract: rsid, gene, genotype (e.g. CT), status ("risk"=homozygous alt, "carrier"=heterozygous, "normal"=ref/ref), domain (methylation/detox/inflammation/longevity/nutrients/circadian/ans/exercise/sun), impact (one sentence with specific intervention).
-Skip normal/wild-type. Return ONLY JSON:
-{"snps":[{"rsid":"rs1801133","gene":"MTHFR","genotype":"CT","status":"carrier","domain":"methylation","impact":"Supplement methylfolate 400mcg, avoid folic acid."}]}
-
-Data:
-${filteredContent.slice(0, 30000)}` }],
-          }),
+          body: JSON.stringify({ lines }),
         });
-        if (!res.ok) throw new Error('API returned ' + res.status);
-        const d = await res.json();
-        if (d.error) throw new Error(d.error);
-        const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-        let json = {};
-        const cleanText = text.replace(/```json|```/g, '').trim();
-        try { json = JSON.parse(cleanText); } catch {
-          const idx = Math.max(cleanText.indexOf('{"snps"'), cleanText.indexOf('{ "snps"'));
-          if (idx >= 0) {
-            let depth = 0, end = idx;
-            for (let i = idx; i < cleanText.length; i++) {
-              if (cleanText[i] === '{') depth++;
-              else if (cleanText[i] === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
-            }
-            try { json = JSON.parse(cleanText.slice(idx, end)); } catch {}
-          }
+        if (!vcfRes.ok) throw new Error('VCF API returned ' + vcfRes.status);
+        const vcfData = await vcfRes.json();
+        if (vcfData.error) throw new Error(vcfData.error);
+
+        const { genomicSnps = [], totalChecked, noMatch } = vcfData;
+        if (genomicSnps.length > 0) {
+          const updatedSnps = [...(patient.genomicSnps || []).filter(s => !genomicSnps.find(n => n.rsid === s.rsid)), ...genomicSnps];
+          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps, genomicChecked: totalChecked || 111 }; persistLabData(updated, file); return updated; });
+          setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
+          setDashLabSuccess(true);
+        } else if (noMatch) {
+          setDashLabError('No clinically relevant variants found. VCF has no position matches — ensure GRCh37 reference.');
+        } else {
+          setDashLabError('No clinically relevant SNPs found in this VCF file');
         }
-        if (json.snps?.length) {
-          const updatedSnps = [...(patient.genomicSnps || []).filter(s => !json.snps.find(n => n.rsid === s.rsid)), ...json.snps];
-          setPatient(p => { const updated = { ...p, genomicSnps: updatedSnps }; persistLabData(updated, file); return updated; });
-        }
-        setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-        if ((json.snps?.length || 0) > 0) { setDashLabSuccess(true); } else { setDashLabError('No clinically relevant SNPs found in this VCF file'); }
         setDashLabParsing(false);
         return;
       }
 
-      // Word / text files — file.text() handles Android content:// URIs; FileReader does not
+      // Word / text files — send text content to /api/parse-lab
       if (isWord) {
         const textContent = await file.text();
-        const res = await fetch('/api/chat', {
+        const res = await fetch('/api/parse-lab', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            max_tokens: 4000,
-            system: 'You extract structured data from medical lab results. Return only valid JSON.',
-            messages: [{ role: 'user', content: `This is a document with lab results. Extract any relevant health data.\n\nExtract reactive foods:\n{"severe":[],"moderate":[],"mild":[]}\n\nFile contents:\n${textContent.slice(0, 50000)}` }],
-          }),
+          body: JSON.stringify({ textContent }),
         });
         if (!res.ok) throw new Error('API returned ' + res.status);
-        const d = await res.json();
-        if (d.error) throw new Error(d.error);
-        const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-        let json = { severe: [], moderate: [], mild: [] };
-        try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); } catch {}
+        const json = await res.json();
+        if (json.error) throw new Error(json.error);
         const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
         const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
         if (newS.length || newM.length || newMi.length) {
@@ -1695,73 +1435,17 @@ ${filteredContent.slice(0, 30000)}` }],
         return;
       }
 
-      // PDF / Image — arrayBuffer() handles Android content:// URIs; FileReader does not
+      // PDF / Image — send to /api/parse-lab
       const base64 = await fileToBase64(file);
-      const fileBlock = isPDF
-        ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-        : { type: 'image', source: { type: 'base64', media_type: imageMediaType, data: base64 } };
-
-      const res = await fetch('/api/chat', {
+      const res = await fetch('/api/parse-lab', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          max_tokens: 4000,
-          system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else.',
-          messages: [{ role: 'user', content: [
-            fileBlock,
-            { type: 'text', text: `This is a medical lab test result. Identify the report type and extract ALL data.
-
-REPORT TYPE 1 — ALCAT (Cell Science Systems food immune reactivity panel):
-This is a Cell Science Systems ALCAT report. The layout has THREE SEPARATE reactivity columns side by side. You MUST extract all three columns independently — do NOT merge them.
-
-COLUMN LAYOUT (left to right):
-1. SEVERE column (far left) — foods highlighted in RED or dark red background. These are Class 3-4 reactions. → "severe" array
-2. MODERATE column (middle) — foods highlighted in ORANGE or amber background. These are Class 2 reactions. → "moderate" array
-3. MILD column (right) — foods highlighted in YELLOW or light yellow background. These are Class 1 reactions. → "mild" array
-4. ACCEPTABLE / GREEN — omit entirely
-
-CRITICAL: The SEVERE column is on the FAR LEFT and is often the smallest column with the fewest items. Do NOT skip it. Do NOT merge SEVERE foods into the MODERATE column. Extract every single food name from all three columns as three distinct arrays.
-
-REPORT TYPE 2 — CMA / CNA / Spectrox (Cell Science Systems intracellular micronutrient analysis):
-This is a Cell Science Systems CMA or CNA report. It tests ~55 intracellular micronutrients.
-
-TABLE LAYOUT: The report has a table where each ROW is one nutrient. The LEFT column contains the nutrient name. The right columns show quartile ranges (1st, 2nd, 3rd, 4th quartile) with the patient's result marked — often as a filled bar, dot, or highlighted cell in one of the quartile columns. Lower quartiles (1st, 2nd) = below optimal. Upper quartiles (3rd, 4th) = adequate.
-
-The Spectrox score (Total Antioxidant Function) is a single numeric score, often shown prominently at the top or bottom.
-
-READ EVERY ROW of the nutrient table. Do NOT skip any nutrient. If a nutrient is in the 1st or 2nd quartile it is deficient/low. If in 3rd or 4th quartile it is adequate.
-
-For the summary arrays:
-- 1st quartile / DEFICIENT / VERY LOW → "severe" AND "cma_deficiencies"
-- 2nd quartile / LOW / BORDERLINE → "moderate" AND "cma_deficiencies"
-- 3rd or 4th quartile / ADEQUATE / NORMAL → "mild" AND "cma_adequate"
-
-Also extract:
-- "cma_deficiencies": ALL below-optimal nutrient names (1st + 2nd quartile)
-- "cma_adequate": ALL optimal nutrient names (3rd + 4th quartile)
-- "cma_nutrients": EVERY nutrient as [{"name":"vitamin d","value":32,"unit":"ng/mL","range_low":30,"range_high":100,"status":"adequate|low|deficient"}]
-- "redox_score": the Spectrox / REDOX / Total Antioxidant Function score (numeric only)
-- "cma_antioxidants": antioxidant-specific nutrients: [{"name":"glutathione","value":...,"status":"adequate|low|deficient"}]
-- "cma_categories": {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
-
-REPORT TYPE 3 — Blood work / other:
-Extract any out-of-range markers into "moderate", normal into "mild".
-
-Return ONLY this JSON (no markdown):
-{"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{}}
-Lowercase English names. Translate Swedish to English. Include EVERY nutrient found — do not skip any.` }
-          ] }],
-        }),
+        body: JSON.stringify({ fileBase64: base64, mediaType: isPDF ? 'application/pdf' : imageMediaType, isPDF }),
       });
 
       if (!res.ok) throw new Error('API returned ' + res.status);
-      const d = await res.json();
-      if (d.error) throw new Error(d.error);
-      const text = (d.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-
-      let json = { severe: [], moderate: [], mild: [] };
-      try { json = JSON.parse(text.replace(/```json|```/g, '').trim()); }
-      catch { const m = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/); if (m) try { json = JSON.parse(m[0]); } catch {} }
+      const json = await res.json();
+      if (json.error) throw new Error(json.error);
 
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
@@ -1889,7 +1573,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
         if (!pd?.name && row?.full_name) { if (pd) pd.name = row.full_name; else pd = { name: row.full_name }; }
         if (pd?.name) {
           pd = mergeAlcat(pd, alcat);
-          if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
+          // genomicSnps already fully annotated by server
           try { sessionStorage.setItem('mm_profile_' + user.id, JSON.stringify(pd)); } catch {}
           console.log('[profile] Loaded — severe:', pd.severe?.length || 0, '| cma:', pd.cmaDeficiencies?.length || 0, '| redox:', pd.redoxScore ?? 'null', '| snps:', pd.genomicSnps?.length || 0);
           return pd;
@@ -1919,7 +1603,7 @@ Lowercase English names. Translate Swedish to English. Include EVERY nutrient fo
           if (!pd.severe?.length && pd.alcat_severe?.length) {
             pd.severe = pd.alcat_severe; pd.moderate = pd.alcat_moderate || []; pd.mild = pd.alcat_mild || [];
           }
-          if (pd.genomicSnps?.length) pd.genomicSnps = enrichGenomicSnps(pd.genomicSnps);
+          // genomicSnps already fully annotated by server
           console.log('[profile] sessionStorage fallback (Supabase unreachable)');
           return pd;
         }
@@ -2276,8 +1960,10 @@ Keep notes sensory and practical — not clinical. Examples:
     chatAbortRef.current = controller;
     try {
       const contextNote = buildPatientContext();
-      const apiMsgs = msgs.map((m, i) => {
-        if (i === msgs.length - 1 && m.role === 'user' && contextNote) {
+      // Cap history at last 12 messages to avoid timeouts with large conversation history
+      const recentMsgs = msgs.slice(-12);
+      const apiMsgs = recentMsgs.map((m, i) => {
+        if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
           return { ...m, content: m.content + contextNote };
         }
         return m;
@@ -4269,30 +3955,35 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         generateDiet(data).catch(e => { console.error('[onComplete] Auto-generateDiet error:', e); setDietPlan('ERROR'); setDietLoading(false); });
       }
 
-      let score = 20;
-      if (data.symptoms?.length >= 5) score += 25;
-      else if (data.symptoms?.length >= 3) score += 15;
-      else if (data.symptoms?.length >= 1) score += 8;
-      if (data.yearsInCurrentCountry && +data.yearsInCurrentCountry < 5) score += 12;
-      if (data.hormonalStatus && data.hormonalStatus !== 'Not applicable') score += 8;
-      if (data.medications?.trim()) score += 10;
-      if (data.conditions?.trim()) score += 10;
-      setBesScore(Math.min(score, 92));
-      setShowBES(true);
+      fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symptoms: data.symptoms,
+          yearsInCurrentCountry: data.yearsInCurrentCountry,
+          hormonalStatus: data.hormonalStatus,
+          medications: data.medications,
+          conditions: data.conditions,
+        }),
+      }).then(r => r.json()).then(({ score, band, interpretation }) => {
+        setBesScore(score);
+        setBesBand(band);
+        setBesInterpretation(interpretation);
+        setShowBES(true);
+      }).catch(e => {
+        console.error('[BES score]', e.message);
+        setShowBES(true); // show screen anyway, score will be null
+      });
     }}/>
   );
 
   // ── BES RESULTS ────────────────────────────────────────────────────────────────
   if (showBES) {
-    const s = besScore;
-    const level = s < 35 ? 'Low' : s < 60 ? 'Moderate' : 'Elevated';
-    const levelColor = s < 35 ? T.ok : s < 60 ? T.warn : T.err;
+    const s = besScore ?? 0;
+    const level = besBand || (s < 35 ? 'Low' : s < 60 ? 'Moderate' : 'Elevated');
+    const levelColor = level === 'Low' ? T.ok : level === 'Moderate' ? T.warn : T.err;
     const arc = Math.round((s / 100) * 180);
-    const desc = s < 35
-      ? 'Your biological signals suggest a relatively low entropic burden. Your system has strong repair capacity and is likely to respond quickly to the protocol.'
-      : s < 60
-      ? 'Your biological signals suggest a moderate entropic burden accumulated over time. Your system has good repair capacity but will benefit from the full 90-day protocol.'
-      : 'Your biological signals suggest an elevated entropic burden with deeper systemic involvement. Your system will respond — but in layers. The full multi-stage protocol is what your biology needs.';
+    const desc = besInterpretation || 'Computing your biological entropy score...';
     return (
       <div style={{ minHeight:'100vh', background:T.w, display:'flex', alignItems:'center', justifyContent:'center', fontFamily:fonts.sans }}>
         <div style={{ maxWidth:520, width:'100%', padding:'0 24px', textAlign:'center' }}>
@@ -4512,7 +4203,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
       {/* FAB action sheet overlay */}
       {fabOpen && (
         <div style={{ position:'fixed',inset:0,zIndex:800,background:'rgba(28,20,16,0.38)',backdropFilter:'blur(6px)' }} onClick={()=>setFabOpen(false)}>
-          <div style={{ position:'fixed',bottom:136,right:20,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10 }} onClick={e=>e.stopPropagation()}>
+          <div style={{ position:'absolute',bottom:136,right:20,display:'flex',flexDirection:'column',alignItems:'flex-end',gap:10 }} onClick={e=>e.stopPropagation()}>
             {[
               { icon:'🏷️', label:'Scan a label', action:()=>{ labelFileRef.current?.click(); } },
               { icon:'🍽️', label:'Check my plate', action:()=>{ setFabOpen(false); setTab('plate'); } },
@@ -4529,7 +4220,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
 
       {/* Floating Action Button */}
       {!showLabelModal && (
-        <button onClick={()=>setFabOpen(o=>!o)} style={{ position:'fixed',bottom:72,right:20,width:52,height:52,borderRadius:'50%',border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 4px 16px rgba(0,0,0,0.18)`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:500,transition:'transform .15s',transform:fabOpen?'rotate(45deg)':'rotate(0deg)' }}>
+        <button onClick={()=>setFabOpen(o=>!o)} style={{ position:'absolute',bottom:72,right:20,width:52,height:52,borderRadius:'50%',border:'none',background:`linear-gradient(140deg,${T.rg3},${T.rg},${T.rg2})`,boxShadow:`0 4px 16px rgba(0,0,0,0.18)`,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',zIndex:500,transition:'transform .15s',transform:fabOpen?'rotate(45deg)':'rotate(0deg)' }}>
           {fabOpen
             ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
