@@ -679,11 +679,22 @@ function Onboarding({ onComplete, onPatientUpdate }) {
       const base64 = await fileToBase64(file);
       console.log('[Lab parse] Sending', isPDF ? 'document' : 'image', 'to /api/parse-lab, base64 length:', base64.length);
 
-      const res = await fetch('/api/parse-lab', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64: base64, mediaType: isPDF ? 'application/pdf' : imageMediaType, isPDF }),
-      });
+      const parseAbort = new AbortController();
+      const parseTimeout = setTimeout(() => parseAbort.abort(), 30000);
+      let res;
+      try {
+        res = await fetch('/api/parse-lab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64: base64, mediaType: isPDF ? 'application/pdf' : imageMediaType, isPDF }),
+          signal: parseAbort.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(parseTimeout);
+        if (fetchErr.name === 'AbortError') throw new Error('Parsing took too long. Try again or upload a different file.');
+        throw fetchErr;
+      }
+      clearTimeout(parseTimeout);
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -1887,11 +1898,22 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
       // PDF / Image — send to /api/parse-lab
       const base64 = await fileToBase64(file);
-      const res = await fetch('/api/parse-lab', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileBase64: base64, mediaType: isPDF ? 'application/pdf' : imageMediaType, isPDF }),
-      });
+      const dashAbort = new AbortController();
+      const dashTimeout = setTimeout(() => dashAbort.abort(), 30000);
+      let res;
+      try {
+        res = await fetch('/api/parse-lab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileBase64: base64, mediaType: isPDF ? 'application/pdf' : imageMediaType, isPDF }),
+          signal: dashAbort.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(dashTimeout);
+        if (fetchErr.name === 'AbortError') throw new Error('Parsing took too long. Try again or upload a different file.');
+        throw fetchErr;
+      }
+      clearTimeout(dashTimeout);
 
       if (!res.ok) throw new Error('API returned ' + res.status);
       const json = await res.json();

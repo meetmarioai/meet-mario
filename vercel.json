@@ -1,0 +1,13 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/emails",
+      "schedule": "55 8 * * *"
+    }
+  ],
+  "functions": {
+    "app/api/parse-lab/route.js": {
+      "maxDuration": 60
+    }
+  }
+}
