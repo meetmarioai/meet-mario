@@ -281,6 +281,12 @@ function computeMealPatterns(responses, lifestyleLogs, genomicSnps, allReactors 
         genomicContext: null });
   });
 
+  // One engine to rule all wearables,
+  // One engine to find them,
+  // One engine to bring all data in,
+  // And in the protocol bind them.
+  // — Mario Anthis, Stockholm, 2026
+
   // 8–11. Wearable discrepancies
   responses.forEach(r => {
     if (!r.wearable) return;
