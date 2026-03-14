@@ -119,12 +119,12 @@ the system prompt file and clinical reasoning would be exposed.
 - [ ] Booking insert failure (Supabase)
 - [ ] meetmario.ai custom domain (Cloudflare → Inleed nameserver pending)
 - [ ] Resend domain verification for medibalans.com
-- [ ] Chat crashes on second message — system prompt + history exceeds token limit. Truncation to 500 chars deployed but not confirmed working.
-- [ ] Blood work PDFs (Unilabs) parsed as ALCAT — lab analytes (testosterone, ferritin, DHEAS) appear as reactive "foods." Parser needs file type discrimination.
 - [ ] Onboarding skipped symptom questions — new steps replaced existing symptom step instead of being added after it.
-- [ ] ALCAT section shows SEVERE: 0 for Christina — should be 5. Possible data overwrite from blood work upload contaminating ALCAT arrays.
 
 ### Resolved
+- [x] Chat crashes on second message — root cause: showContactButton spreading into Anthropic message objects via `...m`, causing 400 validation errors. Fixed: apiMsgs returns explicit `{ role, content }` only. System prompt is ~13K tokens (well within 200K limit); 500-char truncation kept as guard.
+- [x] Blood work PDFs (Unilabs) parsed as ALCAT — parser now routes report_type=LAB to bloodWork[] namespace. ALCAT arrays untouched. Fixes testosterone/ferritin/DHEAS appearing as reactive foods.
+- [x] ALCAT SEVERE: 0 for Christina — root cause was blood work upload overwriting alcat_results with empty arrays. Fixed by bug above.
 - [x] Deprecated anthropic-beta headers — removed
 - [x] Chat history unbounded — capped at 12
 - [x] FAB position:fixed desktop overflow — changed to absolute

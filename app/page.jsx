@@ -2170,9 +2170,10 @@ Keep notes sensory and practical — not clinical. Examples:
           content = content.slice(0, 500) + ' [...]';
         }
         if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
-          return { ...m, content: content + contextNote };
+          content = content + contextNote;
         }
-        return { ...m, content };
+        // Only send role+content — never spread UI-only fields (showContactButton etc) into Anthropic messages
+        return { role: m.role, content };
       });
       const systemPrompt = buildMarioSystemPrompt(patient);
       const totalChars = systemPrompt.length + apiMsgs.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0), 0);
