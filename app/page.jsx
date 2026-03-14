@@ -122,7 +122,7 @@ async function callClaudeRich(messages, system, extra = {}) {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 2000, system, messages, ...bodyExtra }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system, messages, ...bodyExtra }),
     signal: sig,
   });
   if (!res.ok) {
@@ -2012,8 +2012,10 @@ Keep notes sensory and practical — not clinical. Examples:
     chatAbortRef.current = controller;
     try {
       const contextNote = buildPatientContext();
-      // Cap history at last 12 messages to avoid timeouts with large conversation history
-      const recentMsgs = msgs.slice(-12);
+      // Cap history at last 12 messages. Ensure the slice always starts with a user message —
+      // after 6+ exchanges, slice(-12) can begin with an assistant turn, which Anthropic rejects.
+      const sliced = msgs.slice(-12);
+      const recentMsgs = sliced[0]?.role === 'assistant' ? sliced.slice(1) : sliced;
       const apiMsgs = recentMsgs.map((m, i) => {
         if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
           return { ...m, content: m.content + contextNote };
