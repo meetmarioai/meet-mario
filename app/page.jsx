@@ -590,7 +590,7 @@ function Onboarding({ onComplete, onPatientUpdate }) {
     // For VCF files, set type immediately; for PDFs/images the classifier determines type
     if (isVCF) setLastFileType('genomic');
 
-    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| detectedType:', detectedType, '| size:', (file.size/1024).toFixed(0)+'KB');
+    console.log('[Lab parse] File:', file.name, '| type:', file.type, '| ext:', ext, '| isPDF:', isPDF, '| isImage:', isImage, '| isVCF:', isVCF, '| size:', (file.size/1024).toFixed(0)+'KB');
 
     // ── VCF — stream lines client-side, match server-side via /api/vcf ──
     if (isVCF) {
