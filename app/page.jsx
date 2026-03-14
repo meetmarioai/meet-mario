@@ -573,6 +573,9 @@ function Onboarding({ onComplete, onPatientUpdate }) {
   const [labParseError, setLabParseError] = useState(false);
   const [lastFileType, setLastFileType] = useState('alcat'); // alcat | micronutrient | genomic | redox
   const [lastRedoxScore, setLastRedoxScore] = useState(null);
+  const [startDay, setStartDay] = useState('');
+  const [startMonth, setStartMonth] = useState('');
+  const [startYear, setStartYear] = useState('');
 
   const parseLabFile = async (file, isAdditional = false) => {
     if (!file) return;
@@ -998,27 +1001,20 @@ function Onboarding({ onComplete, onPatientUpdate }) {
           {data.protocolStart && data.protocolStart !== "I haven't started yet" && (
             <div>
               <FieldLabel>Approximate start date (if you remember)</FieldLabel>
-              {(() => {
-                const parts = (data.protocolStartDate || '').split('-');
-                const yy = parts[0] || '', mm = parts[1] || '', dd = parts[2] || '';
-                const set = (y,m,d) => u('protocolStartDate', (y&&m&&d) ? `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}` : '');
-                const sel = (val, opts, placeholder, onChange) => (
-                  <select value={val} onChange={e=>onChange(e.target.value)} style={{ flex:1,background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 4px',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:val?T.w7:T.w4,appearance:'none',cursor:'pointer' }}>
-                    <option value="" disabled>{placeholder}</option>
-                    {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-                  </select>
-                );
-                const days = Array.from({length:31},(_,i)=>({v:String(i+1).padStart(2,'0'),l:String(i+1)}));
-                const months = ['January','February','March','April','May','June','July','August','September','October','November','December'].map((l,i)=>({v:String(i+1).padStart(2,'0'),l}));
-                const years = Array.from({length:7},(_,i)=>({v:String(2020+i),l:String(2020+i)}));
-                return (
-                  <div style={{ display:'flex', gap:8 }}>
-                    {sel(dd, days,   'Day',   d => set(yy,mm,d))}
-                    {sel(mm, months, 'Month', m => set(yy,m,dd))}
-                    {sel(yy, years,  'Year',  y => set(y,mm,dd))}
-                  </div>
-                );
-              })()}
+              <div style={{ display:'flex', gap:8 }}>
+                <select value={startDay} onChange={e => { setStartDay(e.target.value); if (e.target.value && startMonth && startYear) u('protocolStartDate', `${startYear}-${startMonth}-${e.target.value}`); }} style={{ flex:1,background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 4px',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:startDay?T.w7:T.w4,appearance:'none',cursor:'pointer' }}>
+                  <option value="">Day</option>
+                  {Array.from({length:31},(_,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{i+1}</option>)}
+                </select>
+                <select value={startMonth} onChange={e => { setStartMonth(e.target.value); if (startDay && e.target.value && startYear) u('protocolStartDate', `${startYear}-${e.target.value}-${startDay}`); }} style={{ flex:2,background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 4px',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:startMonth?T.w7:T.w4,appearance:'none',cursor:'pointer' }}>
+                  <option value="">Month</option>
+                  {['January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=><option key={i+1} value={String(i+1).padStart(2,'0')}>{m}</option>)}
+                </select>
+                <select value={startYear} onChange={e => { setStartYear(e.target.value); if (startDay && startMonth && e.target.value) u('protocolStartDate', `${e.target.value}-${startMonth}-${startDay}`); }} style={{ flex:1,background:'transparent',border:'none',borderBottom:`1px solid ${T.w3}`,outline:'none',padding:'7px 4px',fontSize:13,fontFamily:fonts.sans,fontWeight:300,color:startYear?T.w7:T.w4,appearance:'none',cursor:'pointer' }}>
+                  <option value="">Year</option>
+                  {Array.from({length:7},(_,i)=><option key={i} value={String(2020+i)}>{2020+i}</option>)}
+                </select>
+              </div>
             </div>
           )}
         </div>
