@@ -110,10 +110,6 @@ the system prompt file and clinical reasoning would be exposed.
 
 ### Unresolved
 - [ ] ALCAT parser missing 7 severe reactions from Dr Mario's panel
-- [ ] Annotated variants not feeding into Mario in /api/chat/route.js
-- [ ] "Ask Mario about my genetics" button — incorrect tab navigation crash
-- [ ] message.content is array of blocks, .split() crashes — needs array handling
-- [ ] Chat renders raw markdown — Mario should use plain prose, no formatting symbols
 - [ ] Booking insert failure (Supabase)
 - [ ] meetmario.ai custom domain (Cloudflare → Inleed nameserver pending)
 - [ ] Resend domain verification for medibalans.com
@@ -129,3 +125,10 @@ the system prompt file and clinical reasoning would be exposed.
 - [x] BES scoring formula in client bundle — moved to /api/score
 - [x] ALCAT/CMA parsing prompts in client bundle — moved to /api/parse-lab
 - [x] All 111 SNPs missing live verification — MyVariant.info verified, clinvar_verified/sift_verified/polyphen_verified/cadd fields added to all
+- [x] Chat renders raw markdown — client-side stripMarkdown() + system prompt hardened
+- [x] message.content array crash — getMessageText() handles both string and block array
+- [x] "Ask Mario about my genetics" button — was using old tab name; now setTab('mario') correct
+- [x] Annotated variants not reaching Mario — fixed by null-array crash fix in buildMarioSystemPrompt
+- [x] Chat connection error on every message — buildMarioSystemPrompt crashed on null arrays from Supabase
+- [x] Camera FAB overlapping chat send button — FAB hidden on mario tab
+- [x] VCF 413 Payload Too Large — client strips INFO/FORMAT cols before POST (7MB → 0.9MB)

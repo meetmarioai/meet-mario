@@ -150,6 +150,22 @@ function getMessageText(content) {
   return '';
 }
 
+// Strip markdown formatting symbols from Mario's responses.
+// The chat UI renders plain text — symbols like ** and ## appear literally.
+// This is a safety net; the system prompt already instructs Mario not to use them.
+function stripMarkdown(text) {
+  return text
+    .replace(/\*\*(.+?)\*\*/gs, '$1')        // **bold** → bold
+    .replace(/\*([^*\n]+?)\*/g, '$1')         // *italic* → italic
+    .replace(/^#{1,6}\s+/gm, '')              // ## Heading → Heading
+    .replace(/^[\-\*\+] /gm, '')              // - item / * item → item
+    .replace(/^\d+\.\s+/gm, '')              // 1. item → item
+    .replace(/`{3}[\s\S]*?`{3}/g, '')         // ```code block``` → removed
+    .replace(/`([^`\n]+?)`/g, '$1')           // `inline code` → inline code
+    .replace(/^---+$/gm, '')                  // --- horizontal rule → removed
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1'); // [link text](url) → link text
+}
+
 // Dante Labs stub
 const danteStub = { projectId: 'prjWem9WBYg200IIAG', ready: false };
 // VitaminLab stub
@@ -2937,7 +2953,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
         ) : (
           <div key={i} style={{ display:'flex',flexDirection:'column',alignItems:m.role==='user'?'flex-end':'flex-start',marginBottom:10 }}>
             <div style={{ maxWidth:'82%',background:m.role==='user'?T.rg:T.w1,border:`1px solid ${m.role==='user'?T.rg:T.w3}`,borderRadius:m.role==='user'?'16px 16px 4px 16px':'16px 16px 16px 4px',padding:'12px 16px',fontSize:13,color:m.role==='user'?'#fff':T.w6,fontFamily:fonts.sans,fontWeight:300,lineHeight:1.7 }}>
-              {getMessageText(m.content).split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
+              {(m.role === 'assistant' ? stripMarkdown(getMessageText(m.content)) : getMessageText(m.content)).split('\n').map((l,j)=>l.trim()?<div key={j} style={{ marginBottom:4 }}>{l}</div>:null)}
             </div>
             {m.showContactButton && m.role === 'assistant' && (
               <div style={{ maxWidth:'82%',marginTop:6,background:'#F9F4EE',border:'1px solid #DDD0C4',borderRadius:12,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8 }}>
