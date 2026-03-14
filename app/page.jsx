@@ -4286,7 +4286,14 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
       const today = new Date().toISOString().split('T')[0];
 
       const hasSnp = rsid => (P.genomicSnps||[]).some(s => s.rsid === rsid && s.status !== 'normal');
-      const comtSlow  = hasSnp('rs4680');
+      // COMT rs4680: A = Met allele (slow). Must catch both Met/Met (homozygous) and Val/Met (heterozygous).
+      // status-based check alone can miss heterozygous variants if annotation marks them 'normal'.
+      // Genotype check is the safety net: any presence of the A (Met) allele fires the warning.
+      const comtSnp   = (P.genomicSnps||[]).find(s => s.rsid === 'rs4680');
+      const comtSlow  = !!(comtSnp && (
+        comtSnp.status !== 'normal' ||
+        (typeof comtSnp.genotype === 'string' && comtSnp.genotype.toUpperCase().replace(/[|/]/g,'').includes('A'))
+      ));
       const gstp1Risk = hasSnp('rs1695');
       const ftoRisk   = hasSnp('rs9939609');
       const maoaSlow  = hasSnp('rs6323');
@@ -4544,7 +4551,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
           <LifeCard id="polyphenol"
             icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>}
             title="Polyphenol Protocol"
-            adaptation={comtSlow ? "Food sources only. No concentrated polyphenol supplements (green tea extract, quercetin capsules). Your COMT processes these slowly — supplements can overwhelm. Eat the berry, don't take the capsule." : "Polyphenols are Nrf2-activating signals. Every bitter leaf, every dark berry, every aromatic herb is a conversation with your cell's repair systems. Aim for 5+ daily servings from your green list."}
+            adaptation={comtSlow ? "FOOD SOURCES ONLY. No concentrated polyphenol supplements — green tea extract, quercetin capsules, resveratrol. Your COMT processes these slowly. Supplements can overwhelm the pathway. Eat the berry, do not take the capsule." : "Polyphenols are Nrf2-activating signals. Every bitter leaf, every dark berry, every aromatic herb is a conversation with your cell's repair systems. Aim for 5+ daily servings from your green list."}
           >
             <SliderRow label="Servings today" k="poly_serv" min={0} max={10} def={5} unit=""/>
             {greenListPoly.length > 0 && (
