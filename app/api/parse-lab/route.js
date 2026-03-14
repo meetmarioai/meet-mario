@@ -155,7 +155,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-6',
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: 'You extract structured data from medical lab results. Return only valid JSON, nothing else — no preamble, no explanation.',
         messages,
       }),
@@ -169,17 +169,17 @@ export async function POST(req) {
 
     const data = await res.json();
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+    console.log('[/api/parse-lab] stop_reason:', data.stop_reason, '| tokens in/out:', data.usage?.input_tokens, '/', data.usage?.output_tokens);
+    console.log('[/api/parse-lab] raw text (first 600):', text.slice(0, 600));
 
     let json = {};
     try {
-      json = JSON.parse(text.replace(/```json|```/g, '').trim());
+      json = JSON.parse(text.replace(/```json\s?|```/g, '').trim());
     } catch {
-      const m = text.match(/\{[\s\S]*?"severe"[\s\S]*?\}/);
-      if (m) try { json = JSON.parse(m[0]); } catch {}
-      if (!json.severe) {
-        const m2 = text.match(/\{[\s\S]*\}/);
-        if (m2) try { json = JSON.parse(m2[0]); } catch {}
-      }
+      console.log('[/api/parse-lab] Primary JSON parse failed — trying fallbacks');
+      // Fallback 1: match full JSON object
+      const m2 = text.match(/\{[\s\S]*\}/);
+      if (m2) try { json = JSON.parse(m2[0]); } catch (e2) { console.log('[/api/parse-lab] Fallback JSON parse also failed:', e2.message, '| snippet:', m2[0].slice(0, 200)); }
     }
 
     console.log(`[/api/parse-lab] report_type=${json.report_type} severe=${(json.severe||[]).length} moderate=${(json.moderate||[]).length} mild=${(json.mild||[]).length} cma_def=${(json.cma_deficiencies||[]).length} bloodWork=${(json.bloodWork||[]).length}`);

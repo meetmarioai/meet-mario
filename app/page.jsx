@@ -1407,6 +1407,11 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const [recipeLoading, setRecipeLoading] = useState(false);
   const [recipeSteps, setRecipeSteps] = useState(null);
   const [activeRecipe, setActiveRecipe] = useState(null);
+  // Meal builder
+  const [mealSlotFoods, setMealSlotFoods] = useState({ breakfast:[], lunch:[], dinner:[], snack1:[], snack2:[] });
+  const [activeMealSlot, setActiveMealSlot] = useState(null);
+  const [genMealLoading, setGenMealLoading] = useState({});
+  const [genMealResult, setGenMealResult] = useState({});
 
   // Generate
   const [genPhase, setGenPhase] = useState('detox');
@@ -2320,6 +2325,41 @@ INSTRUCTIONS: [4-6 flowing prose paragraphs — warm, confident chef voice — n
     setRecipeLoading(false);
   };
 
+  const genMealForSlot = async (slotKey, foods) => {
+    if (!foods.length || genMealLoading[slotKey]) return;
+    setGenMealLoading(prev => ({ ...prev, [slotKey]: true }));
+    setGenMealResult(prev => ({ ...prev, [slotKey]: null }));
+    const cu = CUISINES.find(c => c.id === cuisine)?.label || 'Mediterranean';
+    const allReactive = [...(patient.severe||[]),...(patient.moderate||[]),...(patient.mild||[])];
+    const severe = allReactive.join(', ') || 'none';
+    const cmaD = (patient.cmaDeficiencies||[]).slice(0,5).join(', ') || 'none on file';
+    const keySnps = (patient.genomicSnps||[]).filter(s=>s&&s.gene&&s.status!=='normal').slice(0,5).map(s=>`${s.gene} [${s.status}]: ${s.impact||''}`).join(', ') || 'none';
+    const ep = EAT_PATS.find(e => e.id === eatPat);
+    const eatNote = ep?.id === 'standard' ? '' : `Eating pattern: ${ep?.label || eatPat}.`;
+    const prompt = `Write a beautiful ${slotKey} recipe in ${cu} style using these foods: ${foods.join(', ')}.
+Protocol: Day ${rotDay} rotation. Phase ${patient.phase||1}. Day ${patient.dayInProtocol||1} of protocol.
+CRITICAL — Do NOT use any food from this reactive list (ALCAT exclusion, zero exceptions): ${severe}
+CMA deficiencies to correct: ${cmaD}
+Key genetic variants: ${keySnps}
+No seed oils. Ghee, olive oil, coconut oil only. 1 serving. ${eatNote}
+
+Return this EXACT format — use these exact labels, no markdown asterisks, no bullet dashes:
+
+DISH NAME: [a beautiful descriptive name]
+TAGLINE: [one sensory sentence — texture, aroma, warmth — make the patient want to cook this]
+PREP: [X min] | COOK: [X min] | DIFFICULTY: [Easy / Medium]
+WHY THIS WORKS FOR YOU: [2 sentences connecting this dish to this patient's ALCAT exclusions, CMA deficiencies, or genetic variants — cite the data]
+WHAT YOUR CELLS GET: [3-6 nutrients as dot-separated list — e.g. "Omega-3 · Magnesium · Zinc"]
+INSTRUCTIONS: [4-6 flowing prose paragraphs — warm chef voice — not numbered steps, not bullet points]`;
+    try {
+      const r = await callClaude([{ role:'user', content:prompt }], buildMarioSystemPrompt(patient), { max_tokens: 1200 });
+      setGenMealResult(prev => ({ ...prev, [slotKey]: r }));
+    } catch {
+      setGenMealResult(prev => ({ ...prev, [slotKey]: 'Error generating recipe. Please try again.' }));
+    }
+    setGenMealLoading(prev => ({ ...prev, [slotKey]: false }));
+  };
+
   const buildRotationFromAlcat = async (pd) => {
     const src = pd || patient;
     const reactiveSet = new Set([
@@ -2435,16 +2475,16 @@ Keep notes sensory and practical — not clinical. Examples:
       // after 6+ exchanges, slice(-12) can begin with an assistant turn, which Anthropic rejects.
       const sliced = msgs.slice(-12);
       const recentMsgs = sliced[0]?.role === 'assistant' ? sliced.slice(1) : sliced;
+      // Build API message array from scratch — ONLY role+content, never UI fields
       const apiMsgs = recentMsgs.map((m, i) => {
-        let content = m.content;
+        let content = typeof m.content === 'string' ? m.content : getMessageText(m.content);
         // Truncate assistant history to 500 chars — full text stays in display state, only history sent to API is shortened
-        if (m.role === 'assistant' && typeof content === 'string' && content.length > 500) {
+        if (m.role === 'assistant' && content.length > 500) {
           content = content.slice(0, 500) + ' [...]';
         }
         if (i === recentMsgs.length - 1 && m.role === 'user' && contextNote) {
           content = content + contextNote;
         }
-        // Only send role+content — never spread UI-only fields (showContactButton etc) into Anthropic messages
         return { role: m.role, content };
       });
       const lifestyleSummary = lifestyleLogs.length ? (() => {
@@ -2989,115 +3029,204 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
       <div>
         <Eyebrow>Daily meal planner</Eyebrow>
         <SectionTitle>Meal<br/><em style={{ fontStyle:'italic',color:T.rg2 }}>Plans</em></SectionTitle>
+        {/* Day selector */}
         <div style={{ display:'flex',gap:6,marginBottom:12 }}>
           {[1,2,3,4].map(d=>{ const th=DAY_THEMES[d]; const active=rotDay===d; return (
-            <button key={d} onClick={()=>{setRotDay(d);setRecipeSteps(null);setActiveRecipe(null);}} style={{ flex:1,background:active?th.bg:T.w1,border:`1px solid ${active?th.border:T.w3}`,borderRadius:10,padding:'10px 6px',cursor:'pointer',transition:'all .18s',textAlign:'center' }}>
+            <button key={d} onClick={()=>{setRotDay(d);setRecipeSteps(null);setActiveRecipe(null);setGenMealResult({});}} style={{ flex:1,background:active?th.bg:T.w1,border:`1px solid ${active?th.border:T.w3}`,borderRadius:10,padding:'10px 6px',cursor:'pointer',transition:'all .18s',textAlign:'center' }}>
               <div style={{ fontFamily:fonts.mono,fontSize:9,color:active?th.color:T.w4,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:2 }}>Day {d}</div>
               <div style={{ fontFamily:fonts.serif,fontSize:12,color:active?th.color:T.w5,fontStyle:'italic' }}>{th.name}</div>
             </button>
           );})}
         </div>
-        {(() => { const th=DAY_THEMES[rotDay]; return (
-          <div style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:10,padding:'10px 14px',marginBottom:20 }}>
-            <div style={{ fontFamily:fonts.sans,fontSize:12,color:th.color,fontStyle:'italic' }}>{th.intention}</div>
-          </div>
-        );})()}
-        {MEALS_DATA[rotDay] ? (
-          Object.entries(MEALS_DATA[rotDay]).map(([mealKey, meal])=>{
-            const prot = getP(rotDay, mealKey);
-            const active = activeRecipe === `${rotDay}-${mealKey}`;
-            return (
-              <Panel key={mealKey}>
-                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:meal.isProtein?12:0 }}>
-                  <div>
-                    <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:4 }}>{mealKey.replace(/(\d)/,' $1').replace('snack','Snack ')}</div>
-                    <div style={{ fontSize:14,color:T.w6,fontFamily:fonts.sans }}>{meal.base}</div>
-                  </div>
-                  {meal.isProtein && (
-                    <div style={{ display:'flex',alignItems:'center',gap:8 }}>
-                      <button onClick={()=>setPicker(picker===`${rotDay}-${mealKey}`?null:`${rotDay}-${mealKey}`)} style={{ background:T.rgBg,border:`1px solid ${T.rg}`,borderRadius:7,padding:'6px 12px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:T.rg2 }}>{prot||'Choose protein'}</button>
-                    </div>
-                  )}
-                </div>
-                {picker === `${rotDay}-${mealKey}` && (
-                  <div style={{ background:T.w,border:`1px solid ${T.w3}`,borderRadius:8,padding:'10px',marginTop:8 }}>
+        {/* Dynamic intention */}
+        {(() => {
+          const th = DAY_THEMES[rotDay];
+          const snps = P.genomicSnps || [];
+          const hasAPOE4 = snps.some(s => (s.gene||'').toUpperCase().includes('APOE') && (s.status==='risk'||s.status==='carrier'));
+          const hasGSTP1 = snps.some(s => (s.gene||'').toUpperCase().includes('GSTP1') && (s.status==='risk'||s.status==='carrier'));
+          const hasMTHFR = snps.some(s => (s.gene||'').toUpperCase().includes('MTHFR') && (s.status==='risk'||s.status==='carrier'));
+          let intention = th.intention;
+          if (rotDay === 1) {
+            if (hasAPOE4) intention = 'Today is especially important for your APOE4 variant. DHA from cold-water fish is directly neuroprotective for your genotype.';
+            else intention = 'Today you nourish your mitochondria. Cold-water fish delivers DHA directly to your cell membranes.';
+          } else if (rotDay === 2) {
+            intention = 'Today you ground your biology. Root vegetables and earth-grown proteins rebuild your mineral stores.';
+          } else if (rotDay === 3) {
+            if (hasGSTP1) intention = "Today's crucifers support your Phase II pathway — the one your GSTP1 variant needs extra help with.";
+            else if (hasMTHFR) intention = 'Today you activate Nrf2. Leafy greens and folate-rich foods feed your methylation cycle.';
+            else intention = 'Today you activate Nrf2. Every green leaf is a signal to your cell\'s repair systems.';
+          } else if (rotDay === 4) {
+            intention = 'Today you restore your amino acid pools. Complete proteins and ancestral grains.';
+          }
+          return (
+            <div style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:10,padding:'10px 14px',marginBottom:20 }}>
+              <div style={{ fontFamily:fonts.sans,fontSize:12,color:th.color,fontStyle:'italic',lineHeight:1.6 }}>{intention}</div>
+            </div>
+          );
+        })()}
+
+        {/* Rotation calendar */}
+        {ROT[rotDay] ? (
+          <Panel>
+            <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:14 }}>Today's rotation — Day {rotDay} {DAY_THEMES[rotDay].name}</div>
+            <div style={{ display:'flex',flexDirection:'column',gap:12 }}>
+              {['protein','veg','grains','fruit','misc'].filter(cat => (ROT[rotDay][cat]||[]).length > 0).map(cat => {
+                const catLabel = cat === 'misc' ? 'Fats & Seeds' : cat.charAt(0).toUpperCase() + cat.slice(1);
+                return (
+                  <div key={cat}>
+                    <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>{catLabel}</div>
                     <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-                      {Object.keys(meal.methods||{}).map(p=>(
-                        <button key={p} onClick={()=>setP(rotDay,mealKey,p)} style={{ background:prot===p?T.rgBg:T.w,border:`1px solid ${prot===p?T.rg:T.w3}`,borderRadius:5,padding:'5px 10px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:prot===p?T.rg2:T.w5 }}>{p}</button>
+                      {(ROT[rotDay][cat]||[]).map(food => {
+                        const inAnySlot = Object.values(mealSlotFoods).some(arr => arr.includes(food));
+                        const inActive = activeMealSlot && mealSlotFoods[activeMealSlot]?.includes(food);
+                        return (
+                          <button key={food} onClick={() => {
+                            if (!activeMealSlot) return;
+                            if (inActive) {
+                              setMealSlotFoods(prev => ({ ...prev, [activeMealSlot]: prev[activeMealSlot].filter(f => f !== food) }));
+                            } else {
+                              setMealSlotFoods(prev => ({ ...prev, [activeMealSlot]: [...prev[activeMealSlot], food] }));
+                            }
+                          }} style={{ background: inActive ? `${DAY_THEMES[rotDay].color}22` : inAnySlot ? `${T.ok}10` : T.w1, border:`1px solid ${inActive ? DAY_THEMES[rotDay].color+'60' : inAnySlot ? T.ok+'40' : T.w3}`, borderRadius:6, padding:'4px 10px', cursor: activeMealSlot ? 'pointer' : 'default', fontSize:11, fontFamily:fonts.sans, color: inActive ? DAY_THEMES[rotDay].color : inAnySlot ? T.ok : T.w5, transition:'all .12s' }}>
+                            {food}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {!activeMealSlot && <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w3,letterSpacing:'0.1em',marginTop:12 }}>Open a meal slot below to select foods</div>}
+          </Panel>
+        ) : (
+          <div style={{ background:T.w1,border:`1px solid ${T.w3}`,borderRadius:10,padding:'18px',textAlign:'center',marginBottom:16 }}>
+            <div style={{ fontFamily:fonts.sans,fontSize:13,color:T.w5,marginBottom:4 }}>No rotation data yet</div>
+            <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.1em' }}>Upload your ALCAT results to generate your 4-day rotation</div>
+          </div>
+        )}
+
+        {/* Meal builder */}
+        <div style={{ fontFamily:fonts.mono,fontSize:10,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:10,marginTop:4 }}>Build your meals</div>
+        {(['breakfast','lunch','dinner','snack1','snack2']).map(slot => {
+          const isActive = activeMealSlot === slot;
+          const foods = mealSlotFoods[slot] || [];
+          const result = genMealResult[slot];
+          const loading = genMealLoading[slot];
+          const th = DAY_THEMES[rotDay];
+          const slotLabel = slot === 'snack1' ? 'Snack 1' : slot === 'snack2' ? 'Snack 2' : slot.charAt(0).toUpperCase() + slot.slice(1);
+          // CPF balance: rough heuristic
+          const rot = ROT[rotDay] || {};
+          const hasC = foods.some(f => [...(rot.grains||[]),...(rot.fruit||[])].includes(f));
+          const hasP = foods.some(f => (rot.protein||[]).includes(f));
+          const hasF = foods.some(f => (rot.misc||[]).includes(f) || (rot.protein||[]).some(p => ['salmon','mackerel','sardine','herring','trout'].includes(p) && f === p));
+          return (
+            <Panel key={slot} style={{ marginBottom:8 }}>
+              <button onClick={() => setActiveMealSlot(isActive ? null : slot)} style={{ width:'100%',background:'none',border:'none',cursor:'pointer',padding:0,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10 }}>
+                <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+                  <div style={{ width:32,height:32,borderRadius:8,background:isActive?th.bg:T.w1,border:`1px solid ${isActive?th.border:T.w3}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
+                    <div style={{ fontFamily:fonts.mono,fontSize:9,color:isActive?th.color:T.w4,letterSpacing:'0.1em' }}>{slot.slice(0,2).toUpperCase()}</div>
+                  </div>
+                  <div style={{ textAlign:'left' }}>
+                    <div style={{ fontFamily:fonts.mono,fontSize:10,color:isActive?T.w6:T.w4,letterSpacing:'0.14em',textTransform:'uppercase' }}>{slotLabel}</div>
+                    {foods.length > 0 && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w4,marginTop:2 }}>{foods.slice(0,3).join(', ')}{foods.length > 3 ? ` +${foods.length-3}` : ''}</div>}
+                    {foods.length === 0 && !isActive && <div style={{ fontFamily:fonts.sans,fontSize:11,color:T.w3,marginTop:2 }}>Tap to add foods</div>}
+                  </div>
+                </div>
+                <div style={{ display:'flex',alignItems:'center',gap:8 }}>
+                  {foods.length > 0 && (
+                    <div style={{ display:'flex',gap:4 }}>
+                      {[['C',hasC],['P',hasP],['F',hasF]].map(([l,has]) => (
+                        <div key={l} style={{ width:18,height:18,borderRadius:'50%',background:has?`${T.ok}20`:T.w2,border:`1px solid ${has?T.ok+'50':T.w3}`,display:'flex',alignItems:'center',justifyContent:'center' }}>
+                          <span style={{ fontFamily:fonts.mono,fontSize:8,color:has?T.ok:T.w4 }}>{l}</span>
+                        </div>
                       ))}
                     </div>
-                  </div>
-                )}
-                {meal.isProtein && prot && (
-                  <div style={{ marginTop:10 }}>
-                    <button onClick={()=>{setActiveRecipe(active?null:`${rotDay}-${mealKey}`);if(!active)fetchRecipeSteps(rotDay,mealKey,prot,meal.base,meal.sides);}} style={{ background:'none',border:`1px solid ${T.w3}`,borderRadius:7,padding:'6px 14px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:T.w5 }}>
-                      {active ? 'Hide recipe' : 'Get recipe steps'}
-                    </button>
-                    {active && (
-                      <div style={{ marginTop:14 }}>
-                        {recipeLoading ? (
-                          <div style={{ display:'flex',gap:6,alignItems:'center',padding:'12px 0' }}>
-                            {[0,1,2].map(i=><div key={i} style={{ width:6,height:6,borderRadius:'50%',background:T.rg,opacity:0.6,animation:`pulse 1.2s ${i*0.2}s infinite` }}/>)}
-                            <span style={{ color:T.w4,fontFamily:fonts.mono,fontSize:10,marginLeft:4 }}>Crafting your recipe…</span>
-                          </div>
-                        ) : recipeSteps ? (() => {
-                          const lines = recipeSteps.split('\n');
-                          const get = (prefix) => { const l = lines.find(l=>l.startsWith(prefix+':')); return l ? l.slice(prefix.length+1).trim() : null; };
-                          const dishName = get('DISH NAME');
-                          const tagline = get('TAGLINE');
-                          const prep = get('PREP');
-                          const why = get('WHY THIS WORKS FOR YOU');
-                          const cells = get('WHAT YOUR CELLS GET');
-                          const instrIdx = lines.findIndex(l=>l.startsWith('INSTRUCTIONS:'));
-                          const instructions = instrIdx >= 0 ? lines.slice(instrIdx+1).filter(l=>l.trim()).join('\n\n') : null;
-                          const th = DAY_THEMES[rotDay];
-                          return (
-                            <div style={{ borderTop:`1px solid ${T.w3}`,paddingTop:16 }}>
-                              {dishName && <div style={{ fontFamily:fonts.serif,fontSize:18,color:T.w7,lineHeight:1.3,marginBottom:6 }}>{dishName}</div>}
-                              {tagline && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4,fontStyle:'italic',marginBottom:14,lineHeight:1.5 }}>{tagline}</div>}
-                              {prep && (
-                                <div style={{ display:'flex',gap:6,flexWrap:'wrap',marginBottom:14 }}>
-                                  {prep.split('|').map((p,i)=>(
-                                    <span key={i} style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:6,padding:'3px 10px',fontFamily:fonts.mono,fontSize:10,color:th.color }}>{p.trim()}</span>
-                                  ))}
-                                </div>
-                              )}
-                              {why && (
-                                <div style={{ background:`${T.ok}0A`,border:`1px solid ${T.ok}25`,borderRadius:9,padding:'10px 14px',marginBottom:12 }}>
-                                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.ok,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:5 }}>Why this works for you</div>
-                                  <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w6,lineHeight:1.7 }}>{why}</div>
-                                </div>
-                              )}
-                              {cells && (
-                                <div style={{ marginBottom:14 }}>
-                                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>What your cells get</div>
-                                  <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
-                                    {cells.split('·').map((c,i)=>c.trim()?<span key={i} style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:5,padding:'3px 9px',fontFamily:fonts.sans,fontSize:11,color:th.color }}>{c.trim()}</span>:null)}
-                                  </div>
-                                </div>
-                              )}
-                              {instructions && (
-                                <div>
-                                  <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:10 }}>Method</div>
-                                  {instructions.split('\n\n').map((para,i)=>(
-                                    <div key={i} style={{ fontFamily:fonts.sans,fontSize:12.5,color:T.w6,lineHeight:1.8,marginBottom:12,fontWeight:300 }}>{para}</div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })() : null}
+                  )}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.w4} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform:isActive?'rotate(180deg)':'none',transition:'transform .2s',flexShrink:0 }}><polyline points="6 9 12 15 18 9"/></svg>
+                </div>
+              </button>
+              {isActive && (
+                <div style={{ marginTop:14,paddingTop:14,borderTop:`1px solid ${T.w2}` }}>
+                  {foods.length > 0 && (
+                    <div style={{ marginBottom:12 }}>
+                      <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6 }}>Selected</div>
+                      <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                        {foods.map(f => (
+                          <button key={f} onClick={() => setMealSlotFoods(prev => ({ ...prev, [slot]: prev[slot].filter(x => x !== f) }))} style={{ background:`${T.ok}12`,border:`1px solid ${T.ok}40`,borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontFamily:fonts.sans,color:T.ok,display:'flex',alignItems:'center',gap:4 }}>
+                            {f} <span style={{ color:T.w4,fontSize:12 }}>×</span>
+                          </button>
+                        ))}
                       </div>
-                    )}
-                  </div>
-                )}
-              </Panel>
-            );
-          })
-        ) : <EmptyState title="Meal plans not loaded" sub="Meal plans are generated from your ALCAT rotation data. Upload your results to unlock this tab."/>}
+                    </div>
+                  )}
+                  {foods.length === 0 && ROT[rotDay] && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4,marginBottom:12,lineHeight:1.5 }}>Tap foods in the rotation above to add them to this meal.</div>}
+                  {foods.length > 0 && (
+                    <button onClick={() => genMealForSlot(slot, foods)} disabled={!!loading} style={{ width:'100%',background:loading?T.w1:T.rg,border:`1px solid ${T.rg}`,borderRadius:9,padding:'10px',cursor:loading?'default':'pointer',color:loading?T.w4:'#fff',fontFamily:fonts.sans,fontSize:12,fontWeight:600,marginBottom: result ? 14 : 0,transition:'all .15s' }}>
+                      {loading ? 'Generating recipe…' : result ? 'Regenerate recipe' : 'Generate full meal'}
+                    </button>
+                  )}
+                  {result && (() => {
+                    const lines = result.split('\n');
+                    const get = (prefix) => { const l = lines.find(l=>l.startsWith(prefix+':')); return l ? l.slice(prefix.length+1).trim() : null; };
+                    const dishName = get('DISH NAME');
+                    const tagline = get('TAGLINE');
+                    const prep = get('PREP');
+                    const why = get('WHY THIS WORKS FOR YOU');
+                    const cells = get('WHAT YOUR CELLS GET');
+                    const instrIdx = lines.findIndex(l=>l.startsWith('INSTRUCTIONS:'));
+                    const instructions = instrIdx >= 0 ? lines.slice(instrIdx+1).filter(l=>l.trim()).join('\n\n') : null;
+                    return (
+                      <div style={{ borderTop:`1px solid ${T.w3}`,paddingTop:16 }}>
+                        {dishName && <div style={{ fontFamily:fonts.serif,fontSize:18,color:T.w7,lineHeight:1.3,marginBottom:6 }}>{dishName}</div>}
+                        {tagline && <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w4,fontStyle:'italic',marginBottom:14,lineHeight:1.5 }}>{tagline}</div>}
+                        {prep && (
+                          <div style={{ display:'flex',gap:6,flexWrap:'wrap',marginBottom:14 }}>
+                            {prep.split('|').map((p,i)=>(
+                              <span key={i} style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:6,padding:'3px 10px',fontFamily:fonts.mono,fontSize:10,color:th.color }}>{p.trim()}</span>
+                            ))}
+                          </div>
+                        )}
+                        {why && (
+                          <div style={{ background:`${T.ok}0A`,border:`1px solid ${T.ok}25`,borderRadius:9,padding:'10px 14px',marginBottom:12 }}>
+                            <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.ok,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:5 }}>Why this works for you</div>
+                            <div style={{ fontFamily:fonts.sans,fontSize:12,color:T.w6,lineHeight:1.7 }}>{why}</div>
+                          </div>
+                        )}
+                        {cells && (
+                          <div style={{ marginBottom:14 }}>
+                            <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:6 }}>What your cells get</div>
+                            <div style={{ display:'flex',flexWrap:'wrap',gap:5 }}>
+                              {cells.split('·').map((c,i)=>c.trim()?<span key={i} style={{ background:th.bg,border:`1px solid ${th.border}`,borderRadius:5,padding:'3px 9px',fontFamily:fonts.sans,fontSize:11,color:th.color }}>{c.trim()}</span>:null)}
+                            </div>
+                          </div>
+                        )}
+                        {instructions && (
+                          <div>
+                            <div style={{ fontFamily:fonts.mono,fontSize:9,color:T.w4,letterSpacing:'0.16em',textTransform:'uppercase',marginBottom:10 }}>Method</div>
+                            {instructions.split('\n\n').map((para,i)=>(
+                              <div key={i} style={{ fontFamily:fonts.sans,fontSize:12.5,color:T.w6,lineHeight:1.8,marginBottom:12,fontWeight:300 }}>{para}</div>
+                            ))}
+                          </div>
+                        )}
+                        <button onClick={() => {
+                          setMrFormMeta({ mealId:`${slot}_${new Date().toISOString().split('T')[0]}`, mealType:slotLabel, foods, timestamp:new Date().toISOString().slice(0,16) });
+                          setMrFormOpen(true);
+                        }} style={{ width:'100%',marginTop:10,background:T.w1,border:`1px solid ${T.rg}40`,borderRadius:9,padding:'10px',cursor:'pointer',fontFamily:fonts.sans,fontSize:12,color:T.rg2,fontWeight:500 }}>
+                          Log this meal
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </Panel>
+          );
+        })}
 
+        {/* Post-meal response */}
         <div style={{ marginTop:8,marginBottom:4 }}>
-          <button onClick={()=>{ const todayStr=new Date().toISOString().split('T')[0]; setMrFormMeta({ mealId:`meals_${todayStr}_day${rotDay}`, mealType:`Day ${rotDay} rotation`, foods:Object.values(MEALS_DATA[rotDay]||{}).flatMap(m=>[m.base,...(m.sides||[])]).filter(Boolean), timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ width:'100%',background:T.w1,border:`1px solid ${T.rg}40`,borderRadius:12,padding:'14px 18px',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:14 }}>
+          <button onClick={()=>{ const todayStr=new Date().toISOString().split('T')[0]; setMrFormMeta({ mealId:`meals_${todayStr}_day${rotDay}`, mealType:`Day ${rotDay} rotation`, foods:Object.values(mealSlotFoods).flat().filter(Boolean), timestamp:new Date().toISOString().slice(0,16) }); setMrFormOpen(true); }} style={{ width:'100%',background:T.w1,border:`1px solid ${T.rg}40`,borderRadius:12,padding:'14px 18px',cursor:'pointer',textAlign:'left',display:'flex',alignItems:'center',gap:14 }}>
             <div style={{ width:36,height:36,borderRadius:10,background:T.rgBg,border:`1px solid ${T.rg}30`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0 }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.rg2} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
             </div>
@@ -3793,7 +3922,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
                 { name:'REDOX / Spectrox',       active: P.redoxScore != null,                                                   filePresent: hasFile(['redox','spectrox']),    detail: P.redoxScore != null ? `Score: ${P.redoxScore}/100` : null },
                 { name:'Antioxidant panel',      active: (P.cmaAntioxidants||[]).length > 0,                                     filePresent: hasFile(['antioxidant']),         detail: `${(P.cmaAntioxidants||[]).length} markers` },
                 { name:'Genomic variants (VCF)', active: (P.genomicSnps||[]).length > 0,                                         filePresent: hasFile(['.vcf','.txt','.gz']),   detail: P.genomicChecked ? `${(P.genomicSnps||[]).filter(s=>s&&s.status!=='normal').length} variants · ${P.genomicChecked} checked` : `${(P.genomicSnps||[]).length} variants` },
-                { name:'Blood work / Other labs',active: P.customLabs?.length > 0,                                               filePresent: hasFile(['blood','lab','result']),detail: P.customLabs?.length ? `${P.customLabs.length} reports` : null },
+                { name:'Blood work / Other labs',active: (P.bloodWork||[]).length > 0,                                           filePresent: hasFile(['blood','lab','result']),detail: (P.bloodWork||[]).length > 0 ? `${P.bloodWork.length} analytes` : null },
               ];
               return tiles.map(t => {
                 const timeout = !t.active && t.filePresent; // file stored but parse failed/timed out
@@ -3912,6 +4041,28 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
                 </div>
               </div>
             )}
+            {(P.bloodWork||[]).length > 0 && (
+              <div>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.14em', textTransform:'uppercase', marginBottom:8 }}>Blood work / Other labs</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:8 }}>
+                  {(P.bloodWork||[]).map((m, i) => {
+                    const col = m.status === 'low' ? T.warn : m.status === 'high' ? T.err : T.ok;
+                    return (
+                      <div key={m.name+i} style={{ background:col+'08', border:`1px solid ${col}25`, borderRadius:8, padding:'8px 10px' }}>
+                        <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w7, fontWeight:500, marginBottom:2, textTransform:'capitalize' }}>{m.name}</div>
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:4 }}>
+                          {m.value != null && <span style={{ fontFamily:fonts.mono, fontSize:13, color:col, fontWeight:500 }}>{m.value}{m.unit ? <span style={{ fontSize:10, color:T.w4, marginLeft:2 }}>{m.unit}</span> : null}</span>}
+                          <span style={{ fontFamily:fonts.mono, fontSize:10, color:col, letterSpacing:'0.1em', textTransform:'uppercase', flexShrink:0 }}>{m.status}</span>
+                        </div>
+                        {m.ref_low != null && m.ref_high != null && (
+                          <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w3, marginTop:2 }}>ref {m.ref_low}–{m.ref_high}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </Panel>
         )}
 
@@ -3940,6 +4091,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
                   {(P.cmaDeficiencies?.length||0)+(P.cmaAdequate?.length||0) > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>CMA: {(P.cmaAllNutrients||[]).length} nutrients</span>}
                   {P.redoxScore != null && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>REDOX: {P.redoxScore}/100</span>}
                   {(P.genomicSnps||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>VCF: {(P.genomicSnps||[]).filter(s=>s&&s.status!=='normal').length} variants{P.genomicChecked ? ` / ${P.genomicChecked} checked` : ''}</span>}
+                  {(P.bloodWork||[]).length > 0 && <span style={{ fontFamily:fonts.mono, fontSize:10, color:T.w5, background:T.w1, padding:'2px 8px', borderRadius:4 }}>Blood work: {P.bloodWork.length} analytes</span>}
                 </div>
                 {dashLabFiles.map(fn => (
                   <div key={fn} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:fonts.mono, fontSize:11, color:T.w4, marginBottom:2 }}>
