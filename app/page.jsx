@@ -1327,6 +1327,14 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   const [outEnergy, setOutEnergy] = useState(5);
   const [outNotes, setOutNotes] = useState('');
 
+  // Lifestyle hormesis
+  const [lifestyleLogs, setLifestyleLogs] = useState([]);
+  const [lifestyleOpen, setLifestyleOpen] = useState(null);
+  const [lsForm, setLsForm] = useState({});
+  const [breathTimerActive, setBreathTimerActive] = useState(false);
+  const [breathPhase, setBreathPhase] = useState('idle'); // idle|inhale|hold|exhale
+  const [breathRound, setBreathRound] = useState(0);
+
   // GutCheck
   const [gutLogs, setGutLogs] = useState([]);
   const [gutType, setGutType] = useState(null);
@@ -1943,6 +1951,28 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Load lifestyle logs from patient data when profile arrives
+  useEffect(() => {
+    if (patient.lifestyleLogs?.length) setLifestyleLogs(patient.lifestyleLogs);
+  }, [patient.lifestyleLogs]);
+
+  // 4-7-8 breathing timer progression
+  useEffect(() => {
+    if (!breathTimerActive) return;
+    const durations = { inhale:4000, hold:7000, exhale:8000 };
+    const next = { inhale:'hold', hold:'exhale', exhale:'inhale' };
+    const t = setTimeout(() => {
+      if (breathPhase === 'exhale') {
+        const newRound = breathRound + 1;
+        if (newRound > 4) { setBreathTimerActive(false); setBreathPhase('idle'); setBreathRound(0); }
+        else { setBreathRound(newRound); setBreathPhase('inhale'); }
+      } else {
+        setBreathPhase(next[breathPhase] || 'inhale');
+      }
+    }, durations[breathPhase] || 4000);
+    return () => clearTimeout(t);
+  }, [breathTimerActive, breathPhase, breathRound]);
+
   // Geo detection on mount
   useEffect(() => {
     fetch('https://ipapi.co/json/').then(r=>r.json()).then(d=>{
@@ -2168,7 +2198,15 @@ Keep notes sensory and practical — not clinical. Examples:
         // Only send role+content — never spread UI-only fields (showContactButton etc) into Anthropic messages
         return { role: m.role, content };
       });
-      const systemPrompt = buildMarioSystemPrompt(patient);
+      const lifestyleSummary = lifestyleLogs.length ? (() => {
+        const wk = new Date(); wk.setDate(wk.getDate()-6); wk.setHours(0,0,0,0);
+        const wl = lifestyleLogs.filter(l => new Date(l.date) >= wk);
+        const days = t => new Set(wl.filter(l=>l.type===t).map(l=>l.date)).size;
+        const avg = (arr, key) => arr.length ? Math.round(arr.reduce((s,l)=>s+(l[key]||0),0)/arr.length*10)/10 : null;
+        let cs=0; const dc=new Date(); while(lifestyleLogs.some(l=>l.type==='cold'&&l.date===dc.toISOString().split('T')[0])){cs++;dc.setDate(dc.getDate()-1);}
+        return { coldStreak:cs, saunaThisWeek:days('sauna'), avgFastHours:avg(wl.filter(l=>l.type==='fasting'&&l.totalHours),'totalHours'), avgSleepQuality:avg(wl.filter(l=>l.type==='circadian'&&l.sleepQuality),'sleepQuality'), movementDaysThisWeek:days('movement'), breathworkDaysThisWeek:days('breathwork'), avgPolyphenolServings:avg(wl.filter(l=>l.type==='polyphenol'&&l.servings),'servings') };
+      })() : null;
+      const systemPrompt = buildMarioSystemPrompt({ ...patient, lifestyleSummary });
       const totalChars = systemPrompt.length + apiMsgs.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0), 0);
       console.log('[sendChat] messages:', apiMsgs.length, '| system chars:', systemPrompt.length, '| total chars:', totalChars, '| ~tokens:', Math.round(totalChars / 4));
       const { text: r, showContactButton } = await callClaudeRich(apiMsgs, systemPrompt, { signal: controller.signal });
@@ -2387,6 +2425,7 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
     { id:'today',    label:'Today', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> },
     { id:'mario',    label:'Mario', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
     { id:'rotation', label:'Meals', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2"/><path d="M18 15V2"/><path d="M15 2c0 4.8 6 4.8 6 9.6a5.98 5.98 0 0 1-6 5.4"/><path d="M21 22v-7"/><path d="M18 22v-7"/></svg> },
+    { id:'lifestyle', label:'Lifestyle', icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c0 6-8 6-8 12a8 8 0 0 0 16 0c0-6-8-6-8-12z"/></svg> },
     { id:'me',       label:'Me',    icon:<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
   ];
   const MEALS_GROUP = new Set(['rotation','meals','generate','grocery']);
@@ -3868,6 +3907,293 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             </div>
           </button>
+        </div>
+      );
+    }
+
+    // ── LIFESTYLE ──
+    if (tab === 'lifestyle') {
+      const lsPhase = P.phase || 1;
+      const lsDay = P.dayInProtocol || 1;
+      const locked = lsPhase === 1 && lsDay < 14;
+      const today = new Date().toISOString().split('T')[0];
+
+      const hasSnp = rsid => (P.genomicSnps||[]).some(s => s.rsid === rsid && s.status !== 'normal');
+      const comtSlow  = hasSnp('rs4680');
+      const gstp1Risk = hasSnp('rs1695');
+      const ftoRisk   = hasSnp('rs9939609');
+      const maoaSlow  = hasSnp('rs6323');
+      const bdnfMet   = hasSnp('rs6265');
+      const clockVar  = hasSnp('rs1801260') || hasSnp('rs2304672');
+      const adora2a   = hasSnp('rs5751876');
+      const oxtRisk   = hasSnp('rs53576');
+
+      const weekStart = () => { const d=new Date(); d.setDate(d.getDate()-d.getDay()+1); d.setHours(0,0,0,0); return d; };
+      const weekLogs  = type => lifestyleLogs.filter(l => l.type===type && new Date(l.date) >= weekStart());
+      const dayStreak = type => { let s=0,d=new Date(); while(lifestyleLogs.some(l=>l.type===type&&l.date===d.toISOString().split('T')[0])){s++;d.setDate(d.getDate()-1);} return s; };
+
+      const fv = (k, def='') => lsForm[k] !== undefined ? lsForm[k] : def;
+      const sf = (k, v) => setLsForm(p => ({...p, [k]:v}));
+      const toggleArr = (k, v) => sf(k, (lsForm[k]||[]).includes(v) ? (lsForm[k]||[]).filter(x=>x!==v) : [...(lsForm[k]||[]),v]);
+
+      const saveLog = async entry => {
+        const newLogs = [...lifestyleLogs, { ...entry, date: today }];
+        setLifestyleLogs(newLogs);
+        setLifestyleOpen(null);
+        setLsForm({});
+        try {
+          const { data:{ user } } = await supabase.auth.getUser();
+          if (!user?.id) return;
+          const { data:pr } = await supabase.from('profiles').select('patient_data').eq('id',user.id).single();
+          const pd = pr?.patient_data ? (typeof pr.patient_data==='string' ? JSON.parse(pr.patient_data) : pr.patient_data) : {};
+          pd.lifestyleLogs = newLogs;
+          await supabase.from('profiles').upsert({ id:user.id, patient_data:JSON.stringify(pd), updated_at:new Date().toISOString() }, { onConflict:'id' });
+        } catch {}
+      };
+
+      const DOT_COLORS = { cold:'#5A8FBB', sauna:'#C4687A', fasting:'#8A7A55', circadian:'#B88030', movement:'#5A9A60', breathwork:'#8A6AAA', polyphenol:'#4A7A5A' };
+      const TYPES = ['cold','sauna','fasting','circadian','movement','breathwork','polyphenol'];
+      const weekDays = Array.from({length:7}, (_,i) => { const d=new Date(); d.setDate(d.getDate()-d.getDay()+i+1); return d.toISOString().split('T')[0]; });
+
+      const POLYPHENOL_FOODS = ['blueberries','blackberries','raspberries','strawberries','kale','spinach','arugula','broccoli','red cabbage','beetroot','turmeric','rosemary','thyme','ginger','green tea','dark chocolate','walnuts','red onion','garlic'];
+      const greenListPoly = POLYPHENOL_FOODS.filter(f => !(P.severe||[]).concat(P.moderate||[]).concat(P.mild||[]).includes(f));
+
+      const cardStyle = { background:'#fff', border:`1px solid ${T.w3}`, borderRadius:16, padding:'20px 22px', marginBottom:16 };
+      const lockedOver = locked ? { opacity:0.45, pointerEvents:'none' } : {};
+
+      const LifeCard = ({ id, icon, title, adaptation, children }) => {
+        const open = lifestyleOpen === id;
+        const streak = dayStreak(id);
+        const todayLogged = lifestyleLogs.some(l => l.type===id && l.date===today);
+        return (
+          <div style={{ ...cardStyle, ...lockedOver }}>
+            <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+                <div style={{ color:T.w4, marginTop:3, flexShrink:0 }}>{icon}</div>
+                <div>
+                  <div style={{ fontFamily:fonts.serif, fontSize:18, color:T.w7, marginBottom:4 }}>{title}</div>
+                  {adaptation && <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.rg, lineHeight:1.55, maxWidth:340 }}>{adaptation}</div>}
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexShrink:0, marginLeft:8 }}>
+                {streak > 0 && <span style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, letterSpacing:'0.1em' }}>{streak}d</span>}
+                {todayLogged
+                  ? <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.ok, background:`${T.ok}15`, borderRadius:6, padding:'4px 8px', letterSpacing:'0.08em' }}>LOGGED</div>
+                  : <button onClick={()=>{ setLifestyleOpen(open?null:id); setLsForm({}); }} style={{ fontFamily:fonts.mono, fontSize:10, letterSpacing:'0.08em', color:T.rg2, background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:8, padding:'6px 14px', cursor:'pointer' }}>LOG</button>
+                }
+              </div>
+            </div>
+            {locked && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4, letterSpacing:'0.1em', marginTop:8 }}>UNLOCKS DAY 14</div>}
+            {open && !locked && <div style={{ marginTop:16, paddingTop:16, borderTop:`1px solid ${T.w2}` }}>{children}</div>}
+          </div>
+        );
+      };
+
+      const SliderRow = ({ label, k, min, max, def, unit }) => (
+        <div style={{ marginBottom:16 }}>
+          <FieldLabel>{label}</FieldLabel>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <input type="range" min={min} max={max} value={fv(k,def)} onChange={e=>sf(k,Number(e.target.value))} style={{ flex:1, accentColor:T.rg }}/>
+            <span style={{ fontFamily:fonts.mono, fontSize:13, color:T.w6, minWidth:48 }}>{fv(k,def)}{unit}</span>
+          </div>
+        </div>
+      );
+
+      const ChipRow = ({ label, k, opts, multi }) => (
+        <div style={{ marginBottom:16 }}>
+          <FieldLabel>{label}</FieldLabel>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+            {opts.map(o => <Chip key={o} label={o} on={multi ? (lsForm[k]||[]).includes(o) : fv(k)===o} onClick={()=>multi ? toggleArr(k,o) : sf(k,o)}/>)}
+          </div>
+        </div>
+      );
+
+      const TimeRow = ({ label, k }) => (
+        <div>
+          <FieldLabel>{label}</FieldLabel>
+          <input type="time" value={fv(k,'')} onChange={e=>sf(k,e.target.value)} style={{ width:'100%', padding:'9px 12px', borderRadius:8, border:`1px solid ${T.w3}`, fontFamily:fonts.mono, fontSize:13, color:T.w6, background:T.w, outline:'none' }}/>
+        </div>
+      );
+
+      return (
+        <div style={{ padding:'24px 20px 120px', maxWidth:640, margin:'0 auto' }}>
+          <style>{`@keyframes breatheExpand{from{transform:scale(1)}to{transform:scale(1.38)}}@keyframes breatheContract{from{transform:scale(1.38)}to{transform:scale(1)}}`}</style>
+
+          <Eyebrow>LIFESTYLE HORMESIS</Eyebrow>
+          <div style={{ fontFamily:fonts.serif, fontSize:34, fontWeight:400, color:T.w7, lineHeight:1.14, marginBottom:10 }}>Restore the Signal</div>
+          <div style={{ fontFamily:fonts.sans, fontSize:14, color:T.w4, fontWeight:300, lineHeight:1.7, marginBottom:28 }}>The detox removes the noise. These interventions restore the molecular dialogue your cells are waiting for.</div>
+
+          {locked && (
+            <Panel style={{ background:`${T.warn}08`, border:`1px solid ${T.warn}30`, marginBottom:24 }}>
+              <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.warn, letterSpacing:'0.14em', marginBottom:8 }}>PHASE 1 — RECALIBRATION</div>
+              <div style={{ fontFamily:fonts.sans, fontSize:13, color:T.w6, lineHeight:1.65 }}>Your body is in the initial recalibration phase. Lifestyle interventions begin on Day 14 when your immune system has had time to begin standing down. For now, focus on the protocol, sleep, and gentle walking.</div>
+            </Panel>
+          )}
+
+          {/* Weekly summary */}
+          <Panel style={{ marginBottom:24 }}>
+            <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.14em', marginBottom:14 }}>THIS WEEK</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4, marginBottom:12 }}>
+              {weekDays.map((dateStr,i) => {
+                const dayName = ['M','T','W','T','F','S','S'][i];
+                const dayLogs = lifestyleLogs.filter(l => l.date===dateStr);
+                const isToday = dateStr===today;
+                return (
+                  <div key={dateStr} style={{ textAlign:'center' }}>
+                    <div style={{ fontFamily:fonts.mono, fontSize:9, color:isToday?T.rg:T.w4, letterSpacing:'0.1em', marginBottom:5, fontWeight:isToday?600:400 }}>{dayName}</div>
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, minHeight:56 }}>
+                      {TYPES.map(type => (
+                        <div key={type} style={{ width:7, height:7, borderRadius:'50%', background:dayLogs.some(l=>l.type===type) ? DOT_COLORS[type] : `${T.w3}60` }}/>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4 }}>
+              {(()=>{ const ad=weekDays.filter(d=>lifestyleLogs.some(l=>l.date===d)).length; const tl=weekDays.reduce((s,d)=>s+new Set(lifestyleLogs.filter(l=>l.date===d).map(l=>l.type)).size,0); return `This week: ${ad}/7 days active — ${tl} interventions logged`; })()}
+            </div>
+          </Panel>
+
+          {/* Card 1: Cold Exposure */}
+          <LifeCard id="cold"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/><line x1="19.07" y1="4.93" x2="4.93" y2="19.07"/></svg>}
+            title="Cold Exposure"
+            adaptation={comtSlow ? "Your COMT variant means norepinephrine persists longer. Start conservative — 15 seconds, build over weeks." : "Standard protocol. Start 30 seconds, build to 2-3 minutes over 4 weeks."}
+          >
+            <ChipRow label="Type" k="cold_sub" opts={['Cold shower','Ice bath','Outdoor cold','Cold face immersion']}/>
+            <SliderRow label="Duration (seconds)" k="cold_dur" min={10} max={300} def={comtSlow?15:30} unit="s"/>
+            <ChipRow label="How did it feel?" k="cold_feel" opts={['Easy','Challenging','Too much']}/>
+            <ChipRow label="Time of day" k="cold_tod" opts={['Morning','Afternoon','Evening']}/>
+            <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.w4, lineHeight:1.7, marginBottom:16 }}>
+              Progression: Week 1-2: {comtSlow?'15':'15-30'}s &nbsp;·&nbsp; Week 3-4: {comtSlow?'30':'30-60'}s &nbsp;·&nbsp; Month 2: 1-2 min &nbsp;·&nbsp; Month 3+: 2-3 min or ice bath
+            </div>
+            <BtnPrimary small onClick={()=>saveLog({ type:'cold', subtype:fv('cold_sub','cold_shower').toLowerCase().replace(/ /g,'_'), duration:fv('cold_dur',30), unit:'seconds', subjective:fv('cold_feel',''), timeOfDay:fv('cold_tod','').toLowerCase() })}>Save Log</BtnPrimary>
+          </LifeCard>
+
+          {/* Card 2: Heat / Sauna */}
+          <LifeCard id="sauna"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2c0 6-8 6-8 12a8 8 0 0 0 16 0c0-6-8-6-8-12z"/></svg>}
+            title="Heat Exposure"
+            adaptation={gstp1Risk ? "Your GSTP1 variant reduces toxin clearance capacity. Cap sauna at 15-20 minutes. Your body mobilises toxins during heat but clears them slower." : "Standard protocol. 20-30 minutes. Focus on deep breathing and hydration."}
+          >
+            <ChipRow label="Type" k="sauna_sub" opts={['Sauna (traditional)','Infrared sauna','Hot bath','Steam room']}/>
+            <SliderRow label="Duration (minutes)" k="sauna_dur" min={5} max={gstp1Risk?20:45} def={gstp1Risk?15:25} unit="m"/>
+            <ChipRow label="How did it feel?" k="sauna_feel" opts={['Energised','Relaxed','Drained']}/>
+            <BtnPrimary small onClick={()=>saveLog({ type:'sauna', subtype:fv('sauna_sub','sauna').toLowerCase().replace(/[ ()]/g,'_'), duration:fv('sauna_dur',20), unit:'minutes', subjective:fv('sauna_feel','') })}>Save Log</BtnPrimary>
+          </LifeCard>
+
+          {/* Card 3: Fasting */}
+          <LifeCard id="fasting"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
+            title="Intermittent Fasting"
+            adaptation={ftoRisk ? "Your FTO variant affects satiety signalling. Start with 12:12, not 16:8. Aggressive fasting can trigger compensatory overeating in your genotype." : maoaSlow ? "Serotonin drops during fasting affect your genotype more. Start gentle — 12:12, progress slowly." : "Standard protocol. Begin 14:10 on Day 14, progress to 16:8 by Day 30."}
+          >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+              <TimeRow label="Fast start (last meal)" k="fast_start"/>
+              <TimeRow label="Fast end (first meal)" k="fast_end"/>
+            </div>
+            {fv('fast_start') && fv('fast_end') && (()=>{
+              const [sh,sm]=fv('fast_start').split(':').map(Number);
+              const [eh,em]=fv('fast_end').split(':').map(Number);
+              const hrs=(((eh*60+em)-(sh*60+sm)+1440)%1440)/60;
+              return <div style={{ fontFamily:fonts.mono, fontSize:13, color:T.ok, marginBottom:16 }}>{hrs.toFixed(1)}-hour fast</div>;
+            })()}
+            <ChipRow label="How did you feel?" k="fast_feel" opts={['Clear-headed','Normal','Hungry','Irritable','Dizzy']}/>
+            <BtnPrimary small onClick={()=>{
+              const [sh,sm]=(fv('fast_start','20:00')).split(':').map(Number);
+              const [eh,em]=(fv('fast_end','12:00')).split(':').map(Number);
+              const hrs=(((eh*60+em)-(sh*60+sm)+1440)%1440)/60;
+              saveLog({ type:'fasting', fastStart:fv('fast_start','20:00'), fastEnd:fv('fast_end','12:00'), totalHours:Math.round(hrs*10)/10, subjective:fv('fast_feel','') });
+            }}>Save Log</BtnPrimary>
+          </LifeCard>
+
+          {/* Card 4: Circadian */}
+          <LifeCard id="circadian"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>}
+            title="Circadian Rhythm"
+            adaptation={clockVar ? "Your circadian genes suggest a natural evening chronotype. Work with your rhythm — consistent wake time matters more than early wake time. Morning light is your most important intervention." : adora2a ? "Your adenosine receptors are highly sensitive to caffeine. Consider eliminating caffeine entirely, or restrict to before 9am." : "Morning light within 60 minutes of waking. Same wake time daily. Blue light restriction after 20:00."}
+          >
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:16 }}>
+              <TimeRow label="Wake time" k="circ_wake"/>
+              <TimeRow label="Sleep time" k="circ_sleep"/>
+            </div>
+            <ChipRow label="Morning light" k="circ_light" opts={['Yes','No','Cloudy day']}/>
+            <SliderRow label="Sleep quality (1-10)" k="circ_qual" min={1} max={10} def={7} unit=""/>
+            <ChipRow label="Caffeine" k="circ_caff" opts={['None','Before 10am','After 10am']}/>
+            {adora2a && fv('circ_caff')==='After 10am' && (
+              <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.warn, background:`${T.warn}10`, borderRadius:8, padding:'10px 14px', marginBottom:14 }}>Given your ADORA2A variant, caffeine after 10am is likely disrupting your sleep architecture significantly.</div>
+            )}
+            <BtnPrimary small onClick={()=>saveLog({ type:'circadian', wakeTime:fv('circ_wake',''), morningLight:fv('circ_light',''), sleepTime:fv('circ_sleep',''), sleepQuality:fv('circ_qual',7), caffeine:fv('circ_caff','') })}>Save Log</BtnPrimary>
+          </LifeCard>
+
+          {/* Card 5: Movement */}
+          <LifeCard id="movement"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="5" r="2"/><path d="m3 13 3-3 2.5 2.5L13 7l3 3"/><path d="m9 20 3-10 3 10"/></svg>}
+            title="Movement"
+            adaptation={comtSlow ? "Steady-state cardio and strength training preferred over HIIT in Phase 1. Zone 2 heart rate is your sweet spot." : bdnfMet ? "Movement is critical for your genotype. Physical activity is the most reliable BDNF stimulus for neuroplasticity. Daily movement is not optional — it is gene regulation." : ftoRisk ? "Daily movement is non-negotiable for FTO carriers. Regular physical activity downregulates your FTO risk allele expression by 30-40%. Morning movement is ideal." : "Daily movement in natural light. Not performance — rhythm. Walking is the most ancestrally aligned form."}
+          >
+            <ChipRow label="Type" k="mov_type" opts={['Walking','Running','Swimming','Cycling','Strength','Yoga','Pilates','Other']}/>
+            <SliderRow label="Duration (minutes)" k="mov_dur" min={5} max={120} def={30} unit="m"/>
+            <ChipRow label="Intensity" k="mov_int" opts={['Light','Moderate','Vigorous']}/>
+            <ChipRow label="Outdoor?" k="mov_out" opts={['Yes','No']}/>
+            <BtnPrimary small onClick={()=>saveLog({ type:'movement', subtype:fv('mov_type','walking').toLowerCase(), duration:fv('mov_dur',30), intensity:fv('mov_int','moderate').toLowerCase(), outdoor:fv('mov_out')==='Yes' })}>Save Log</BtnPrimary>
+          </LifeCard>
+
+          {/* Card 6: Breathwork */}
+          <LifeCard id="breathwork"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></svg>}
+            title="Breathwork"
+            adaptation={(comtSlow||maoaSlow) ? "Your nervous system holds onto stress hormones longer. Breathwork is your most direct parasympathetic activation tool. 4-7-8 breathing before bed is especially important for your genotype." : oxtRisk ? "Structured breathwork activates the vagus nerve directly — compensating for reduced social buffering in your genotype." : "Breathwork activates the parasympathetic nervous system. Even 3 minutes of 4-7-8 breathing shifts your autonomic state."}
+          >
+            <ChipRow label="Type" k="bw_type" opts={['4-7-8 breathing','Box breathing','Wim Hof','Free breathing','Meditation']}/>
+            {(fv('bw_type','4-7-8 breathing') === '4-7-8 breathing') && (
+              <div style={{ marginBottom:16, textAlign:'center' }}>
+                <div style={{ fontFamily:fonts.mono, fontSize:10, color:T.w4, letterSpacing:'0.14em', marginBottom:12 }}>GUIDED TIMER — 4-7-8</div>
+                <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', marginBottom:12 }}>
+                  <div style={{ width:100, height:100, borderRadius:'50%', border:`2px solid ${breathTimerActive?T.rg:T.w3}`, background:breathTimerActive?`${T.rg}15`:T.w1, display:'flex', alignItems:'center', justifyContent:'center', animation:breathPhase==='inhale'?'breatheExpand 4s ease-in-out forwards':breathPhase==='exhale'?'breatheContract 8s ease-in-out forwards':'none', transition:'border-color 0.3s,background 0.3s' }}>
+                    <div style={{ textAlign:'center' }}>
+                      <div style={{ fontFamily:fonts.mono, fontSize:11, color:breathTimerActive?T.rg:T.w4, letterSpacing:'0.08em' }}>
+                        {breathPhase==='idle'?'TAP':breathPhase==='inhale'?'INHALE':breathPhase==='hold'?'HOLD':'EXHALE'}
+                      </div>
+                      {breathRound>0 && <div style={{ fontFamily:fonts.mono, fontSize:9, color:T.w4 }}>{breathRound}/4</div>}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  {!breathTimerActive
+                    ? <button onClick={()=>{ setBreathTimerActive(true); setBreathPhase('inhale'); setBreathRound(1); }} style={{ fontFamily:fonts.mono, fontSize:10, letterSpacing:'0.1em', color:T.rg2, background:T.rgBg, border:`1px solid ${T.rg3}`, borderRadius:8, padding:'8px 20px', cursor:'pointer' }}>Start</button>
+                    : <button onClick={()=>{ setBreathTimerActive(false); setBreathPhase('idle'); setBreathRound(0); }} style={{ fontFamily:fonts.mono, fontSize:10, letterSpacing:'0.1em', color:T.w4, background:T.w2, border:`1px solid ${T.w3}`, borderRadius:8, padding:'8px 20px', cursor:'pointer' }}>Stop</button>
+                  }
+                </div>
+              </div>
+            )}
+            <SliderRow label="Duration (minutes)" k="bw_dur" min={1} max={30} def={5} unit="m"/>
+            <ChipRow label="When" k="bw_tod" opts={['Morning','Midday','Evening','Before sleep']}/>
+            <BtnPrimary small onClick={()=>saveLog({ type:'breathwork', subtype:fv('bw_type','4-7-8 breathing').toLowerCase().replace(/[- ]/g,'_').replace(/\//g,''), duration:fv('bw_dur',5), timeOfDay:fv('bw_tod','').toLowerCase().replace(/ /g,'_') })}>Save Log</BtnPrimary>
+          </LifeCard>
+
+          {/* Card 7: Polyphenol Protocol */}
+          <LifeCard id="polyphenol"
+            icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>}
+            title="Polyphenol Protocol"
+            adaptation={comtSlow ? "Food sources only. No concentrated polyphenol supplements (green tea extract, quercetin capsules). Your COMT processes these slowly — supplements can overwhelm. Eat the berry, don't take the capsule." : "Polyphenols are Nrf2-activating signals. Every bitter leaf, every dark berry, every aromatic herb is a conversation with your cell's repair systems. Aim for 5+ daily servings from your green list."}
+          >
+            <SliderRow label="Servings today" k="poly_serv" min={0} max={10} def={5} unit=""/>
+            {greenListPoly.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <FieldLabel>Sources (from your green list)</FieldLabel>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                  {greenListPoly.slice(0,12).map(f => <Chip key={f} label={f} on={(lsForm.poly_src||[]).includes(f)} onClick={()=>toggleArr('poly_src',f)}/>)}
+                </div>
+              </div>
+            )}
+            <ChipRow label="Supplement?" k="poly_supp" opts={['None','Taken']}/>
+            {comtSlow && fv('poly_supp')==='Taken' && (
+              <div style={{ fontFamily:fonts.sans, fontSize:12, color:T.warn, background:`${T.warn}10`, borderRadius:8, padding:'10px 14px', marginBottom:14 }}>Given your COMT variant, concentrated polyphenol supplements may accumulate. Prefer food sources.</div>
+            )}
+            <BtnPrimary small onClick={()=>saveLog({ type:'polyphenol', servings:fv('poly_serv',5), sources:lsForm.poly_src||[], supplement:fv('poly_supp')==='Taken' })}>Save Log</BtnPrimary>
+          </LifeCard>
         </div>
       );
     }
