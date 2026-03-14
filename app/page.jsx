@@ -1877,7 +1877,8 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
 
       const norm = arr => (Array.isArray(arr) ? arr : []).map(f => String(f).toLowerCase().trim()).filter(Boolean);
       const newS = norm(json.severe), newM = norm(json.moderate), newMi = norm(json.mild);
-      const isCMA = json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0 || (Array.isArray(json.cma_nutrients) && json.cma_nutrients.length > 0);
+      const isBloodWork = json.report_type === 'LAB';
+      const isCMA = !isBloodWork && (json.report_type === 'CMA' || norm(json.cma_deficiencies).length > 0 || norm(json.cma_adequate).length > 0 || (Array.isArray(json.cma_nutrients) && json.cma_nutrients.length > 0));
       // Fallback: derive cma_deficiencies / cma_adequate from cma_nutrients if arrays were empty
       let cmaDef = norm(json.cma_deficiencies);
       let cmaAdeq = norm(json.cma_adequate);
@@ -1890,7 +1891,16 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
       const cmaAntioxidants = Array.isArray(json.cma_antioxidants) ? json.cma_antioxidants : [];
       const cmaCategories = json.cma_categories && typeof json.cma_categories === 'object' ? json.cma_categories : {};
 
-      if (isCMA) {
+      if (isBloodWork) {
+        // Standard blood work — serum markers go into bloodWork[], never ALCAT arrays
+        const markers = Array.isArray(json.bloodWork) ? json.bloodWork : [];
+        console.log(`[dashParseFile] LAB report — ${markers.length} bloodWork markers`);
+        setPatient(p => {
+          const updated = { ...p, bloodWork: [...(p.bloodWork||[]), ...markers] };
+          persistLabData(updated, file);
+          return updated;
+        });
+      } else if (isCMA) {
         // CMA/CNA report — store full nutrient data separately, don't overwrite ALCAT food reactivity
         setPatient(p => {
           const updated = {
@@ -1933,13 +1943,14 @@ Generate all 21 days. Format: Day number, then each meal as **Meal Name** follow
       }
 
       setDashLabFiles(prev => [...prev.filter(f => f !== file.name), file.name]);
-      const totalItems = newS.length + newM.length + newMi.length + cmaDef.length + cmaAdeq.length;
+      const bwCount = isBloodWork ? (Array.isArray(json.bloodWork) ? json.bloodWork.length : 0) : 0;
+      const totalItems = newS.length + newM.length + newMi.length + cmaDef.length + cmaAdeq.length + bwCount;
       const hasResults = totalItems > 0;
       if (!hasResults) { setDashLabError('0 items extracted — try a clearer file or different page'); }
       else {
         setDashLabSuccess(true);
         // Also save ALCAT to dedicated table for backwards compat
-        if (authUser?.id && !isCMA) {
+        if (authUser?.id && !isCMA && !isBloodWork) {
           try {
             const p = patient;
             const finalS = isAdditional ? [...new Set([...(p.severe||[]), ...newS])] : newS;
@@ -4286,12 +4297,14 @@ Read the full ingredient list from the label. Then respond with ONLY this JSON (
       const today = new Date().toISOString().split('T')[0];
 
       const hasSnp = rsid => (P.genomicSnps||[]).some(s => s.rsid === rsid && s.status !== 'normal');
-      // COMT rs4680: A = Met allele (slow). Must catch both Met/Met (homozygous) and Val/Met (heterozygous).
-      // status-based check alone can miss heterozygous variants if annotation marks them 'normal'.
-      // Genotype check is the safety net: any presence of the A (Met) allele fires the warning.
-      const comtSnp   = (P.genomicSnps||[]).find(s => s.rsid === 'rs4680');
+      // COMT rs4680: A = Met allele (slow). Catch both Met/Met (status='risk') and Val/Met (status='carrier').
+      // Match by gene name AND rsid per genomicSnps spec. Genotype check is the safety net for
+      // pipelines that store het as 'normal' — any A allele presence fires the clinical warning.
+      const comtSnp   = (P.genomicSnps||[]).find(s =>
+        s.rsid === 'rs4680' || (s.gene||'').toUpperCase().startsWith('COMT'));
       const comtSlow  = !!(comtSnp && (
-        comtSnp.status !== 'normal' ||
+        comtSnp.status === 'risk' || comtSnp.status === 'carrier' ||
+        comtSnp.status === 'heterozygous' || comtSnp.status === 'pathogenic' ||
         (typeof comtSnp.genotype === 'string' && comtSnp.genotype.toUpperCase().replace(/[|/]/g,'').includes('A'))
       ));
       const gstp1Risk = hasSnp('rs1695');

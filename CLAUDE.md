@@ -132,6 +132,10 @@ the system prompt file and clinical reasoning would be exposed.
 - [ ] Resend domain verification for medibalans.com
 
 ### Resolved
+- [x] Swedish Unilabs blood work PDFs return "0 items extracted" — two causes: (1) COMPREHENSIVE_PROMPT lacked Swedish header mapping and multi-page scan instruction; (2) dashParseFile missing isBloodWork guard, so bloodWork items were not counted in hasResults and not saved to Supabase. Fixed: full Swedish term mapping added to prompt; dashParseFile now routes LAB → bloodWork[] and counts bwCount in hasResults.
+- [x] COMT rs4680 check missing heterozygous Val/Met — check now matches by gene name AND rsid, catches status 'risk'|'carrier'|'heterozygous'|'pathogenic', and has genotype A-allele safety net. Polyphenol card adaptation text updated to exact clinical spec (FOOD SOURCES ONLY, includes resveratrol, 'the pathway', 'do not').
+
+### Unresolved
 - [x] Onboarding skipped symptom questions — merged "Your journey so far" (step 3) back into "Your Symptoms" (step 2). Duration/practitioners/prior-approaches now in same step as checkboxes. UPLOAD_STEP 8 → 7. Step count 10 → 9.
 - [x] Chat crashes on second message — root cause: showContactButton spreading into Anthropic message objects via `...m`, causing 400 validation errors. Fixed: apiMsgs returns explicit `{ role, content }` only. System prompt is ~13K tokens (well within 200K limit); 500-char truncation kept as guard.
 - [x] Blood work PDFs (Unilabs) parsed as ALCAT — parser now routes report_type=LAB to bloodWork[] namespace. ALCAT arrays untouched. Fixes testosterone/ferritin/DHEAS appearing as reactive foods.

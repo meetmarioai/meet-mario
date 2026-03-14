@@ -39,31 +39,96 @@ Also extract:
 - "cma_categories": {"vitamins":[],"minerals":[],"amino_acids":[],"antioxidants":[],"fatty_acids":[],"metabolites":[]}
 
 REPORT TYPE 3 — Standard blood work / serum lab panel (e.g. Unilabs, Synlab, hospital labs):
-This is a standard serum/blood lab report — NOT an ALCAT food reactivity panel. It contains serum markers such as testosterone, ferritin, DHEAS, TSH, cortisol, haemoglobin, glucose, etc.
+This is a standard serum/blood lab report — NOT an ALCAT food reactivity panel.
 
-CRITICAL: Do NOT put these into the severe/moderate/mild arrays. Those arrays are reserved for ALCAT food names only. Instead extract ALL markers into "bloodWork" as structured objects.
+CRITICAL: Do NOT put any results into the severe/moderate/mild arrays. Those arrays are reserved for ALCAT food names only. Extract ALL lab markers into "bloodWork" as structured objects.
 
-For each marker extract:
-- "name": marker name in lowercase English (translate Swedish)
-- "value": numeric result (number only, no units)
-- "unit": unit string (e.g. "nmol/L", "µg/dL", "ng/mL")
-- "status": "low" | "normal" | "high" — compare value against reference range
-- "ref_low": lower bound of reference range (number)
-- "ref_high": upper bound of reference range (number)
+Extract ALL lab results from this report. The report may be in Swedish, English, German, or other languages. For each result extract: test name (translate to English standard name), value (number), unit, reference range (low and high as separate numbers), and status (normal if within range, low if below, high if above).
+
+Swedish term mapping:
+- Analys/Undersökning = Test name
+- Resultat = Result
+- Referensintervall = Reference range
+- Enhet = Unit
+- Delsvar = Partial result (interim)
+- Slutsvar = Final result
+- Referensintervall saknas = Reference range not available (set ref_low and ref_high to null)
+- Se kommentar = See comment (use phase-specific ranges if provided)
+
+Common Swedish test name translations:
+- S-DHEAS → DHEA-S
+- S-Testosteron,bioaktiv → Bioactive Testosterone
+- S-Testosteron → Total Testosterone
+- P-Homocystein → Homocysteine
+- S-Östradiol → Estradiol
+- B-Hemoglobin → Hemoglobin
+- B-EVF → Hematocrit
+- B-Erytrocyter → Red Blood Cells
+- B-MCV → MCV
+- Erc(B)-MCH → MCH
+- B-Leukocyter → White Blood Cells
+- B-Trombocyter → Platelets
+- S-Follitropin (FSH) → FSH
+- S-Progesteron → Progesterone
+- S-SHBG → SHBG
+- S-25-hydroxiVitaminD → 25-OH Vitamin D
+- S-Kortisol → Cortisol
+- P-Kreatinin → Creatinine
+- Pt-eGFRrel (LMrev) → eGFR
+- Pt-eGFR(Krea)absolut → eGFR Absolute
+- P-Ferritin → Ferritin
+- P-ALAT → ALT
+- P-ASAT → AST
+- P-Bilirubin → Bilirubin
+- P-Kolesterol → Total Cholesterol
+- P-HDL-kolesterol → HDL Cholesterol
+- P-LDL-kol, beräknat → LDL Cholesterol
+- P-Tyrotropin (TSH) → TSH
+- P-T4, fritt → Free T4
+- P-T3, fritt → Free T3
+- P-ALP → Alkaline Phosphatase
+- P(fPt)-Triglycerid → Triglycerides
+- S-Insulin → Insulin
+- P-Glukos → Glucose
+- S-IGF-1 → IGF-1
+- B-HbA1c → HbA1c
+- P-Natrium → Sodium
+- P-Kalium → Potassium
+- P-Kalcium → Calcium
+- P-Magnesium → Magnesium
+- P-Fosfat → Phosphate
+- S-Järn → Iron
+- S-Transferrin → Transferrin
+- S-Transferrinmättnad → Transferrin Saturation
+
+For phase-dependent reference ranges (e.g. hormones with Follikelfas/Midcykel/Lutealfas/Postmenopaus), use the broadest range across all applicable phases for ref_low/ref_high, and add phase info in the "notes" field.
+
+For each marker in bloodWork:
+- "name": English standard name in lowercase
+- "value": numeric result only (no units in this field)
+- "unit": unit string exactly as shown
+- "status": "low" | "normal" | "high" based on reference range comparison
+- "ref_low": lower bound of reference range as number, or null if unavailable
+- "ref_high": upper bound of reference range as number, or null if unavailable
+- "notes": phase info or other clinical notes, or null
+
+Scan EVERY PAGE of the document. The report may repeat patient header info across multiple pages — ignore duplicate headers, extract only unique test results. Include every analyte found.
 
 Leave severe/moderate/mild as empty arrays for this report type.
 
 Return ONLY this JSON (no markdown):
 {"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"cma_nutrients":[],"redox_score":null,"cma_antioxidants":[],"cma_categories":{},"bloodWork":[]}
-Lowercase English names. Translate Swedish to English. Include EVERY nutrient found — do not skip any.`;
+English lowercase names. Include EVERY analyte found — do not skip any.`;
 
 const TEXT_PROMPT = `This is a medical lab document. Extract reactive foods and classify by severity.
 
 Return ONLY this JSON (no markdown):
 {"report_type":"ALCAT|CMA|LAB","severe":[],"moderate":[],"mild":[],"cma_deficiencies":[],"cma_adequate":[],"redox_score":null,"bloodWork":[]}
 
-For LAB type: put ALL markers in "bloodWork" as [{"name":"...","value":0,"unit":"...","status":"low|normal|high","ref_low":0,"ref_high":0}]. Leave severe/moderate/mild empty.
-Lowercase English food/nutrient names. Translate Swedish to English.`;
+For LAB type: put ALL markers in "bloodWork" as [{"name":"english name","value":0,"unit":"...","status":"low|normal|high","ref_low":0,"ref_high":0,"notes":null}]. Leave severe/moderate/mild empty.
+Swedish→English: S-DHEAS→DHEA-S, S-Testosteron→Total Testosterone, P-Homocystein→Homocysteine, S-Östradiol→Estradiol, B-Hemoglobin→Hemoglobin, B-EVF→Hematocrit, B-Leukocyter→White Blood Cells, B-Trombocyter→Platelets, S-Follitropin→FSH, S-Progesteron→Progesterone, S-SHBG→SHBG, S-25-hydroxiVitaminD→25-OH Vitamin D, S-Kortisol→Cortisol, P-Ferritin→Ferritin, P-ALAT→ALT, P-ASAT→AST, P-Kolesterol→Total Cholesterol, P-HDL-kolesterol→HDL Cholesterol, P-LDL-kol→LDL Cholesterol, P-Tyrotropin→TSH, P-T4 fritt→Free T4, P-T3 fritt→Free T3, P-ALP→Alkaline Phosphatase, P-Triglycerid→Triglycerides.
+Analys/Undersökning=test name, Resultat=result, Referensintervall=reference range, Enhet=unit.
+Translate all test names to lowercase English. Include every analyte found.`;
 
 export async function POST(req) {
   try {
